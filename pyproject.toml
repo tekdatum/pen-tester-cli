@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pentester" # the project and lib name
+version = "0.0.1"
+description = "Pentester CLI"
+readme = "README.md"
+requires-python = ">=3.11"
+optional-dependencies = { test = ["pytest", "pytest-mock"] }
+authors = [{ name="Tekdatum", email="tools@tekdatum.com" }]
+license = "Apache-2.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+]
+[tool.setuptools.packages.find]
+where = ["src"] # the source code
+
+
+# PyTest CONFIGURATION
+[tool.pytest.ini_options]
+# Sets the root directory for tests
+testpaths = ["tests"]
+addopts = "-vv --showlocals"
+pythonpath = ["src"]
+
+# MYPY CONFIGURATION
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+explicit_package_bases = true
+
+exclude = [
+    "docs/",
+    "venv/",
+    "engine_sdk/"
+]
+
+[[tool.mypy.overrides]]
+module = ["requests.*"]
+ignore_missing_imports = true
+
+# ------------------------------------------------------------------
+
+# RUFF CONFIGURATION
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+# linter configuration
+# E: pycodestyle errors
+# F: Pyflakes
+# I: isort (import sorting)
+# ... https://docs.astral.sh/ruff/rules/
+[tool.ruff.lint]
+select = ["E", "F"] 
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
