@@ -25,7 +25,7 @@ Edit the `pyproject.toml` file and update the `version` field under the `[projec
 
 ```toml
 [project]
-name = "combinatorics_utils"
+name = "pentester"
 version = "0.0.3"  <-- Update this
 ...
 ```
@@ -69,7 +69,7 @@ You can install from test pypi using this command
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            combinatorics_utils==0.1.6
+            pentester==0.1.6
 ```
 
 
