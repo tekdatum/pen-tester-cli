@@ -16,6 +16,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "pydantic-settings>=2.0",
 ]
 [tool.setuptools.packages.find]
 where = ["src"] # the source code
