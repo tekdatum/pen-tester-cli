@@ -1,4 +1,14 @@
-.env
+dist/
+.venv/
 .env.local
-
-__pycache__
+.env
+env/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+pytest.xml
+pentester.egg-info
+pr.md
