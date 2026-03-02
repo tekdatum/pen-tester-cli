@@ -35,7 +35,9 @@ class TestEnvVarOverrides:
         settings = PentesterSettings()
         assert settings.output_dir == Path("/tmp/results")
 
-    def test_override_target_type_network(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_override_target_type_network(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("PENTESTER_TARGET_TYPE", "SEMANTIC_FENCE")
         settings = PentesterSettings()
         assert settings.target_type == TargetType.SEMANTIC_FENCE
