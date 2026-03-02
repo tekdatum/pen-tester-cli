@@ -1,0 +1,12 @@
+dist/
+.venv/
+env/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+pytest.xml
+pentester.egg-info
+pr.md
