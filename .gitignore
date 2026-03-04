@@ -10,3 +10,4 @@ coverage.xml
 pytest.xml
 pentester.egg-info
 pr.md
+pentester_env/
