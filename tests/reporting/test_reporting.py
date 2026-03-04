@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pentester.probes.models.probe_result import ProbeResult
+from pentester.auditors.models.probe_result import ProbeResult
 from pentester.reporting.generators.generator_factory import GeneratorFactory
 from pentester.reporting.reporting import Reporting
 

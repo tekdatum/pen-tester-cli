@@ -1,4 +1,4 @@
-from pentester.probes.models.probe_result import ProbeResult
+from pentester.auditors.models.probe_result import ProbeResult
 
 
 def _make_result(**kwargs) -> ProbeResult:

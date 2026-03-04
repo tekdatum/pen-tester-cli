@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from pentester.probes.models.probe_result import ProbeResult
+from pentester.auditors.models.probe_result import ProbeResult
 from pentester.reporting.enum.generator_extension import GeneratorExtension
 from pentester.reporting.enum.generator_key import GeneratorKey
 from pentester.reporting.generators.base_generator import BaseGenerator

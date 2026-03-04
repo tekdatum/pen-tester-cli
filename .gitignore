@@ -1,5 +1,7 @@
 dist/
 .venv/
+.env.local
+.env
 env/
 __pycache__/
 *.pyc
@@ -13,3 +15,4 @@ pr.md
 .vscode
 .pytest_cache
 pentester_env
+pentester.log
