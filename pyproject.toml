@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "Pentester CLI"
 readme = "README.md"
 requires-python = ">=3.11"
-optional-dependencies = { test = ["pytest", "pytest-mock"] }
+optional-dependencies = { test = ["pytest", "pytest-mock", "pytest-cov"] }
 authors = [{ name="Tekdatum", email="tools@tekdatum.com" }]
 license = "Apache-2.0"
 classifiers = [
@@ -26,7 +26,7 @@ where = ["src"] # the source code
 [tool.pytest.ini_options]
 # Sets the root directory for tests
 testpaths = ["tests"]
-addopts = "-vv --showlocals"
+addopts = "-vv --showlocals --cov=pentester --cov-report=term-missing"
 pythonpath = ["src"]
 
 # MYPY CONFIGURATION
@@ -44,7 +44,7 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["requests.*"]
+module = ["requests.*", "mako.*"]
 ignore_missing_imports = true
 
 # ------------------------------------------------------------------
@@ -63,6 +63,21 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F"] 
 ignore = []
+
+# ------------------------------------------------------------------
+
+# COVERAGE CONFIGURATION
+
+[tool.coverage.run]
+source = ["pentester"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 0
+
+# ------------------------------------------------------------------
 
 [tool.ruff.format]
 quote-style = "double"
