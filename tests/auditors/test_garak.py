@@ -5,30 +5,19 @@ Design notes
 * garak is an external library not in pyproject.toml dependencies.  All
   garak.* modules are stubbed via sys.modules before the module under test is
   imported so the suite runs without the real package present.
-* garak.py uses un-prefixed import paths ("config.*", "auditors.models.*")
-  rather than the pentester.* prefix — those modules are also stubbed out.
+* All pentester.* internal imports resolve normally (pydantic-settings is
+  installed in the project's conda environment).
 * Settings are injected via GarakAuditor(settings=GarakSettings(...)) so no
-  module-level patching of PentesterSettings is needed in any test.
+  module-level patching of get_settings() is needed in any test.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from abc import ABC, abstractmethod
 from unittest.mock import MagicMock, patch
 
 import pytest
-from dataclasses import dataclass, field
-
-
-@dataclass
-class GarakSettings:
-    """Test stand-in for the real GarakSettings (avoids pydantic_settings dep)."""
-    probes: list[str] = field(default_factory=list)
-    generations: int = 1
-    seed: int = 42
-
 
 # ---------------------------------------------------------------------------
 # Register sys.modules stubs BEFORE importing the module under test.
@@ -42,40 +31,16 @@ _garak_mod._config = _garak_config_mod
 _garak_mod._plugins = _garak_plugins_mod
 _garak_mod.command = _garak_command_mod
 
-
-class _BaseAuditor(ABC):
-    """Minimal stand-in for the real BaseAuditor."""
-
-    def __init__(self) -> None:
-        pass
-
-    @abstractmethod
-    def audit(self): ...
-
-
-_base_auditor_mod = MagicMock()
-_base_auditor_mod.BaseAuditor = _BaseAuditor
-
-_config_auditors_garak_mod = MagicMock(name="config.auditors.garak_settings")
-_config_auditors_garak_mod.GarakSettings = GarakSettings
-
 for _name, _stub in [
     ("garak", _garak_mod),
     ("garak._config", _garak_config_mod),
     ("garak._plugins", _garak_plugins_mod),
     ("garak.command", _garak_command_mod),
-    ("config", MagicMock(name="config")),
-    ("config.settings", MagicMock(name="config.settings")),
-    ("config.auditors", MagicMock(name="config.auditors")),
-    ("config.auditors.garak_settings", _config_auditors_garak_mod),
-    ("auditors", MagicMock(name="auditors")),
-    ("auditors.models", MagicMock(name="auditors.models")),
-    ("auditors.models.base_auditor", _base_auditor_mod),
-    ("auditors.models.probe_result", MagicMock(name="auditors.models.probe_result")),
 ]:
     sys.modules.setdefault(_name, _stub)
 
 from pentester.auditors.garak import GarakAuditor  # noqa: E402
+from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -334,11 +299,11 @@ class TestAudit:
             auditor.audit()
         assert "Probe:" not in capsys.readouterr().out
 
-    def test_returns_none(self) -> None:
+    def test_returns_empty_list(self) -> None:
         auditor = _make_auditor()
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]),
         ):
             result = auditor.audit()
-        assert result is None
+        assert result == []
