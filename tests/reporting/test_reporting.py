@@ -56,32 +56,24 @@ def test_generate_details_dispatches_to_all_selected_generators(mocker) -> None:
 
 
 def test_generate_summary_passes_keys_to_factory(mocker) -> None:
-    mock_get_all = mocker.patch.object(
-        GeneratorFactory, "get_all", return_value=[]
-    )
+    mock_get_all = mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
     Reporting().generate_summary({}, "/out", ["pdf", "html"])
     mock_get_all.assert_called_once_with(["pdf", "html"])
 
 
 def test_generate_details_passes_keys_to_factory(mocker) -> None:
-    mock_get_all = mocker.patch.object(
-        GeneratorFactory, "get_all", return_value=[]
-    )
+    mock_get_all = mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
     Reporting().generate_details([], "/out", ["csv"])
     mock_get_all.assert_called_once_with(["csv"])
 
 
 def test_generate_summary_empty_keys_calls_no_generators(mocker) -> None:
-    mock_get_all = mocker.patch.object(
-        GeneratorFactory, "get_all", return_value=[]
-    )
+    mock_get_all = mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
     Reporting().generate_summary({}, "/out", [])
     mock_get_all.assert_called_once_with([])
 
 
 def test_generate_details_empty_keys_calls_no_generators(mocker) -> None:
-    mock_get_all = mocker.patch.object(
-        GeneratorFactory, "get_all", return_value=[]
-    )
+    mock_get_all = mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
     Reporting().generate_details([], "/out", [])
     mock_get_all.assert_called_once_with([])

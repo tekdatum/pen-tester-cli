@@ -11,9 +11,7 @@ def test_cannot_instantiate_abstract_class() -> None:
 
 def test_partial_implementation_cannot_instantiate() -> None:
     class PartialGenerator(BaseGenerator):
-        def generate_summary_report(
-            self, summary_data: dict, output_path: str
-        ) -> None:
+        def generate_summary_report(self, summary_data: dict, output_path: str) -> None:
             pass
 
     with pytest.raises(TypeError):
@@ -22,9 +20,7 @@ def test_partial_implementation_cannot_instantiate() -> None:
 
 def test_full_implementation_can_instantiate() -> None:
     class ConcreteGenerator(BaseGenerator):
-        def generate_summary_report(
-            self, summary_data: dict, output_path: str
-        ) -> None:
+        def generate_summary_report(self, summary_data: dict, output_path: str) -> None:
             pass
 
         def generate_details_report(

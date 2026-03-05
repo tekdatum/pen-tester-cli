@@ -1,7 +1,9 @@
 import pytest
 from requests import Response
 
-from pentester.scanners.response_serializers.json_dot_serializer import JSONDotSerializer
+from pentester.scanners.response_serializers.json_dot_serializer import (
+    JSONDotSerializer,
+)
 
 
 def _make_response(body: str, status_code: int = 200) -> Response:
@@ -13,6 +15,7 @@ def _make_response(body: str, status_code: int = 200) -> Response:
 
 
 # ── body ──────────────────────────────────────────────────────────────────────
+
 
 def test_serialize_body_top_level_key() -> None:
     response = _make_response('{"valid": true}')
@@ -46,6 +49,7 @@ def test_serialize_body_returns_number() -> None:
 
 # ── headers ───────────────────────────────────────────────────────────────────
 
+
 def test_serialize_header() -> None:
     response = _make_response("{}")
     response.headers["X-Custom"] = "value123"
@@ -54,6 +58,7 @@ def test_serialize_header() -> None:
 
 
 # ── errores ───────────────────────────────────────────────────────────────────
+
 
 def test_serialize_unknown_section_raises() -> None:
     response = _make_response("{}")
