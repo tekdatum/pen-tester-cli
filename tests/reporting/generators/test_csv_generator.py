@@ -29,16 +29,11 @@ def test_extension() -> None:
     assert CsvGenerator().extension == GeneratorExtension.CSV
 
 
-def test_generate_summary_report_returns_bytes() -> None:
-    result = CsvGenerator().generate_summary_report({"host": "10.0.0.1"})
+def test_generate_detail_report_returns_bytes() -> None:
+    result = CsvGenerator().generate_detail_report([_probe()])
     assert isinstance(result, bytes)
 
 
-def test_generate_details_report_returns_bytes() -> None:
-    result = CsvGenerator().generate_details_report([_probe()])
-    assert isinstance(result, bytes)
-
-
-def test_generate_details_report_accepts_empty_list() -> None:
-    result = CsvGenerator().generate_details_report([])
+def test_generate_detail_report_accepts_empty_list() -> None:
+    result = CsvGenerator().generate_detail_report([])
     assert isinstance(result, bytes)

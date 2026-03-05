@@ -37,29 +37,24 @@ def test_extension() -> None:
 
 
 def test_details_template_name_is_md_file() -> None:
-    assert MarkdownGenerator().details_template_name == "probe_details.md"
-
-
-def test_generate_summary_report_returns_bytes() -> None:
-    result = MarkdownGenerator().generate_summary_report({"host": "10.0.0.1"})
-    assert isinstance(result, bytes)
+    assert MarkdownGenerator().details_template_name == "details.md"
 
 
 @patch("pentester.reporting.generators.mako_generator.Template")
-def test_generate_details_report_returns_bytes(mock_template_cls: MagicMock) -> None:
+def test_generate_detail_report_returns_bytes(mock_template_cls: MagicMock) -> None:
     mock_template_cls.return_value.render.return_value = "# Report\n"
 
-    result = MarkdownGenerator().generate_details_report([_probe()])
+    result = MarkdownGenerator().generate_detail_report([_probe()])
 
     assert result == b"# Report\n"
 
 
 @patch("pentester.reporting.generators.mako_generator.Template")
-def test_generate_details_report_accepts_empty_list(
+def test_generate_detail_report_accepts_empty_list(
     mock_template_cls: MagicMock,
 ) -> None:
     mock_template_cls.return_value.render.return_value = ""
 
-    result = MarkdownGenerator().generate_details_report([])
+    result = MarkdownGenerator().generate_detail_report([])
 
     assert isinstance(result, bytes)

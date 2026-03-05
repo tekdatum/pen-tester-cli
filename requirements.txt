@@ -61,3 +61,4 @@ weasyprint==68.1
 webencodings==0.5.1
 zipp==3.23.0
 zopfli==0.4.1
+pandas>=2.0.0
