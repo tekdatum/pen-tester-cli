@@ -1,37 +1,50 @@
-from pentester.probes.models.probe_result import ProbeResult
+from pentester.auditors.models.probe_result import ProbeResult
 
 
 def _make_result(**kwargs) -> ProbeResult:
     defaults = {
-        "tool_id": "t-001",
-        "tool_name": "prompt_injector",
-        "accepted": False,
-        "attack_type": "injection",
+        "auditor": "prompt_injector",
         "attack_category": "prompt",
+        "attack_type": "injection",
         "prompt": "Ignore previous instructions.",
+        "response": "Access denied.",
+        "bypassed": False,
+        "score": 0.0,
     }
     return ProbeResult(**{**defaults, **kwargs})
 
 
 def test_all_fields_assigned() -> None:
     r = _make_result()
-    assert r.tool_id == "t-001"
-    assert r.tool_name == "prompt_injector"
-    assert r.accepted is False
-    assert r.attack_type == "injection"
+    assert r.auditor == "prompt_injector"
     assert r.attack_category == "prompt"
+    assert r.attack_type == "injection"
     assert r.prompt == "Ignore previous instructions."
+    assert r.response == "Access denied."
+    assert r.bypassed is False
+    assert r.score == 0.0
+    assert r.metadata == {}
 
 
-def test_accepted_true() -> None:
-    r = _make_result(accepted=True)
-    assert r.accepted is True
+def test_bypassed_true() -> None:
+    r = _make_result(bypassed=True)
+    assert r.bypassed is True
 
 
 def test_field_override() -> None:
-    r = _make_result(tool_id="t-999", tool_name="xss_tool")
-    assert r.tool_id == "t-999"
-    assert r.tool_name == "xss_tool"
+    r = _make_result(auditor="xss_tool", score=0.9)
+    assert r.auditor == "xss_tool"
+    assert r.score == 0.9
+
+
+def test_metadata_defaults_to_empty_dict() -> None:
+    r = _make_result()
+    assert r.metadata == {}
+
+
+def test_metadata_can_be_set() -> None:
+    r = _make_result(metadata={"key": "value"})
+    assert r.metadata == {"key": "value"}
 
 
 def test_two_instances_with_same_values_are_equal() -> None:
@@ -41,6 +54,6 @@ def test_two_instances_with_same_values_are_equal() -> None:
 
 
 def test_two_instances_with_different_values_are_not_equal() -> None:
-    r1 = _make_result(accepted=False)
-    r2 = _make_result(accepted=True)
+    r1 = _make_result(bypassed=False)
+    r2 = _make_result(bypassed=True)
     assert r1 != r2
