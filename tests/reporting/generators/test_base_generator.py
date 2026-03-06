@@ -36,7 +36,12 @@ def test_full_implementation_can_instantiate() -> None:
         def extension(self) -> GeneratorExtension:
             return GeneratorExtension.PDF
 
-        def generate_detail_report(self, probe_results: list[ProbeResult]) -> bytes:
+        def generate_detail_report(
+            self,
+            probe_results: list[ProbeResult],
+            attack_category_results: dict[str, SummaryResult],
+            attack_type_results: dict[str, SummaryResult],
+        ) -> bytes:
             return b""
 
         def generate_summary_report(
@@ -59,7 +64,12 @@ def test_details_link_extension_defaults_to_extension() -> None:
         def extension(self) -> GeneratorExtension:
             return GeneratorExtension.PDF
 
-        def generate_detail_report(self, probe_results: list[ProbeResult]) -> bytes:
+        def generate_detail_report(
+            self,
+            probe_results: list[ProbeResult],
+            attack_category_results: dict[str, SummaryResult],
+            attack_type_results: dict[str, SummaryResult],
+        ) -> bytes:
             return b""
 
         def generate_summary_report(

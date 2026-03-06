@@ -30,10 +30,10 @@ def test_extension() -> None:
 
 
 def test_generate_detail_report_returns_bytes() -> None:
-    result = CsvGenerator().generate_detail_report([_probe()])
+    result = CsvGenerator().generate_detail_report([_probe()], {}, {})
     assert isinstance(result, bytes)
 
 
 def test_generate_detail_report_accepts_empty_list() -> None:
-    result = CsvGenerator().generate_detail_report([])
+    result = CsvGenerator().generate_detail_report([], {}, {})
     assert isinstance(result, bytes)

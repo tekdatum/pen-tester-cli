@@ -161,7 +161,9 @@ class TestLoadProbes:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:  # type: ignore[override]
         _garak_plugins_mod.load_plugin.reset_mock(side_effect=True, return_value=True)
-        _garak_plugins_mod.enumerate_plugins.reset_mock(side_effect=True, return_value=True)
+        _garak_plugins_mod.enumerate_plugins.reset_mock(
+            side_effect=True, return_value=True
+        )
         _garak_plugins_mod.enumerate_plugins.return_value = []
 
     @staticmethod
@@ -272,9 +274,7 @@ class TestAudit:
             auditor.audit()
         m_load.assert_called_once()
 
-    def test_prints_each_probe_name(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_prints_each_probe_name(self, capsys: pytest.CaptureFixture[str]) -> None:
         auditor = _make_auditor()
         probe_a, probe_b = MagicMock(), MagicMock()
         probe_a.probename = "probes.dan.Dan1"

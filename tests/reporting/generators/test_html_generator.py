@@ -44,7 +44,7 @@ def test_details_template_name_is_html_file() -> None:
 def test_generate_detail_report_returns_bytes(mock_template_cls: MagicMock) -> None:
     mock_template_cls.return_value.render.return_value = "<html></html>"
 
-    result = HtmlGenerator().generate_detail_report([_probe()])
+    result = HtmlGenerator().generate_detail_report([_probe()], {}, {})
 
     assert result == b"<html></html>"
 
@@ -55,6 +55,6 @@ def test_generate_detail_report_accepts_empty_list(
 ) -> None:
     mock_template_cls.return_value.render.return_value = ""
 
-    result = HtmlGenerator().generate_detail_report([])
+    result = HtmlGenerator().generate_detail_report([], {}, {})
 
     assert isinstance(result, bytes)

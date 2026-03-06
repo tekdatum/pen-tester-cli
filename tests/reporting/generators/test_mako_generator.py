@@ -57,6 +57,22 @@ def _auditor_results() -> dict[str, SummaryResult]:
     }
 
 
+def _category_results() -> dict[str, SummaryResult]:
+    return {
+        "prompt_injection": SummaryResult(
+            total_probes=5, total_bypassed=1, success_rate=80.0
+        ),
+        "jailbreak": SummaryResult(total_probes=5, total_bypassed=1, success_rate=80.0),
+    }
+
+
+def _type_results() -> dict[str, SummaryResult]:
+    return {
+        "direct": SummaryResult(total_probes=5, total_bypassed=0, success_rate=100.0),
+        "dan": SummaryResult(total_probes=5, total_bypassed=2, success_rate=60.0),
+    }
+
+
 def test_cannot_instantiate_abstract_class() -> None:
     with pytest.raises(TypeError):
         MakoGenerator()  # type: ignore[abstract]
@@ -84,7 +100,9 @@ def test_partial_implementation_cannot_instantiate() -> None:
 def test_generate_detail_report_returns_bytes(mock_template_cls: MagicMock) -> None:
     mock_template_cls.return_value.render.return_value = "<html></html>"
 
-    result = _concrete().generate_detail_report([_probe()])
+    result = _concrete().generate_detail_report(
+        [_probe()], _category_results(), _type_results()
+    )
 
     assert result == b"<html></html>"
 
@@ -95,7 +113,7 @@ def test_generate_detail_report_accepts_empty_list(
 ) -> None:
     mock_template_cls.return_value.render.return_value = ""
 
-    result = _concrete().generate_detail_report([])
+    result = _concrete().generate_detail_report([], {}, {})
 
     assert isinstance(result, bytes)
 
@@ -106,7 +124,7 @@ def test_generate_detail_report_resolves_template_name_against_templates_dir(
 ) -> None:
     mock_template_cls.return_value.render.return_value = ""
 
-    _concrete("my_template.html").generate_detail_report([])
+    _concrete("my_template.html").generate_detail_report([], {}, {})
 
     mock_template_cls.assert_called_once_with(
         filename=str(_TEMPLATES_DIR / "my_template.html")
@@ -120,10 +138,14 @@ def test_generate_detail_report_passes_probe_results_to_template(
     mock_template_cls.return_value.render.return_value = ""
     probes = [_probe()]
 
-    _concrete().generate_detail_report(probes)
+    _concrete().generate_detail_report(probes, _category_results(), _type_results())
 
     mock_template_cls.return_value.render.assert_called_once_with(
-        results=probes, created_at=ANY, details_link_extension=GeneratorExtension.HTML
+        results=probes,
+        attack_category_results=_category_results(),
+        attack_type_results=_type_results(),
+        created_at=ANY,
+        details_link_extension=GeneratorExtension.HTML,
     )
 
 
@@ -133,7 +155,9 @@ def test_generate_detail_report_encodes_template_output(
 ) -> None:
     mock_template_cls.return_value.render.return_value = "hello world"
 
-    result = _concrete().generate_detail_report([_probe()])
+    result = _concrete().generate_detail_report(
+        [_probe()], _category_results(), _type_results()
+    )
 
     assert result == b"hello world"
 
@@ -206,7 +230,7 @@ def test_generate_detail_report_passes_details_link_extension_to_template(
 ) -> None:
     mock_template_cls.return_value.render.return_value = ""
 
-    _concrete().generate_detail_report([_probe()])
+    _concrete().generate_detail_report([_probe()], _category_results(), _type_results())
 
     _, kwargs = mock_template_cls.return_value.render.call_args
     assert kwargs["details_link_extension"] == GeneratorExtension.HTML

@@ -48,7 +48,9 @@ def test_init_creates_factory_instance() -> None:
 def test_generate_passes_keys_to_factory(mock_path_cls: MagicMock, mocker) -> None:
     mock_get_all = mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
-    mocker.patch("pentester.reporting.reporting.Summarizer.summarize_by_auditor", return_value={})
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_auditor", return_value={}
+    )
 
     Reporting().generate([], "/out", ["csv"])
 
@@ -56,10 +58,14 @@ def test_generate_passes_keys_to_factory(mock_path_cls: MagicMock, mocker) -> No
 
 
 @patch("pentester.reporting.reporting.Path")
-def test_generate_empty_keys_calls_no_generators(mock_path_cls: MagicMock, mocker) -> None:
+def test_generate_empty_keys_calls_no_generators(
+    mock_path_cls: MagicMock, mocker
+) -> None:
     mock_get_all = mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
-    mocker.patch("pentester.reporting.reporting.Summarizer.summarize_by_auditor", return_value={})
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_auditor", return_value={}
+    )
 
     Reporting().generate([], "/out", [])
 
@@ -86,6 +92,14 @@ def test_generate_calls_generate_summary_report_with_overall_and_auditor_results
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.filter_by_auditor", return_value=[]
     )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_category",
+        return_value={},
+    )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_type",
+        return_value={},
+    )
 
     Reporting().generate([_probe()], "/out", ["csv"])
 
@@ -103,7 +117,8 @@ def test_generate_writes_summary_file(mock_path_cls: MagicMock, mocker) -> None:
 
     Reporting().generate([], "/out", ["md"])
 
-    mock_path_cls.assert_any_call("/out", "summary.md")
+    mock_path_cls.assert_any_call("/out", "md")
+    mock_path_cls.return_value.__truediv__.assert_any_call("summary.md")
 
 
 @patch("pentester.reporting.reporting.Path")
@@ -123,6 +138,14 @@ def test_generate_calls_generate_detail_report_per_auditor(
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
     mock_filter = mocker.patch(
         "pentester.reporting.reporting.Summarizer.filter_by_auditor", return_value=[]
+    )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_category",
+        return_value={},
+    )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_type",
+        return_value={},
     )
 
     Reporting().generate([_probe("garak"), _probe("pyrit")], "/out", ["csv"])
@@ -149,10 +172,19 @@ def test_generate_writes_detail_file_per_auditor(
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.filter_by_auditor", return_value=[]
     )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_category",
+        return_value={},
+    )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_type",
+        return_value={},
+    )
 
     Reporting().generate([_probe("garak")], "/out", ["csv"])
 
-    mock_path_cls.assert_any_call("/out", "garak_details.csv")
+    mock_path_cls.assert_any_call("/out", "csv")
+    mock_path_cls.return_value.__truediv__.assert_any_call("garak_details.csv")
 
 
 @patch("pentester.reporting.reporting.Path")
@@ -186,4 +218,60 @@ def test_generate_creates_output_directory(mock_path_cls: MagicMock, mocker) -> 
     mock_path_cls.assert_any_call("/out/nested")
     mock_path_cls.return_value.mkdir.assert_called_once_with(
         parents=True, exist_ok=True
+    )
+
+
+@patch("pentester.reporting.reporting.Path")
+def test_generate_creates_generator_subdirectory(
+    mock_path_cls: MagicMock, mocker
+) -> None:
+    mock_gen = _mock_generator("csv", "csv")
+    mocker.patch.object(GeneratorFactory, "get_all", return_value=[mock_gen])
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_auditor", return_value={}
+    )
+    mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
+
+    Reporting().generate([], "/out", ["csv"])
+
+    mock_path_cls.assert_any_call("/out", "csv")
+    mock_path_cls.return_value.mkdir.assert_called_with(parents=True, exist_ok=True)
+
+
+@patch("pentester.reporting.reporting.Path")
+def test_generate_passes_attack_breakdowns_to_detail_report(
+    mock_path_cls: MagicMock, mocker
+) -> None:
+    mock_gen = _mock_generator("csv", "csv")
+    mocker.patch.object(GeneratorFactory, "get_all", return_value=[mock_gen])
+    auditor_results = {
+        "garak": SummaryResult(total_probes=2, total_bypassed=0, success_rate=100.0)
+    }
+    category_results = {
+        "injection": SummaryResult(total_probes=2, total_bypassed=0, success_rate=100.0)
+    }
+    type_results = {
+        "direct": SummaryResult(total_probes=2, total_bypassed=0, success_rate=100.0)
+    }
+    mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_auditor",
+        return_value=auditor_results,
+    )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.filter_by_auditor", return_value=[]
+    )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_category",
+        return_value=category_results,
+    )
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_attack_type",
+        return_value=type_results,
+    )
+
+    Reporting().generate([_probe("garak")], "/out", ["csv"])
+
+    mock_gen.generate_detail_report.assert_called_once_with(
+        [], category_results, type_results
     )
