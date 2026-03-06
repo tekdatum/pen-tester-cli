@@ -30,27 +30,27 @@ def test_scanner():
 
 def test_scan_returns_target_response() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="ok", by_passed=None)
+    handler.request.return_value = TargetResponse(response="ok", bypassed=None)
     assert isinstance(Scanner(handler).scan(PROMPT), TargetResponse)
 
 
 def test_scan_delegates_to_handler_with_prompt() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="ok", by_passed=None)
+    handler.request.return_value = TargetResponse(response="ok", bypassed=None)
     Scanner(handler).scan(PROMPT)
     handler.request.assert_called_once_with(PROMPT)
 
 
 def test_scan_propagates_bypassed_true() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="ok", by_passed=True)
-    assert Scanner(handler).scan(PROMPT).by_passed is True
+    handler.request.return_value = TargetResponse(response="ok", bypassed=True)
+    assert Scanner(handler).scan(PROMPT).bypassed is True
 
 
 def test_scan_propagates_bypassed_false() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="blocked", by_passed=False)
-    assert Scanner(handler).scan(PROMPT).by_passed is False
+    handler.request.return_value = TargetResponse(response="blocked", bypassed=False)
+    assert Scanner(handler).scan(PROMPT).bypassed is False
 
 
 # ── Scanner.from_curl ─────────────────────────────────────────────────────────

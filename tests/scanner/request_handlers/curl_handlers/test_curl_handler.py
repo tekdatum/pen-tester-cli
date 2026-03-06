@@ -64,7 +64,7 @@ def test_request_bypassed_is_none_without_serializer() -> None:
     handler = ParsedCurlHandler(curl_command=CURL_COMMAND, response_serializer=None)
     handler._exec_http_request = MagicMock(return_value=_make_response())
     result = handler.request(PROMPT)
-    assert result.by_passed is None
+    assert result.bypassed is None
 
 
 def test_request_bypassed_uses_serializer_when_present() -> None:
@@ -75,7 +75,7 @@ def test_request_bypassed_uses_serializer_when_present() -> None:
     )
     handler._exec_http_request = MagicMock(return_value=_make_response())
     result = handler.request(PROMPT)
-    assert result.by_passed is True
+    assert result.bypassed is True
 
 
 # ── ParsedCurlHandler._parse ──────────────────────────────────────────────────
