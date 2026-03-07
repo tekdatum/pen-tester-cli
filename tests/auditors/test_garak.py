@@ -31,11 +31,17 @@ _garak_mod._config = _garak_config_mod
 _garak_mod._plugins = _garak_plugins_mod
 _garak_mod.command = _garak_command_mod
 
+# tqdm is a runtime dependency; stub it so tests run in environments where it
+# is not yet installed (e.g. CI before pip install .[...] resolves deps).
+_tqdm_mod = MagicMock(name="tqdm")
+_tqdm_mod.tqdm = lambda iterable, **_kwargs: iterable
+
 for _name, _stub in [
     ("garak", _garak_mod),
     ("garak._config", _garak_config_mod),
     ("garak._plugins", _garak_plugins_mod),
     ("garak.command", _garak_command_mod),
+    ("tqdm", _tqdm_mod),
 ]:
     sys.modules.setdefault(_name, _stub)
 
