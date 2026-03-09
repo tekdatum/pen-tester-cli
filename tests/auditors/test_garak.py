@@ -45,11 +45,18 @@ for _name, _stub in [
 ]:
     sys.modules.setdefault(_name, _stub)
 
+# Re-read from sys.modules so local variables always reference the registered
+# stubs, even if another test module registered them first.
+_garak_mod = sys.modules["garak"]
+_garak_config_mod = sys.modules["garak._config"]
+_garak_plugins_mod = sys.modules["garak._plugins"]
+_garak_command_mod = sys.modules["garak.command"]
+
 from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.settings import TargetType  # noqa: E402
-from pentester.scanners.scanner import Scanner  # noqa: E402
+from pentester.scanners.scanner import Scanner  # noqa: E402  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
