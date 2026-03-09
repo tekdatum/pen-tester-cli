@@ -39,8 +39,16 @@ for _name, _stub in [
 ]:
     sys.modules.setdefault(_name, _stub)
 
+# Re-read from sys.modules so local variables always reference the registered
+# stubs, even if another test module registered them first.
+_garak_mod = sys.modules["garak"]
+_garak_config_mod = sys.modules["garak._config"]
+_garak_plugins_mod = sys.modules["garak._plugins"]
+_garak_command_mod = sys.modules["garak.command"]
+
 from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
+from pentester.scanners.scanner import Scanner  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -307,3 +315,25 @@ class TestAudit:
         ):
             result = auditor.audit()
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# __init__ scanner parameter
+# ---------------------------------------------------------------------------
+
+
+class TestInit:
+    def test_scanner_defaults_to_none(self) -> None:
+        auditor = GarakAuditor(settings=GarakSettings())
+        assert auditor._scanner is None
+
+    def test_scanner_is_stored_when_provided(self) -> None:
+        scanner = MagicMock(spec=Scanner)
+        auditor = GarakAuditor(settings=GarakSettings(), scanner=scanner)
+        assert auditor._scanner is scanner
+
+    def test_settings_still_loaded_from_get_settings_when_none(self) -> None:
+        with patch("pentester.auditors.garak.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.garak = GarakSettings(generations=5)
+            auditor = GarakAuditor()
+        assert auditor._settings.generations == 5
