@@ -1,4 +1,6 @@
+import pytest
 from unittest.mock import MagicMock
+from pentester.scanners.exceptions import ScanFileException
 from pentester.scanners.scanner import Scanner
 from pentester.scanners.models.target_response import TargetResponse
 from pentester.scanners.request_handlers.request_handler import RequestHandler
@@ -89,3 +91,8 @@ def test_from_curl_file_with_target_sets_serializer(tmp_path) -> None:
     f.write_text(CURL_COMMAND)
     scanner = Scanner.from_curl_file(str(f), json_dot_target="body.data.valid")
     assert scanner.request_handler.response_serializer is not None
+
+
+def test_from_curl_file_raises_if_not_found() -> None:
+    with pytest.raises(ScanFileException):
+        Scanner.from_curl_file("/nonexistent/path/cmd.curl")
