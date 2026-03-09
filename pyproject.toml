@@ -44,7 +44,7 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "mako.*", "uncurl.*", "garak.*", "garak"]
+module = ["requests.*", "mako.*", "uncurl.*", "garak.*", "garak", "pandas.*"]
 ignore_missing_imports = true
 
 # ------------------------------------------------------------------
