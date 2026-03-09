@@ -31,11 +31,17 @@ _garak_mod._config = _garak_config_mod
 _garak_mod._plugins = _garak_plugins_mod
 _garak_mod.command = _garak_command_mod
 
+# tqdm is a runtime dependency; stub it so tests run in environments where it
+# is not yet installed (e.g. CI before pip install .[...] resolves deps).
+_tqdm_mod = MagicMock(name="tqdm")
+_tqdm_mod.tqdm = lambda iterable, **_kwargs: iterable
+
 for _name, _stub in [
     ("garak", _garak_mod),
     ("garak._config", _garak_config_mod),
     ("garak._plugins", _garak_plugins_mod),
     ("garak.command", _garak_command_mod),
+    ("tqdm", _tqdm_mod),
 ]:
     sys.modules.setdefault(_name, _stub)
 
@@ -47,8 +53,10 @@ _garak_plugins_mod = sys.modules["garak._plugins"]
 _garak_command_mod = sys.modules["garak.command"]
 
 from pentester.auditors.garak import GarakAuditor  # noqa: E402
+from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
-from pentester.scanners.scanner import Scanner  # noqa: E402
+from pentester.config.settings import TargetType  # noqa: E402
+from pentester.scanners.scanner import Scanner  # noqa: E402  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -57,6 +65,31 @@ from pentester.scanners.scanner import Scanner  # noqa: E402
 
 def _make_auditor(settings: GarakSettings | None = None) -> GarakAuditor:
     return GarakAuditor(settings=settings or GarakSettings())
+
+
+def _make_llm_auditor(settings: GarakSettings | None = None) -> GarakAuditor:
+    auditor = _make_auditor(settings)
+    auditor.target_type = TargetType.LLM
+    return auditor
+
+
+def _make_probe(probename: str, prompts: list[str]) -> MagicMock:
+    probe = MagicMock()
+    probe.probename = probename
+    probe.prompts = prompts
+    return probe
+
+
+def _make_scan_result(
+    response: str = "HTTP/1.1 200 OK\n\n{}",
+    bypassed: bool | None = True,
+    score: float | None = 0.9,
+) -> MagicMock:
+    result = MagicMock()
+    result.response = response
+    result.bypassed = bypassed
+    result.score = score
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -259,16 +292,46 @@ class TestLoadProbes:
 
 
 # ---------------------------------------------------------------------------
+# _init_scanner
+# ---------------------------------------------------------------------------
+
+
+class TestInitScanner:
+    def test_returns_scanner_instance(self) -> None:
+        assert isinstance(_make_auditor()._init_scanner(), Scanner)
+
+
+# ---------------------------------------------------------------------------
 # audit
 # ---------------------------------------------------------------------------
 
 
 class TestAudit:
+    @pytest.fixture(autouse=True)
+    def _mock_scanner(self) -> MagicMock:
+        self.mock_scanner = MagicMock()
+        self.mock_scanner.scan.return_value = _make_scan_result()
+        return self.mock_scanner
+
+    def _audit_with(
+        self, probes: list, scanner: MagicMock | None = None
+    ) -> list[ProbeResult]:
+        auditor = _make_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=probes),
+            patch.object(auditor, "_init_scanner", return_value=scanner or self.mock_scanner),
+        ):
+            return auditor.audit()
+
+    # orchestration ----------------------------------------------------------
+
     def test_calls_init_garak(self) -> None:
         auditor = _make_auditor()
         with (
             patch.object(auditor, "_init_garak") as m_init,
             patch.object(auditor, "_load_probes", return_value=[]),
+            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
         ):
             auditor.audit()
         m_init.assert_called_once()
@@ -278,62 +341,282 @@ class TestAudit:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]) as m_load,
+            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
         ):
             auditor.audit()
         m_load.assert_called_once()
 
     def test_prints_each_probe_name(self, capsys: pytest.CaptureFixture[str]) -> None:
         auditor = _make_auditor()
-        probe_a, probe_b = MagicMock(), MagicMock()
-        probe_a.probename = "probes.dan.Dan1"
-        probe_b.probename = "probes.encoding.Encoding1"
-        with (
-            patch.object(auditor, "_init_garak"),
-            patch.object(auditor, "_load_probes", return_value=[probe_a, probe_b]),
-        ):
-            auditor.audit()
-        out = capsys.readouterr().out
-        assert "probes.dan.Dan1" in out
-        assert "probes.encoding.Encoding1" in out
-
-    def test_no_output_for_empty_probe_list(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        auditor = _make_auditor()
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]),
+            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner) as m_scanner,
         ):
             auditor.audit()
-        assert "Probe:" not in capsys.readouterr().out
+        m_scanner.assert_called_once()
 
-    def test_returns_empty_list(self) -> None:
-        auditor = _make_auditor()
+    # result count -----------------------------------------------------------
+
+    def test_returns_empty_list_when_no_probes(self) -> None:
+        assert self._audit_with([]) == []
+
+    def test_probe_with_no_prompts_yields_no_results(self) -> None:
+        assert self._audit_with([_make_probe("probes.dan.Dan1", [])]) == []
+
+    def test_returns_one_result_per_prompt(self) -> None:
+        probe = _make_probe("probes.dan.Dan1", ["p1", "p2"])
+        assert len(self._audit_with([probe])) == 2
+
+    def test_multiple_probes_accumulate_results(self) -> None:
+        probes = [
+            _make_probe("probes.dan.Dan1", ["p1"]),
+            _make_probe("probes.xss.Xss1", ["p2", "p3"]),
+        ]
+        assert len(self._audit_with(probes)) == 3
+
+    # ProbeResult field mapping ----------------------------------------------
+
+    def test_result_auditor_is_garak(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].auditor == "garak"
+
+    def test_result_attack_category_from_probename(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].attack_category == "dan"
+
+    def test_result_attack_type_from_probename(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].attack_type == "Dan1"
+
+    def test_result_prompt_matches_probe_prompt(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["injected text"])])
+        assert results[0].prompt == "injected text"
+
+    def test_result_response_from_scanner(self) -> None:
+        self.mock_scanner.scan.return_value = _make_scan_result(response="HTTP/1.1 200 OK\n\nbody")
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].response == "HTTP/1.1 200 OK\n\nbody"
+
+    def test_result_bypassed_true_when_scanner_returns_true(self) -> None:
+        self.mock_scanner.scan.return_value = _make_scan_result(bypassed=True)
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].bypassed is True
+
+    def test_result_bypassed_false_when_scanner_returns_false(self) -> None:
+        self.mock_scanner.scan.return_value = _make_scan_result(bypassed=False)
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].bypassed is False
+
+    def test_result_score_from_scanner(self) -> None:
+        self.mock_scanner.scan.return_value = _make_scan_result(score=0.75)
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].score == 0.75
+
+    def test_result_score_none_when_scanner_returns_none(self) -> None:
+        self.mock_scanner.scan.return_value = _make_scan_result(score=None)
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].score is None
+
+    def test_scanner_called_with_each_prompt(self) -> None:
+        probe = _make_probe("probes.dan.Dan1", ["first", "second"])
+        self._audit_with([probe])
+        calls = [c.args[0] for c in self.mock_scanner.scan.call_args_list]
+        assert calls == ["first", "second"]
+
+    def test_results_are_probe_result_instances(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert all(isinstance(r, ProbeResult) for r in results)
+
+
+# ---------------------------------------------------------------------------
+# _init_generator
+# ---------------------------------------------------------------------------
+
+
+class TestInitGenerator:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:  # type: ignore[override]
+        _garak_plugins_mod.load_plugin.reset_mock(side_effect=True, return_value=True)
+
+    def test_loads_plugin_from_settings(self) -> None:
+        settings = GarakSettings(generator="generators.openai.OpenAIGenerator", model="gpt-4o")
+        _make_llm_auditor(settings)._init_generator()
+        _garak_plugins_mod.load_plugin.assert_called_once_with("generators.openai.OpenAIGenerator")
+
+    def test_sets_model_name_on_generator(self) -> None:
+        mock_gen = MagicMock()
+        _garak_plugins_mod.load_plugin.return_value = mock_gen
+        settings = GarakSettings(generator="generators.openai.OpenAIGenerator", model="gpt-4o")
+        _make_llm_auditor(settings)._init_generator()
+        assert mock_gen.name == "gpt-4o"
+
+    def test_returns_generator_instance(self) -> None:
+        mock_gen = MagicMock()
+        _garak_plugins_mod.load_plugin.return_value = mock_gen
+        result = _make_llm_auditor(GarakSettings(generator="generators.openai.OpenAIGenerator"))._init_generator()
+        assert result is mock_gen
+
+
+# ---------------------------------------------------------------------------
+# _evaluate
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluate:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:  # type: ignore[override]
+        _garak_plugins_mod.load_plugin.reset_mock(side_effect=True, return_value=True)
+
+    def _probe_with_detectors(self, detector_specs: list[str]) -> MagicMock:
+        probe = MagicMock()
+        probe.detector_specs = detector_specs
+        return probe
+
+    def test_returns_zero_when_no_detector_specs(self) -> None:
+        probe = self._probe_with_detectors([])
+        assert _make_llm_auditor()._evaluate(probe, "some response") == 0.0
+
+    def test_returns_zero_when_detector_specs_missing(self) -> None:
+        probe = MagicMock(spec=[])  # no detector_specs attribute
+        assert _make_llm_auditor()._evaluate(probe, "some response") == 0.0
+
+    def test_loads_each_detector_plugin(self) -> None:
+        detector = MagicMock()
+        detector.detect.return_value = [0.5]
+        _garak_plugins_mod.load_plugin.return_value = detector
+        probe = self._probe_with_detectors(["detectors.always.Fail", "detectors.always.Pass"])
+        _make_llm_auditor()._evaluate(probe, "response")
+        assert _garak_plugins_mod.load_plugin.call_count == 2
+
+    def test_calls_detect_with_response_text(self) -> None:
+        detector = MagicMock()
+        detector.detect.return_value = [0.7]
+        _garak_plugins_mod.load_plugin.return_value = detector
+        probe = self._probe_with_detectors(["detectors.always.Fail"])
+        _make_llm_auditor()._evaluate(probe, "attack response")
+        detector.detect.assert_called_once_with("attack response")
+
+    def test_returns_max_score_across_detectors(self) -> None:
+        low, high = MagicMock(), MagicMock()
+        low.detect.return_value = [0.2]
+        high.detect.return_value = [0.9]
+        _garak_plugins_mod.load_plugin.side_effect = [low, high]
+        probe = self._probe_with_detectors(["detectors.a.Low", "detectors.a.High"])
+        assert _make_llm_auditor()._evaluate(probe, "response") == 0.9
+
+    def test_returns_max_across_multi_score_detector(self) -> None:
+        detector = MagicMock()
+        detector.detect.return_value = [0.1, 0.8, 0.4]
+        _garak_plugins_mod.load_plugin.return_value = detector
+        probe = self._probe_with_detectors(["detectors.always.Fail"])
+        assert _make_llm_auditor()._evaluate(probe, "response") == 0.8
+
+    def test_single_detector_single_score(self) -> None:
+        detector = MagicMock()
+        detector.detect.return_value = [0.6]
+        _garak_plugins_mod.load_plugin.return_value = detector
+        probe = self._probe_with_detectors(["detectors.always.Fail"])
+        assert _make_llm_auditor()._evaluate(probe, "response") == 0.6
+
+
+# ---------------------------------------------------------------------------
+# audit — LLM path
+# ---------------------------------------------------------------------------
+
+
+class TestAuditLLM:
+    @pytest.fixture(autouse=True)
+    def _mock_generator(self) -> None:
+        self.mock_generator = MagicMock()
+        self.mock_generator.generate.return_value = ["LLM response text"]
+
+    def _audit_with(self, probes: list, score: float = 0.8) -> list[ProbeResult]:
+        auditor = _make_llm_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=probes),
+            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(auditor, "_evaluate", return_value=score),
+        ):
+            return auditor.audit()
+
+    def test_calls_init_generator(self) -> None:
+        auditor = _make_llm_auditor()
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]),
+            patch.object(auditor, "_init_generator") as m_gen,
+            patch.object(auditor, "_evaluate", return_value=0.0),
         ):
-            result = auditor.audit()
-        assert result == []
+            auditor.audit()
+        m_gen.assert_called_once()
 
+    def test_returns_empty_when_no_probes(self) -> None:
+        assert self._audit_with([]) == []
 
-# ---------------------------------------------------------------------------
-# __init__ scanner parameter
-# ---------------------------------------------------------------------------
+    def test_probe_with_no_prompts_yields_no_results(self) -> None:
+        assert self._audit_with([_make_probe("probes.dan.Dan1", [])]) == []
 
+    def test_returns_one_result_per_prompt(self) -> None:
+        probe = _make_probe("probes.dan.Dan1", ["p1", "p2"])
+        assert len(self._audit_with([probe])) == 2
 
-class TestInit:
-    def test_scanner_defaults_to_none(self) -> None:
-        auditor = GarakAuditor(settings=GarakSettings())
-        assert auditor._scanner is None
+    def test_generator_called_with_each_prompt(self) -> None:
+        probe = _make_probe("probes.dan.Dan1", ["first", "second"])
+        auditor = _make_llm_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=[probe]),
+            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(auditor, "_evaluate", return_value=0.0),
+        ):
+            auditor.audit()
+        calls = [c.args[0] for c in self.mock_generator.generate.call_args_list]
+        assert calls == ["first", "second"]
 
-    def test_scanner_is_stored_when_provided(self) -> None:
-        scanner = MagicMock(spec=Scanner)
-        auditor = GarakAuditor(settings=GarakSettings(), scanner=scanner)
-        assert auditor._scanner is scanner
+    def test_evaluate_called_with_probe_and_response(self) -> None:
+        probe = _make_probe("probes.dan.Dan1", ["p"])
+        self.mock_generator.generate.return_value = ["the response"]
+        auditor = _make_llm_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=[probe]),
+            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(auditor, "_evaluate", return_value=0.0) as m_eval,
+        ):
+            auditor.audit()
+        m_eval.assert_called_once_with(probe, "the response")
 
-    def test_settings_still_loaded_from_get_settings_when_none(self) -> None:
-        with patch("pentester.auditors.garak.get_settings") as mock_get_settings:
-            mock_get_settings.return_value.garak = GarakSettings(generations=5)
-            auditor = GarakAuditor()
-        assert auditor._settings.generations == 5
+    def test_result_response_is_llm_text(self) -> None:
+        self.mock_generator.generate.return_value = ["generated text"]
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].response == "generated text"
+
+    def test_result_bypassed_true_when_score_above_threshold(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])], score=0.6)
+        assert results[0].bypassed is True
+
+    def test_result_bypassed_false_when_score_at_threshold(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])], score=0.5)
+        assert results[0].bypassed is False
+
+    def test_result_bypassed_false_when_score_below_threshold(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])], score=0.3)
+        assert results[0].bypassed is False
+
+    def test_result_score_from_evaluate(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])], score=0.75)
+        assert results[0].score == 0.75
+
+    def test_result_attack_category_from_probename(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].attack_category == "dan"
+
+    def test_result_attack_type_from_probename(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].attack_type == "Dan1"
+
+    def test_results_are_probe_result_instances(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert all(isinstance(r, ProbeResult) for r in results)
