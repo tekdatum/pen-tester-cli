@@ -320,7 +320,9 @@ class TestAudit:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=probes),
-            patch.object(auditor, "_init_scanner", return_value=scanner or self.mock_scanner),
+            patch.object(
+                auditor, "_init_scanner", return_value=scanner or self.mock_scanner
+            ),
         ):
             return auditor.audit()
 
@@ -351,7 +353,9 @@ class TestAudit:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]),
-            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner) as m_scanner,
+            patch.object(
+                auditor, "_init_scanner", return_value=self.mock_scanner
+            ) as m_scanner,
         ):
             auditor.audit()
         m_scanner.assert_called_once()
@@ -394,7 +398,9 @@ class TestAudit:
         assert results[0].prompt == "injected text"
 
     def test_result_response_from_scanner(self) -> None:
-        self.mock_scanner.scan.return_value = _make_scan_result(response="HTTP/1.1 200 OK\n\nbody")
+        self.mock_scanner.scan.return_value = _make_scan_result(
+            response="HTTP/1.1 200 OK\n\nbody"
+        )
         results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
         assert results[0].response == "HTTP/1.1 200 OK\n\nbody"
 
@@ -440,21 +446,29 @@ class TestInitGenerator:
         _garak_plugins_mod.load_plugin.reset_mock(side_effect=True, return_value=True)
 
     def test_loads_plugin_from_settings(self) -> None:
-        settings = GarakSettings(generator="generators.openai.OpenAIGenerator", model="gpt-4o")
+        settings = GarakSettings(
+            generator="generators.openai.OpenAIGenerator", model="gpt-4o"
+        )
         _make_llm_auditor(settings)._init_generator()
-        _garak_plugins_mod.load_plugin.assert_called_once_with("generators.openai.OpenAIGenerator")
+        _garak_plugins_mod.load_plugin.assert_called_once_with(
+            "generators.openai.OpenAIGenerator"
+        )
 
     def test_sets_model_name_on_generator(self) -> None:
         mock_gen = MagicMock()
         _garak_plugins_mod.load_plugin.return_value = mock_gen
-        settings = GarakSettings(generator="generators.openai.OpenAIGenerator", model="gpt-4o")
+        settings = GarakSettings(
+            generator="generators.openai.OpenAIGenerator", model="gpt-4o"
+        )
         _make_llm_auditor(settings)._init_generator()
         assert mock_gen.name == "gpt-4o"
 
     def test_returns_generator_instance(self) -> None:
         mock_gen = MagicMock()
         _garak_plugins_mod.load_plugin.return_value = mock_gen
-        result = _make_llm_auditor(GarakSettings(generator="generators.openai.OpenAIGenerator"))._init_generator()
+        result = _make_llm_auditor(
+            GarakSettings(generator="generators.openai.OpenAIGenerator")
+        )._init_generator()
         assert result is mock_gen
 
 
@@ -485,7 +499,9 @@ class TestEvaluate:
         detector = MagicMock()
         detector.detect.return_value = [0.5]
         _garak_plugins_mod.load_plugin.return_value = detector
-        probe = self._probe_with_detectors(["detectors.always.Fail", "detectors.always.Pass"])
+        probe = self._probe_with_detectors(
+            ["detectors.always.Fail", "detectors.always.Pass"]
+        )
         _make_llm_auditor()._evaluate(probe, "response")
         assert _garak_plugins_mod.load_plugin.call_count == 2
 
