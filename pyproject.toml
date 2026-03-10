@@ -18,6 +18,7 @@ classifiers = [
 dependencies = [
     "pydantic-settings>=2.0",
     "tqdm>=4.0",
+    "click>=8.0",
 ]
 [tool.setuptools.packages.find]
 where = ["src"] # the source code
@@ -45,7 +46,7 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "mako.*", "uncurl.*", "garak.*", "garak", "tqdm", "pandas.*"]
+module = ["requests.*", "mako.*", "uncurl.*", "garak.*", "garak", "tqdm", "pandas.*", "click", "click.*"]
 ignore_missing_imports = true
 
 # ------------------------------------------------------------------

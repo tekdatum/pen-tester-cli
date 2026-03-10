@@ -64,3 +64,4 @@ zopfli==0.4.1
 uncurl==0.0.11
 pandas>=2.0.0
 tqdm>=4.0
+click>=8.0
