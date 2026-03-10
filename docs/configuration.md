@@ -12,6 +12,10 @@ All variables are prefixed with `PENTESTER_`.
 |---|---|---|---|
 | `PENTESTER_OUTPUT_DIR` | `Path` | `./output` | Directory where output files are written |
 | `PENTESTER_TARGET_TYPE` | `TargetType` | `SEMANTIC_FENCE` | Category of the target being scanned |
+| `PENTESTER_SCANNER__CURL_COMMAND` | `str \| None` | `None` | curl command string used to target the model |
+| `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract value from response |
+| `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written |
+| `PENTESTER_REPORTING__GENERATOR_KEYS` | `str` | `pdf,csv,html,markdown` | Comma-separated list of report formats to generate |
 
 **`TargetType` values:**
 

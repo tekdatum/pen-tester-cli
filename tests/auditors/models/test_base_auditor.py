@@ -1,7 +1,10 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from pentester.auditors.models.base_auditor import BaseAuditor
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.scanners.scanner import Scanner
 
 
 def _make_result(**kwargs) -> ProbeResult:
@@ -18,8 +21,10 @@ def _make_result(**kwargs) -> ProbeResult:
 
 
 class ConcreteAuditor(BaseAuditor):
-    def __init__(self, results: list[ProbeResult]) -> None:
-        super().__init__()
+    def __init__(
+        self, results: list[ProbeResult], scanner: Scanner | None = None
+    ) -> None:
+        super().__init__(scanner)
         self._results = results
 
     def audit(self) -> list[ProbeResult]:
@@ -50,3 +55,14 @@ def test_audit_returns_probe_results() -> None:
 def test_audit_return_type_is_list() -> None:
     auditor = ConcreteAuditor([_make_result()])
     assert isinstance(auditor.audit(), list)
+
+
+def test_scanner_defaults_to_none() -> None:
+    auditor = ConcreteAuditor([])
+    assert auditor._scanner is None
+
+
+def test_scanner_is_stored_when_provided() -> None:
+    scanner = MagicMock(spec=Scanner)
+    auditor = ConcreteAuditor([], scanner=scanner)
+    assert auditor._scanner is scanner

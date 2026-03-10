@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+from pentester.config.scanner import ScannerSettings
 from pentester.scanners.scanner import Scanner
 from pentester.scanners.models.target_response import TargetResponse
 from pentester.scanners.request_handlers.request_handler import RequestHandler
@@ -30,27 +31,27 @@ def test_scanner():
 
 def test_scan_returns_target_response() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="ok", by_passed=None)
+    handler.request.return_value = TargetResponse(response="ok", bypassed=None)
     assert isinstance(Scanner(handler).scan(PROMPT), TargetResponse)
 
 
 def test_scan_delegates_to_handler_with_prompt() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="ok", by_passed=None)
+    handler.request.return_value = TargetResponse(response="ok", bypassed=None)
     Scanner(handler).scan(PROMPT)
     handler.request.assert_called_once_with(PROMPT)
 
 
 def test_scan_propagates_bypassed_true() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="ok", by_passed=True)
-    assert Scanner(handler).scan(PROMPT).by_passed is True
+    handler.request.return_value = TargetResponse(response="ok", bypassed=True)
+    assert Scanner(handler).scan(PROMPT).bypassed is True
 
 
 def test_scan_propagates_bypassed_false() -> None:
     handler = MagicMock(spec=RequestHandler)
-    handler.request.return_value = TargetResponse(response="blocked", by_passed=False)
-    assert Scanner(handler).scan(PROMPT).by_passed is False
+    handler.request.return_value = TargetResponse(response="blocked", bypassed=False)
+    assert Scanner(handler).scan(PROMPT).bypassed is False
 
 
 # ── Scanner.from_curl ─────────────────────────────────────────────────────────
@@ -88,4 +89,32 @@ def test_from_curl_file_with_target_sets_serializer(tmp_path) -> None:
     f = tmp_path / "cmd.curl"
     f.write_text(CURL_COMMAND)
     scanner = Scanner.from_curl_file(str(f), json_dot_target="body.data.valid")
+    assert scanner.request_handler.response_serializer is not None
+
+
+# ── Scanner.from_settings ─────────────────────────────────────────────────────
+
+
+def test_from_settings_returns_none_when_no_curl_command() -> None:
+    assert Scanner.from_settings(ScannerSettings()) is None
+
+
+def test_from_settings_returns_scanner_when_curl_command_set() -> None:
+    settings = ScannerSettings(curl_command=CURL_COMMAND)
+    assert isinstance(Scanner.from_settings(settings), Scanner)
+
+
+def test_from_settings_without_json_dot_target_has_no_serializer() -> None:
+    settings = ScannerSettings(curl_command=CURL_COMMAND)
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
+    assert scanner.request_handler.response_serializer is None
+
+
+def test_from_settings_with_json_dot_target_sets_serializer() -> None:
+    settings = ScannerSettings(
+        curl_command=CURL_COMMAND, json_dot_target="body.data.valid"
+    )
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
     assert scanner.request_handler.response_serializer is not None
