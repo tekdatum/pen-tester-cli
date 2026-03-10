@@ -357,20 +357,22 @@ class TestGenerateProbeResults:
             "duration": 1.5,
             "latency_ms": 100,
             "cached": False,
+            "strategy_id": "jailbreak-templates",
+            "plugin_id": "competitors",
         }])
 
     def test_maps_dataframe_rows_to_probe_results_correctly(self) -> None:
         auditor = _make_auditor()
         auditor.results_df = self._make_results_df()
-        
+
         results = auditor._generate_probe_results()
-        
+
         assert len(results) == 1
         res = results[0]
         assert isinstance(res, ProbeResult)
         assert res.auditor == "PromptFooAuditor"
-        assert res.attack_category == "category_0"
-        assert res.attack_type == "unknown"
+        assert res.attack_category == "jailbreak-templates"
+        assert res.attack_type == "competitors"
         assert res.prompt == "my_prompt"
         assert "response_data" in res.response
         assert res.bypassed is True

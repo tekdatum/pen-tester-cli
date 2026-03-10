@@ -24,6 +24,8 @@ def _make_jsonl_row(
     http_status: int = 200,
     cached: bool = False,
     raw_response: object = None,
+    strategy_id: str = "base64",
+    plugin_id: str = "competitors",
 ) -> dict:
     return {
         "provider": {"id": provider_id},
@@ -32,9 +34,9 @@ def _make_jsonl_row(
         "response": {
             "raw": raw_response or {
                 "data": {
-                    "valid": valid, 
-                    "reason_code": reason_code, 
-                    "duration": duration, 
+                    "valid": valid,
+                    "reason_code": reason_code,
+                    "duration": duration,
                     "extra": {"accept_score": accept_score, "reject_score": reject_score}
                 }
             },
@@ -42,6 +44,7 @@ def _make_jsonl_row(
             "cached": cached,
             "metadata": {"http": {"status": http_status}},
         },
+        "metadata": {"strategyId": strategy_id, "pluginId": plugin_id},
     }
 
 
@@ -153,19 +156,22 @@ class TestExtractRows:
             latency_ms=500,
             http_status=201,
             cached=True,
-            raw_response=raw_response
+            raw_response=raw_response,
+            strategy_id="jailbreak-templates",
+            plugin_id="competitors",
         )])
-        
+
         result = collector._extract_rows(df, "test.jsonl")
-        
+
         # Verify schema structure
         expected_cols = {
             "provider_url", "prompt", "input", "valid", "reason_code",
             "duration", "accept_score", "reject_score", "latency_ms",
             "http_status", "cached", "api_response", "source_file",
+            "strategy_id", "plugin_id",
         }
         assert set(result.columns) == expected_cols
-        
+
         # Verify row mapping accuracy
         row = result.iloc[0]
         assert row["provider_url"] == "http://my-api.com"
@@ -181,15 +187,19 @@ class TestExtractRows:
         assert row["cached"] == True
         assert isinstance(row["api_response"], dict)
         assert row["source_file"] == "test.jsonl"
+        assert row["strategy_id"] == "jailbreak-templates"
+        assert row["plugin_id"] == "competitors"
 
     def test_handles_missing_nested_keys_gracefully(self) -> None:
         collector = PromptfooResultCollector(results_path=Path("/tmp"))
         df = pd.DataFrame([{"provider": {}, "prompt": {}, "vars": {}, "response": {}}])
-        
+
         result = collector._extract_rows(df, "test.jsonl")
-        
+
         assert result["provider_url"].iloc[0] is None
         assert result["prompt"].iloc[0] is None
+        assert result["strategy_id"].iloc[0] is None
+        assert result["plugin_id"].iloc[0] is None
 
 
 class TestBuildDataframe:
