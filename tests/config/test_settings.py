@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -99,6 +101,22 @@ class TestReportingEnvVarOverrides:
         monkeypatch.setenv("PENTESTER_REPORTING__GENERATOR_KEYS", "pdf,csv")
         settings = PentesterSettings()
         assert settings.reporting.generator_keys == "pdf,csv"
+
+
+class TestEnvFileLoading:
+    def test_env_file_loaded(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        env_file.write_text("PENTESTER_TARGET_TYPE=LLM\n")
+        settings = PentesterSettings(_env_file=str(env_file))
+        assert settings.target_type == TargetType.LLM
+
+    def test_env_local_overrides_env(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        env_local_file = tmp_path / ".env.local"
+        env_file.write_text("PENTESTER_TARGET_TYPE=LLM\n")
+        env_local_file.write_text("PENTESTER_TARGET_TYPE=SEMANTIC_FENCE\n")
+        settings = PentesterSettings(_env_file=[str(env_file), str(env_local_file)])
+        assert settings.target_type == TargetType.SEMANTIC_FENCE
 
 
 class TestSettingsSingleton:

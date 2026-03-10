@@ -2,20 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 from unittest.mock import MagicMock, patch
 
-# ---------------------------------------------------------------------------
-# Stub garak so the suite runs without the real package installed.
-# ---------------------------------------------------------------------------
+import click.testing
 
-sys.modules.setdefault("pentester.auditors.garak", MagicMock())
-
-import click.testing  # noqa: E402
-
-from pentester.config.settings import PentesterSettings  # noqa: E402
-from pentester.enums.target_type import TargetType  # noqa: E402
-from pentester.main import main  # noqa: E402
+from pentester.config.settings import PentesterSettings
+from pentester.enums.target_type import TargetType
+from pentester.main import main
 
 
 # ---------------------------------------------------------------------------
