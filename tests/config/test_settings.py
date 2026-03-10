@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from pentester.config.reporting import ReportingSettings
+from pentester.config.scanner import ScannerSettings
 from pentester.config.settings import (
     PentesterSettings,
     TargetType,
@@ -27,6 +29,47 @@ class TestDefaults:
     def test_default_target_type(self) -> None:
         settings = PentesterSettings()
         assert settings.target_type == TargetType.SEMANTIC_FENCE
+
+    def test_default_scanner_is_scanner_settings(self) -> None:
+        settings = PentesterSettings()
+        assert isinstance(settings.scanner, ScannerSettings)
+
+    def test_default_scanner_curl_command_is_none(self) -> None:
+        settings = PentesterSettings()
+        assert settings.scanner.curl_command is None
+
+    def test_default_scanner_json_dot_target_is_none(self) -> None:
+        settings = PentesterSettings()
+        assert settings.scanner.json_dot_target is None
+
+    def test_default_reporting_is_reporting_settings(self) -> None:
+        settings = PentesterSettings()
+        assert isinstance(settings.reporting, ReportingSettings)
+
+    def test_default_reporting_output_dir_path(self) -> None:
+        settings = PentesterSettings()
+        assert settings.reporting.output_dir_path == "./output/"
+
+    def test_default_reporting_generator_keys_contains_all_keys(self) -> None:
+        settings = PentesterSettings()
+        for key in ("pdf", "csv", "html", "markdown"):
+            assert key in settings.reporting.generator_keys
+
+
+class TestScannerEnvVarOverrides:
+    def test_scanner_curl_command_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_SCANNER__CURL_COMMAND", "curl http://example.com")
+        settings = PentesterSettings()
+        assert settings.scanner.curl_command == "curl http://example.com"
+
+    def test_scanner_json_dot_target_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_SCANNER__JSON_DOT_TARGET", "body.result")
+        settings = PentesterSettings()
+        assert settings.scanner.json_dot_target == "body.result"
 
 
 class TestEnvVarOverrides:
@@ -57,6 +100,22 @@ class TestEnvVarOverrides:
         settings = PentesterSettings()
         assert settings.output_dir == Path("/tmp/out")
         assert isinstance(settings.output_dir, Path)
+
+
+class TestReportingEnvVarOverrides:
+    def test_reporting_output_dir_path_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_REPORTING__OUTPUT_DIR_PATH", "/tmp/reports/")
+        settings = PentesterSettings()
+        assert settings.reporting.output_dir_path == "/tmp/reports/"
+
+    def test_reporting_generator_keys_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_REPORTING__GENERATOR_KEYS", "pdf,csv")
+        settings = PentesterSettings()
+        assert settings.reporting.generator_keys == "pdf,csv"
 
 
 class TestEnvFileLoading:

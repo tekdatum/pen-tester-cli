@@ -16,3 +16,4 @@ pr.md
 .pytest_cache
 pentester_env
 pentester.log
+output/
