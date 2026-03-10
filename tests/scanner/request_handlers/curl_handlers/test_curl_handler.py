@@ -54,7 +54,7 @@ def test_request_bypassed_is_none_without_serializer() -> None:
     handler = CurlReaderHandler(curl_command=CURL_COMMAND, response_serializer=None)
     with patch(_REQUEST_PATH, return_value=_make_response()):
         result = handler.request(PROMPT)
-    assert result.by_passed is None
+    assert result.bypassed is None
 
 
 def test_request_bypassed_uses_serializer_when_present() -> None:
@@ -65,7 +65,7 @@ def test_request_bypassed_uses_serializer_when_present() -> None:
     )
     with patch(_REQUEST_PATH, return_value=_make_response()):
         result = handler.request(PROMPT)
-    assert result.by_passed is True
+    assert result.bypassed is True
 
 
 # ── CurlReaderhandler._parse_command ──────────────────────────────────────────────────
