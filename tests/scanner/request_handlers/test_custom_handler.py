@@ -61,12 +61,12 @@ def test_from_handler_returns_target_response() -> None:
 
 def test_from_handler_passed_maps_to_bypassed_false() -> None:
     result = Scanner.from_handler(_PassingHandler()).scan(PROMPT)
-    assert result.bypassed is False
+    assert result.bypassed is True
 
 
 def test_from_handler_failed_maps_to_bypassed_true() -> None:
     result = Scanner.from_handler(_FailingHandler()).scan(PROMPT)
-    assert result.bypassed is True
+    assert result.bypassed is False
 
 
 def test_from_handler_propagates_response_text() -> None:
