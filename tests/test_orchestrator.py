@@ -7,7 +7,9 @@ the real garak package.
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Stub our auditor module so garak internals never load.
@@ -21,6 +23,31 @@ from pentester.config.reporting import ReportingSettings  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.orchestrator import Orchestrator  # noqa: E402
 from pentester.reporting.reporting import Reporting  # noqa: E402
+
+
+_FAKE_PROMPTFOO_CONFIG = {
+    "prompts": [],
+    "providers": [],
+    "redteam": {},
+    "defaultTest": [],
+    "tests": [],
+    "commandLineOptions": [],
+    "metadata": {},
+}
+
+
+@pytest.fixture(autouse=True)
+def _patch_promptfoo_init():
+    """Prevent PromptFooAuditor.__init__ from doing disk I/O in all orchestrator tests."""
+    with (
+        patch("pathlib.Path.mkdir"),
+        patch("builtins.open", mock_open(read_data="")),
+        patch(
+            "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+            return_value=_FAKE_PROMPTFOO_CONFIG,
+        ),
+    ):
+        yield
 
 
 def _make_settings(**reporting_kwargs) -> PentesterSettings:

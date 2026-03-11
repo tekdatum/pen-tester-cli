@@ -40,14 +40,16 @@ def _make_settings(**kwargs: object) -> PromptfooSettings:
     return PromptfooSettings(**defaults)
 
 
-def _make_auditor(settings: PromptfooSettings | None = None) -> PromptFooAuditor:
+def _make_auditor(
+    settings: PromptfooSettings | None = None, scanner: object = None
+) -> PromptFooAuditor:
     s = settings or _make_settings()
     with (
         patch("pathlib.Path.mkdir"),
         patch("builtins.open", mock_open(read_data="")),
         patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
     ):
-        return PromptFooAuditor(settings=s)
+        return PromptFooAuditor(settings=s, scanner=scanner)
 
 # ---------------------------------------------------------------------------
 # TestInit & TestEnsureDirectories
@@ -73,8 +75,17 @@ class TestInit:
             patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
         ):
             auditor = PromptFooAuditor(settings=None)
-        
+
         assert isinstance(auditor.settings, PromptfooSettings)
+
+    def test_scanner_defaults_to_none(self) -> None:
+        auditor = _make_auditor()
+        assert auditor._scanner is None
+
+    def test_scanner_is_stored_when_provided(self) -> None:
+        mock_scanner = MagicMock()
+        auditor = _make_auditor(scanner=mock_scanner)
+        assert auditor._scanner is mock_scanner
 
 
 class TestEnsureDirectories:

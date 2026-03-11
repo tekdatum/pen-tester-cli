@@ -42,6 +42,12 @@ class TestDefaults:
         settings = PentesterSettings()
         assert settings.scanner.json_dot_target is None
 
+    def test_default_promptfoo_is_promptfoo_settings(self) -> None:
+        from pentester.config.auditors.promptfoo_settings import PromptfooSettings
+
+        settings = PentesterSettings()
+        assert isinstance(settings.promptfoo, PromptfooSettings)
+
     def test_default_reporting_is_reporting_settings(self) -> None:
         settings = PentesterSettings()
         assert isinstance(settings.reporting, ReportingSettings)
