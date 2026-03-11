@@ -1,13 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
-from pentester.auditors.promptfoo.http_provider import PromptFooHTTPProvider
+from pentester.auditors.promptfoo.http_provider import PromptfooHTTPProvider
 
 
-def _make_provider(**kwargs: object) -> PromptFooHTTPProvider:
+def _make_provider(**kwargs: object) -> PromptfooHTTPProvider:
     defaults: dict[str, object] = {"url": "http://example.com/api"}
     defaults.update(kwargs)
-    return PromptFooHTTPProvider(**defaults)
+    return PromptfooHTTPProvider(**defaults)
 
 
 class TestInitialization:
@@ -40,12 +40,12 @@ class TestInitialization:
 
     def test_raises_error_if_url_is_missing(self) -> None:
         with pytest.raises(ValidationError):
-            PromptFooHTTPProvider()  # type: ignore[call-arg]
+            PromptfooHTTPProvider()  # type: ignore[call-arg]
 
 
 class TestTransformConfig:
     def test_transforms_promptfoo_config_keys(self) -> None:
-        provider = PromptFooHTTPProvider(
+        provider = PromptfooHTTPProvider(
             url="http://example.com",
             body={"text": "custom {{prompt}}"},
             responseParser="json.choices[0].text",
@@ -56,16 +56,16 @@ class TestTransformConfig:
 
     def test_ignores_invalid_body_structures(self) -> None:
         # If 'body' isn't a dict with a 'text' key, it should safely fall back to the default
-        p1 = PromptFooHTTPProvider(url="http://example.com", body={"other": "value"})
-        p2 = PromptFooHTTPProvider(url="http://example.com", body="raw string")
-        p3 = PromptFooHTTPProvider(url="http://example.com", body=123)
+        p1 = PromptfooHTTPProvider(url="http://example.com", body={"other": "value"})
+        p2 = PromptfooHTTPProvider(url="http://example.com", body="raw string")
+        p3 = PromptfooHTTPProvider(url="http://example.com", body=123)
         
         assert p1.body_template == "{{prompt}}"
         assert p2.body_template == "{{prompt}}"
         assert p3.body_template == "{{prompt}}"
 
     def test_body_text_overrides_explicit_body_template(self) -> None:
-        provider = PromptFooHTTPProvider(
+        provider = PromptfooHTTPProvider(
             url="http://example.com",
             body={"text": "from body"},
             body_template="explicit",

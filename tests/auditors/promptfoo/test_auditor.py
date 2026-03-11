@@ -243,7 +243,7 @@ class TestProviders:
         assert auditor.providers[0]["config"] == new_config
 
     def test_retrieves_http_provider_correctly(self) -> None:
-        from pentester.auditors.promptfoo.http_provider import PromptFooHTTPProvider
+        from pentester.auditors.promptfoo.http_provider import PromptfooHTTPProvider
         auditor = _make_auditor()
         
         # Mix of valid and invalid providers
@@ -254,7 +254,7 @@ class TestProviders:
         
         providers = auditor.get_providers()
         assert len(providers) == 1
-        assert isinstance(providers["http"], PromptFooHTTPProvider)
+        assert isinstance(providers["http"], PromptfooHTTPProvider)
 
     def test_returns_empty_dict_when_no_http_provider(self) -> None:
         auditor = _make_auditor()
