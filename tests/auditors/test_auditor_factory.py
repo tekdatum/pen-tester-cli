@@ -33,7 +33,7 @@ for _name, _stub in [
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
 from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.auditors.models.base_auditor import BaseAuditor  # noqa: E402
-from pentester.auditors.promptfoo.auditor import PromptFooAuditor  # noqa: E402
+from pentester.auditors.promptfoo.auditor import PromptfooAuditor  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
@@ -51,7 +51,7 @@ _FAKE_PROMPTFOO_CONFIG = {
 
 @pytest.fixture(autouse=True)
 def _patch_promptfoo_init():
-    """Prevent PromptFooAuditor.__init__ from doing disk I/O in all factory tests."""
+    """Prevent PromptfooAuditor.__init__ from doing disk I/O in all factory tests."""
     with (
         patch("pathlib.Path.mkdir"),
         patch("builtins.open", mock_open(read_data="")),
@@ -138,7 +138,7 @@ class TestGetAuditor:
 
     def test_get_promptfoo_returns_promptfoo_auditor(self) -> None:
         factory = AuditorFactory(_make_settings())
-        assert isinstance(factory.get_auditor("promptfoo"), PromptFooAuditor)
+        assert isinstance(factory.get_auditor("promptfoo"), PromptfooAuditor)
 
     def test_get_unknown_key_raises(self) -> None:
         factory = AuditorFactory(_make_settings())
@@ -167,7 +167,7 @@ class TestGetAvailableAuditors:
     def test_contains_promptfoo_auditor(self) -> None:
         factory = AuditorFactory(_make_settings())
         auditors = factory.get_available_auditors()
-        assert any(isinstance(a, PromptFooAuditor) for a in auditors)
+        assert any(isinstance(a, PromptfooAuditor) for a in auditors)
 
     def test_all_items_are_base_auditors(self) -> None:
         factory = AuditorFactory(_make_settings())

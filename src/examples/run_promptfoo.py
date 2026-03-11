@@ -27,9 +27,9 @@ settings = get_settings()
 factory = AuditorFactory(settings)
 auditor = factory.get_auditor("promptfoo")
 
-results = auditor.audit()
-# auditor.collector.build_dataframe()
-# results = auditor._generate_probe_results()
+# results = auditor.audit()
+auditor.df_results = auditor.collector.build_dataframe()
+results = auditor._generate_probe_results()
 
 reporting = Reporting()
 generator_keys = [k.strip() for k in settings.reporting.generator_keys.split(",")]

@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from pentester.auditors.models.probe_result import ProbeResult
-from pentester.auditors.promptfoo.auditor import PromptFooAuditor
+from pentester.auditors.promptfoo.auditor import PromptfooAuditor
 from pentester.config.auditors.promptfoo_settings import PromptfooSettings
 
 
@@ -42,14 +42,14 @@ def _make_settings(**kwargs: object) -> PromptfooSettings:
 
 def _make_auditor(
     settings: PromptfooSettings | None = None, scanner: object = None
-) -> PromptFooAuditor:
+) -> PromptfooAuditor:
     s = settings or _make_settings()
     with (
         patch("pathlib.Path.mkdir"),
         patch("builtins.open", mock_open(read_data="")),
         patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
     ):
-        return PromptFooAuditor(settings=s, scanner=scanner)
+        return PromptfooAuditor(settings=s, scanner=scanner)
 
 # ---------------------------------------------------------------------------
 # TestInit & TestEnsureDirectories
@@ -74,7 +74,7 @@ class TestInit:
             patch("builtins.open", mock_open(read_data="")),
             patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
         ):
-            auditor = PromptFooAuditor(settings=None)
+            auditor = PromptfooAuditor(settings=None)
 
         assert isinstance(auditor.settings, PromptfooSettings)
 
@@ -95,7 +95,7 @@ class TestEnsureDirectories:
             patch("builtins.open", mock_open(read_data="")),
             patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
         ):
-            PromptFooAuditor(settings=_make_settings())
+            PromptfooAuditor(settings=_make_settings())
             
         assert mock_mkdir.call_count == 4
         for call_obj in mock_mkdir.call_args_list:
@@ -381,7 +381,7 @@ class TestGenerateProbeResults:
         assert len(results) == 1
         res = results[0]
         assert isinstance(res, ProbeResult)
-        assert res.auditor == "PromptFooAuditor"
+        assert res.auditor == "PromptfooAuditor"
         assert res.attack_category == "jailbreak-templates"
         assert res.attack_type == "competitors"
         assert res.prompt == "my_prompt"
