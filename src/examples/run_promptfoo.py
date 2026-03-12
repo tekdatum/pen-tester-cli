@@ -39,4 +39,4 @@ reporting.generate(
     generator_keys=generator_keys,
 )
 
-print(f"Audit complete. {len(results)} probe results written to {settings.reporting.output_dir_path}")
+print(f"Audit complete with {len(results)} results")
