@@ -81,6 +81,15 @@ def test_request_bypassed_uses_serializer_when_present() -> None:
 # ── ParsedCurlHandler._parse ──────────────────────────────────────────────────
 
 
+def test_exec_http_request_raises_when_url_missing() -> None:
+    handler = ParsedCurlHandler(curl_command="curl", response_serializer=None)
+    try:
+        handler._exec_http_request("curl")
+        assert False, "Expected ValueError"
+    except ValueError as exc:
+        assert "URL" in str(exc)
+
+
 def test_parse_extracts_method() -> None:
     handler = ParsedCurlHandler(curl_command=CURL_COMMAND, response_serializer=None)
     components = handler._parse(CURL_COMMAND)

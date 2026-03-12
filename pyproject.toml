@@ -21,6 +21,9 @@ dependencies = [
     "click>=8.0",
     "garak>=0.9",
 ]
+[project.scripts]
+pentester = "pentester.main:main"
+
 [tool.setuptools.packages.find]
 where = ["src"] # the source code
 
@@ -49,6 +52,11 @@ exclude = [
 [[tool.mypy.overrides]]
 module = ["requests.*", "mako.*", "uncurl.*", "tqdm", "pandas.*", "click", "click.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["garak", "garak.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 # ------------------------------------------------------------------
 
