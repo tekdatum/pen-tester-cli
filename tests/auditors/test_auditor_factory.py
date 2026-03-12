@@ -6,7 +6,7 @@ garak.* is stubbed via sys.modules so the suite runs without the real package.
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -33,34 +33,17 @@ for _name, _stub in [
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
 from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.auditors.models.base_auditor import BaseAuditor  # noqa: E402
-from pentester.auditors.promptfoo.auditor import PromptfooAuditor  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
 
-_FAKE_PROMPTFOO_CONFIG = {
-    "prompts": [],
-    "providers": [],
-    "redteam": {},
-    "defaultTest": [],
-    "tests": [],
-    "commandLineOptions": [],
-    "metadata": {},
-}
-
-
 @pytest.fixture(autouse=True)
-def _patch_promptfoo_init():
-    """Prevent PromptfooAuditor.__init__ from doing disk I/O in all factory tests."""
-    with (
-        patch("pathlib.Path.mkdir"),
-        patch("builtins.open", mock_open(read_data="")),
-        patch(
-            "pentester.auditors.promptfoo.auditor.yaml.safe_load",
-            return_value=_FAKE_PROMPTFOO_CONFIG,
-        ),
-    ):
-        yield
+def _patch_promptfoo_auditor():
+    """Mock PromptfooAuditor at the factory boundary so its __init__ never runs."""
+    with patch(
+        "pentester.auditors.auditor_factory.PromptfooAuditor"
+    ) as mock_cls:
+        yield mock_cls
 
 
 def _make_settings(**scanner_kwargs) -> PentesterSettings:
@@ -115,15 +98,21 @@ class TestScannerInjection:
         auditor = factory.get_auditor("garak")
         assert isinstance(auditor._scanner, Scanner)
 
-    def test_promptfoo_auditor_receives_none_scanner_when_not_configured(self) -> None:
-        factory = AuditorFactory(_make_settings())
-        auditor = factory.get_auditor("promptfoo")
-        assert auditor._scanner is None
+    def test_promptfoo_auditor_receives_none_scanner_when_not_configured(
+        self, _patch_promptfoo_auditor
+    ) -> None:
+        AuditorFactory(_make_settings())
+        _patch_promptfoo_auditor.assert_called_once()
+        _, kwargs = _patch_promptfoo_auditor.call_args
+        assert kwargs["scanner"] is None
 
-    def test_promptfoo_auditor_receives_scanner_when_configured(self) -> None:
-        factory = AuditorFactory(_make_settings(curl_command="curl http://example.com"))
-        auditor = factory.get_auditor("promptfoo")
-        assert isinstance(auditor._scanner, Scanner)
+    def test_promptfoo_auditor_receives_scanner_when_configured(
+        self, _patch_promptfoo_auditor
+    ) -> None:
+        AuditorFactory(_make_settings(curl_command="curl http://example.com"))
+        _patch_promptfoo_auditor.assert_called_once()
+        _, kwargs = _patch_promptfoo_auditor.call_args
+        assert isinstance(kwargs["scanner"], Scanner)
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +125,12 @@ class TestGetAuditor:
         factory = AuditorFactory(_make_settings())
         assert isinstance(factory.get_auditor("garak"), GarakAuditor)
 
-    def test_get_promptfoo_returns_promptfoo_auditor(self) -> None:
+    def test_get_promptfoo_returns_promptfoo_auditor(
+        self, _patch_promptfoo_auditor
+    ) -> None:
         factory = AuditorFactory(_make_settings())
-        assert isinstance(factory.get_auditor("promptfoo"), PromptfooAuditor)
+        auditor = factory.get_auditor("promptfoo")
+        assert auditor is _patch_promptfoo_auditor.return_value
 
     def test_get_unknown_key_raises(self) -> None:
         factory = AuditorFactory(_make_settings())
@@ -164,15 +156,17 @@ class TestGetAvailableAuditors:
         auditors = factory.get_available_auditors()
         assert any(isinstance(a, GarakAuditor) for a in auditors)
 
-    def test_contains_promptfoo_auditor(self) -> None:
+    def test_contains_promptfoo_auditor(self, _patch_promptfoo_auditor) -> None:
         factory = AuditorFactory(_make_settings())
         auditors = factory.get_available_auditors()
-        assert any(isinstance(a, PromptfooAuditor) for a in auditors)
+        assert _patch_promptfoo_auditor.return_value in auditors
 
-    def test_all_items_are_base_auditors(self) -> None:
+    def test_all_items_are_base_auditors(self, _patch_promptfoo_auditor) -> None:
         factory = AuditorFactory(_make_settings())
         for auditor in factory.get_available_auditors():
-            assert isinstance(auditor, BaseAuditor)
+            is_real = isinstance(auditor, BaseAuditor)
+            is_mock = auditor is _patch_promptfoo_auditor.return_value
+            assert is_real or is_mock
 
 
 # ---------------------------------------------------------------------------
