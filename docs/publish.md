@@ -69,7 +69,7 @@ You can install from test pypi using this command
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            pentester==0.1.6
+            pentester==0.0.2
 ```
 
 
