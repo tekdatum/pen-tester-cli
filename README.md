@@ -4,6 +4,28 @@ Pentester CLI is a command-line tool for running automated prompt-injection secu
 
 ---
 
+## Installation
+
+Install from PyPI:
+
+```
+pip install pentester
+```
+
+Or install directly from the repository:
+
+```
+pip install git+https://github.com/tekdatum/pen-tester-cli.git
+```
+
+To include development tools (linter, type checker, test suite):
+
+```
+pip install "pentester[dev]"
+```
+
+---
+
 ## Usage
 
 ```
@@ -53,6 +75,25 @@ The tool supports LLMs and Semantic Fences (`LLM` | `SEMANTIC_FENCE`). For seman
 pentester \
   --target-type LLM \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+```
+
+### 4. Use the Orchestrator in your own code
+
+You can drive scans programmatically by constructing a `PentesterSettings` object and passing it to `Orchestrator`:
+
+```python
+from pentester.config.settings import PentesterSettings
+from pentester.enums.target_type import TargetType
+from pentester.orchestrator import Orchestrator
+
+settings = PentesterSettings()
+settings.target_type = TargetType.SEMANTIC_FENCE
+settings.scanner.curl_command = "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+settings.scanner.json_dot_target = "body.valid"
+settings.reporting.output_dir_path = "./my-reports"
+settings.reporting.generator_keys = "html,pdf"
+
+Orchestrator(settings).execute()
 ```
 
 ---

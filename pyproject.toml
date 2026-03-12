@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pentester" # the project and lib name
-version = "0.0.2"
+version = "0.0.3"
 description = "Pentester CLI"
 readme = "README.md"
 requires-python = ">=3.11"
