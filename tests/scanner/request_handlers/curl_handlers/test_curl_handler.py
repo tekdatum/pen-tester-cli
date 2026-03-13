@@ -72,7 +72,7 @@ def test_request_bypassed_uses_serializer_when_present() -> None:
 
 
 def test_exec_http_request_raises_when_url_missing() -> None:
-    handler = ParsedCurlHandler(curl_command="curl", response_serializer=None)
+    handler = CurlReaderHandler(curl_command="curl", response_serializer=None)
     try:
         handler._exec_http_request("curl")
         assert False, "Expected ValueError"
