@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from pentester.config.auditors.promptfoo_settings import PromptfooSettings
-from pentester.config.settings import TargetType
 
 
 class TestDefaults:
@@ -26,10 +25,6 @@ class TestDefaults:
     def test_internal_concurrency_default(self) -> None:
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 4
-
-    def test_target_type_default(self) -> None:
-        settings = PromptfooSettings()
-        assert settings.target_type == TargetType.SEMANTIC_FENCE
 
 
 class TestComputedFields:
@@ -111,10 +106,6 @@ class TestDirectInit:
         settings = PromptfooSettings(internal_concurrency=8)
         assert settings.internal_concurrency == 8
 
-    def test_set_target_type(self) -> None:
-        settings = PromptfooSettings(target_type=TargetType.LLM)
-        assert settings.target_type == TargetType.LLM
-
     def test_all_fields_set_together(self) -> None:
         settings = PromptfooSettings(
             config_path="/custom",
@@ -122,14 +113,12 @@ class TestDirectInit:
             replace_existing_file=True,
             files_parallel=3,
             internal_concurrency=2,
-            target_type=TargetType.LLM,
         )
         assert settings.config_path == "/custom"
         assert settings.assertion_wrapper_path == "/wrap.py"
         assert settings.replace_existing_file is True
         assert settings.files_parallel == 3
         assert settings.internal_concurrency == 2
-        assert settings.target_type == TargetType.LLM
 
 
 class TestEnvVarOverrides:
@@ -157,8 +146,3 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("INTERNAL_CONCURRENCY", "16")
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 16
-
-    def test_target_type_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("TARGET_TYPE", "LLM")
-        settings = PromptfooSettings()
-        assert settings.target_type == TargetType.LLM
