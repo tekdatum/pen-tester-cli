@@ -46,9 +46,9 @@ class TestComputedFields:
         settings = PromptfooSettings()
         assert isinstance(settings.tests_path, Path)
 
-    def test_results_path_is_config_path_plus_results(self) -> None:
+    def test_results_path_is_cwd_output_promptfoo_results(self) -> None:
         settings = PromptfooSettings()
-        expected = Path(settings.config_path) / "results"
+        expected = Path.cwd() / "output" / "promptfoo_results"
         assert settings.results_path == expected
 
     def test_results_path_returns_path_instance(self) -> None:
@@ -77,9 +77,9 @@ class TestComputedFieldsWithCustomPath:
         settings = PromptfooSettings(config_path="/custom/path")
         assert settings.tests_path == Path("/custom/path/tests")
 
-    def test_results_path_reflects_custom_path(self) -> None:
+    def test_results_path_is_independent_of_config_path(self) -> None:
         settings = PromptfooSettings(config_path="/custom/path")
-        assert settings.results_path == Path("/custom/path/results")
+        assert settings.results_path == Path.cwd() / "output" / "promptfoo_results"
 
     def test_tests_path_configurations_reflects_custom_path(self) -> None:
         settings = PromptfooSettings(config_path="/custom/path")

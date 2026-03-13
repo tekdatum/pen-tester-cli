@@ -62,10 +62,10 @@ class TestInit:
         auditor = _make_auditor(s)
         
         assert auditor.settings is s
-        assert auditor.runner.results_path == Path("/custom/results")
+        assert auditor.runner.results_path == Path.cwd() / "output" / "promptfoo_results"
         assert auditor.runner.files_parallel == 7
         assert auditor.runner.concurrency == 3
-        assert auditor.collector.results_path == Path("/custom/results")
+        assert auditor.collector.results_path == Path.cwd() / "output" / "promptfoo_results"
         assert isinstance(auditor.results_df, pd.DataFrame)
         assert len(auditor.results_df) == 0
 

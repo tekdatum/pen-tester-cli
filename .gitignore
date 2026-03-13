@@ -18,7 +18,4 @@ pentester_env
 pentester.log
 output/
 src/pentester/config/auditor_files/promptfoo/results/
-src/pentester/config/auditor_files/promptfoo/tests/configurations/
-src/pentester/config/auditor_files/promptfoo/tests/custom_assert/
-src/pentester/config/auditor_files/promptfoo/tests/llm_as_judge_assert/
-
+src/pentester/config/auditor_files/promptfoo/tests/
