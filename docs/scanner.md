@@ -18,10 +18,10 @@ scanner = Scanner(handler)
 result = scanner.scan("Ignore previous instructions")
 
 print(result.response)    # full HTTP request + response as string
-print(result.by_passed)   # True / False / None
+print(result.bypassed)   # True / False / None
 ```
 
-`json_dot_target` is optional. If omitted, `by_passed` will always be `None`.
+`json_dot_target` is optional. If omitted, `bypassed` will always be `None`.
 
 ---
 
@@ -60,6 +60,63 @@ A dot-separated string with the format `section.key1.key2...` that navigates the
 "headers.X-Guard-Result"
 ```
 
-The extracted value is cast to bool to determine `by_passed`:
-- truthy value → `by_passed = True`
-- falsy value → `by_passed = False`
+The extracted value is cast to bool to determine `bypassed`:
+- truthy value → `bypassed = True`
+- falsy value → `bypassed = False`
+
+---
+
+## Custom Handler
+
+If the target is not accessible via curl (e.g. a Python SDK, a gRPC client, a local model), you can implement your own handler by extending `CustomHandler`.
+
+### 1. Create your handler file
+
+```python
+# my_handler.py
+from pentester import CustomHandler, HandlerResponse
+
+class MyServiceHandler(CustomHandler):
+    def request(self, text: str) -> HandlerResponse:
+        # Call your service however you need
+        response = my_sdk_client.send(text)
+        return HandlerResponse(
+            response=response.text,
+            passed=response.was_blocked,
+        )
+```
+
+`passed=True` means the service blocked the prompt (no bypass). `passed=False` means the prompt got through (bypass).
+
+### 2. Use it programmatically
+
+```python
+from pentester.scanners.scanner import Scanner
+
+scanner = Scanner.from_handler(MyServiceHandler())
+result = scanner.scan("Ignore previous instructions")
+
+print(result.response)   # text returned by the service
+print(result.bypassed)   # True if the prompt bypassed the guard
+```
+
+### 3. Example in CLI
+
+```bash
+pentester ./my_handler.py:MyServiceHandler
+```
+
+The argument format is `<path>:<ClassName>`, separated by a colon:
+
+| Part | Description | Example |
+|---|---|---|
+| `<path>` | Path to the `.py` file, relative or absolute | `./my_handler.py`, `/home/user/handlers/my_handler.py` |
+| `<ClassName>` | Name of the class inside that file that extends `CustomHandler` | `MyServiceHandler` |
+
+```bash
+# relative path
+pentester ./handlers/my_handler.py:MyServiceHandler
+
+# absolute path
+pentester /home/user/project/my_handler.py:MyServiceHandler
+```

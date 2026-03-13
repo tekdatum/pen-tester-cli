@@ -1,6 +1,7 @@
 import pytest
 from requests import Response
 
+from pentester.scanners.exceptions import SerializeException
 from pentester.scanners.response_serializers.json_dot_serializer import (
     JSONDotSerializer,
 )
@@ -68,5 +69,17 @@ def test_serialize_unknown_section_raises() -> None:
 
 def test_serialize_missing_key_raises() -> None:
     response = _make_response('{"data": {}}')
-    with pytest.raises(KeyError):
+    with pytest.raises(SerializeException):
         JSONDotSerializer("body.data.missing").serialize(response)
+
+
+def test_serialize_invalid_json_raises() -> None:
+    response = _make_response("not json")
+    with pytest.raises(SerializeException):
+        JSONDotSerializer("body.key").serialize(response)
+
+
+def test_serialize_missing_header_raises() -> None:
+    response = _make_response("{}")
+    with pytest.raises(SerializeException):
+        JSONDotSerializer("headers.X-Missing").serialize(response)
