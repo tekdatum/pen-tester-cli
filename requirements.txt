@@ -64,3 +64,6 @@ zopfli==0.4.1
 uncurl==0.0.11
 pandas>=2.0.0
 tqdm>=4.0
+inspect_ai==0.3.189
+inspect_evals==0.5.0
+rouge_score==0.1.2
