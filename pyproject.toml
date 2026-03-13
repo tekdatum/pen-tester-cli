@@ -55,8 +55,7 @@ explicit_package_bases = true
 exclude = [
     "docs/",
     "venv/",
-    "engine_sdk/",
-    "src/pentester/config/auditor_files/"
+    "engine_sdk/"
 ]
 
 [[tool.mypy.overrides]]
