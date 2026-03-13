@@ -314,19 +314,22 @@ flowchart TD
 
 ## Directory Structure
 
+Static configuration and runtime-generated output live in separate directories:
+
 ```
 config/auditor_files/promptfoo/
-├── promptfooconfig.yaml          # Base config (all plugins, strategies, providers)
+└── promptfooconfig.yaml          # Base config (all plugins, strategies, provider structure, etc.)
+
+output/promptfoo/                  # All runtime-generated files (configurable via output_path)
 ├── tests/
 │   ├── configurations/           # Per-plugin configs (generated)
 │   │   └── test_N.yaml
 │   ├── llm_as_judge_assert/      # Test cases with LLM assertions (generated)
 │   │   └── test_N.yaml
-│   ├── custom_assert/            # Test cases with Python assertions (generated, SEMANTIC_FENCE only)
-│   │   └── test_N.yaml
-│   └── assert.py                 # Custom Python assertion wrapper
-├── results/                      # JSONL evaluation results (generated)
-│   └── test_N_result.jsonl
+│   └── custom_assert/            # Test cases with Python assertions (generated)
+│       └── test_N.yaml
+└── results/                      # JSONL evaluation results (generated)
+    └── test_N_result.jsonl
 ```
 
 ## Configuration
@@ -335,7 +338,8 @@ Settings are configured via environment variables with the `PENTESTER_PROMPTFOO_
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PENTESTER_PROMPTFOO__CONFIG_PATH` | `./pentester/config/auditor_files/promptfoo` | Path to promptfoo config directory |
+| `PENTESTER_PROMPTFOO__CONFIG_PATH` | `./pentester/config/auditor_files/promptfoo` | Path to promptfoo config directory (static `promptfooconfig.yaml`) |
+| `PENTESTER_PROMPTFOO__OUTPUT_PATH` | `./output/promptfoo` | Path for runtime-generated files (`tests/`, `results/`) |
 | `PENTESTER_PROMPTFOO__TARGET_TYPE` | `SEMANTIC_FENCE` | `LLM` or `SEMANTIC_FENCE` |
 | `PENTESTER_PROMPTFOO__FILES_PARALLEL` | `5` | Max concurrent YAML evaluations |
 | `PENTESTER_PROMPTFOO__INTERNAL_CONCURRENCY` | `4` | Promptfoo `-j` flag per evaluation |
