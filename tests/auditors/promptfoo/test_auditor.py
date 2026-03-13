@@ -64,10 +64,10 @@ class TestInit:
         auditor = _make_auditor(s)
         
         assert auditor.settings is s
-        assert auditor.runner.results_path == Path.cwd() / "output" / "promptfoo_results"
+        assert auditor.runner.results_path == Path("./output/promptfoo") / "results"
         assert auditor.runner.files_parallel == 7
         assert auditor.runner.concurrency == 3
-        assert auditor.collector.results_path == Path.cwd() / "output" / "promptfoo_results"
+        assert auditor.collector.results_path == Path("./output/promptfoo") / "results"
         assert isinstance(auditor.results_df, pd.DataFrame)
         assert len(auditor.results_df) == 0
 
@@ -305,34 +305,34 @@ class TestCleanConfig:
 
 class TestPrepareAuditFiles:
     def test_raises_error_when_no_yaml_files_found(self, tmp_path: Path) -> None:
-        auditor = _make_auditor(_make_settings(config_path=str(tmp_path)), target_type=TargetType.LLM)
+        auditor = _make_auditor(_make_settings(output_path=str(tmp_path)), target_type=TargetType.LLM)
         (tmp_path / "tests" / "llm_as_judge_assert").mkdir(parents=True, exist_ok=True)
-        
+
         with pytest.raises(FileNotFoundError):
             auditor._prepare_audit_files()
 
     def test_prepares_semantic_fence_files(self, tmp_path: Path) -> None:
-        auditor = _make_auditor(_make_settings(config_path=str(tmp_path)), target_type=TargetType.SEMANTIC_FENCE)
+        auditor = _make_auditor(_make_settings(output_path=str(tmp_path)), target_type=TargetType.SEMANTIC_FENCE)
         llm_dir = tmp_path / "tests" / "llm_as_judge_assert"
         custom_dir = tmp_path / "tests" / "custom_assert"
         llm_dir.mkdir(parents=True, exist_ok=True)
         custom_dir.mkdir(parents=True, exist_ok=True)
-        
+
         (llm_dir / "test_1.yaml").write_text("data")
         (custom_dir / "test_1.yaml").write_text("cleaned")
-        
+
         with patch.object(auditor, "clean_config") as mock_clean:
             files = auditor._prepare_audit_files()
-            
+
         mock_clean.assert_called_once()
         assert all(str(f).startswith(str(custom_dir)) for f in files)
 
     def test_prepares_llm_target_files(self, tmp_path: Path) -> None:
-        auditor = _make_auditor(_make_settings(config_path=str(tmp_path)), target_type=TargetType.LLM)
+        auditor = _make_auditor(_make_settings(output_path=str(tmp_path)), target_type=TargetType.LLM)
         llm_dir = tmp_path / "tests" / "llm_as_judge_assert"
         llm_dir.mkdir(parents=True, exist_ok=True)
         (llm_dir / "test_1.yaml").write_text("data")
-        
+
         files = auditor._prepare_audit_files()
         assert len(files) == 1
         assert files[0].parent == llm_dir

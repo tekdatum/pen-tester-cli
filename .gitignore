@@ -17,5 +17,3 @@ pr.md
 pentester_env
 pentester.log
 output/
-src/pentester/config/auditor_files/promptfoo/results/
-src/pentester/config/auditor_files/promptfoo/tests/
