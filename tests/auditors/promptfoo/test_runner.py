@@ -18,9 +18,9 @@ def _make_runner(**kwargs: Any) -> PromptfooRunner:
 class TestInit:
     def test_initializes_with_explicit_arguments(self) -> None:
         runner = _make_runner(
-            results_path=Path("/my/results"), 
-            files_parallel=10, 
-            concurrency=8
+            results_path=Path("/my/results"),
+            files_parallel=10,
+            concurrency=8,
         )
         assert runner.results_path == Path("/my/results")
         assert runner.files_parallel == 10
@@ -30,6 +30,11 @@ class TestInit:
         runner = PromptfooRunner(results_path=Path("/tmp"))
         assert runner.files_parallel == 5
         assert runner.concurrency == 4
+        assert runner.max_tests == 20000
+
+    def test_initializes_with_max_tests(self) -> None:
+        runner = _make_runner(max_tests=500)
+        assert runner.max_tests == 500
 
 
 class TestRunEval:
@@ -66,6 +71,7 @@ class TestRunEval:
         assert command[0:2] == ["promptfoo", "eval"]
         assert "-c" in command and command[command.index("-c") + 1] == "/test/my_test.yaml"
         assert "-j" in command and command[command.index("-j") + 1] == "12"
+        assert "-n" in command and command[command.index("-n") + 1] == "20000"
         assert "--output" in command
         assert "my_test_result" in command[command.index("--output") + 1]
         assert command[command.index("--output") + 1].endswith(".jsonl")
@@ -79,6 +85,12 @@ class TestRunEval:
         assert kwargs["check"] is True
         assert kwargs["capture_output"] is True
         assert kwargs["text"] is True
+
+    def test_max_tests_flag_uses_configured_value(self) -> None:
+        _make_runner(max_tests=42).run_eval(Path("/test/my_test.yaml"))
+
+        command = self.mock_run.call_args[0][0]
+        assert "-n" in command and command[command.index("-n") + 1] == "42"
 
 
 class TestRunRedteamGenerate:

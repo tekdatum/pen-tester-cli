@@ -26,6 +26,10 @@ class TestDefaults:
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 4
 
+    def test_max_tests_default(self) -> None:
+        settings = PromptfooSettings()
+        assert settings.max_tests == 20000
+
     def test_output_path_default(self) -> None:
         settings = PromptfooSettings()
         assert settings.output_path == "./output/promptfoo"
@@ -116,6 +120,10 @@ class TestDirectInit:
         settings = PromptfooSettings(internal_concurrency=8)
         assert settings.internal_concurrency == 8
 
+    def test_set_max_tests(self) -> None:
+        settings = PromptfooSettings(max_tests=500)
+        assert settings.max_tests == 500
+
     def test_set_output_path(self) -> None:
         settings = PromptfooSettings(output_path="/my/output")
         assert settings.output_path == "/my/output"
@@ -162,6 +170,11 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("INTERNAL_CONCURRENCY", "16")
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 16
+
+    def test_max_tests_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MAX_TESTS", "100")
+        settings = PromptfooSettings()
+        assert settings.max_tests == 100
 
     def test_output_path_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OUTPUT_PATH", "/env/output")
