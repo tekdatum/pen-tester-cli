@@ -67,7 +67,8 @@ from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
-from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
+from pentester.config.settings import clear_settings_cache  # noqa: E402
+from pentester.enums.target_type import TargetType  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
 
@@ -347,7 +348,9 @@ class TestAudit:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=probes),
-            patch.object(auditor, "_init_scanner", return_value=scanner or self.mock_scanner),
+            patch.object(
+                auditor, "_init_scanner", return_value=scanner or self.mock_scanner
+            ),
         ):
             return auditor.audit()
 
@@ -378,7 +381,9 @@ class TestAudit:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]),
-            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner) as m_scanner,
+            patch.object(
+                auditor, "_init_scanner", return_value=self.mock_scanner
+            ) as m_scanner,
         ):
             auditor.audit()
         m_scanner.assert_called_once()
@@ -421,7 +426,9 @@ class TestAudit:
         assert results[0].prompt == "injected text"
 
     def test_result_response_from_scanner(self) -> None:
-        self.mock_scanner.scan.return_value = _make_scan_result(response="HTTP/1.1 200 OK\n\nbody")
+        self.mock_scanner.scan.return_value = _make_scan_result(
+            response="HTTP/1.1 200 OK\n\nbody"
+        )
         results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
         assert results[0].response == "HTTP/1.1 200 OK\n\nbody"
 

@@ -10,7 +10,6 @@ All variables are prefixed with `PENTESTER_`.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `PENTESTER_OUTPUT_DIR` | `Path` | `./output` | Directory where output files are written |
 | `PENTESTER_TARGET_TYPE` | `TargetType` | `SEMANTIC_FENCE` | Category of the target being scanned |
 | `PENTESTER_SCANNER__CURL_COMMAND` | `str \| None` | `None` | curl command string used to target the model |
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract value from response |
@@ -44,9 +43,6 @@ cp .env.example .env
 `.env.example`:
 
 ```bash
-# Output directory for scan results (default: ./output)
-PENTESTER_OUTPUT_DIR=./output
-
 # Target type: LLM | SEMANTIC_FENCE  (default: SEMANTIC_FENCE)
 PENTESTER_TARGET_TYPE=SEMANTIC_FENCE
 ```
@@ -63,7 +59,6 @@ Unknown variables are silently ignored, so it is safe to share `.env` files acro
 from pentester.config import get_settings
 
 settings = get_settings()
-print(settings.output_dir)
 print(settings.target_type)
 ```
 
@@ -88,7 +83,7 @@ settings.target_type.value     # "LLM"
 **Overriding at the command line:**
 
 ```bash
-PENTESTER_OUTPUT_DIR=/tmp/scans PENTESTER_TARGET_TYPE=LLM python sample.py
+PENTESTER_TARGET_TYPE=LLM python sample.py
 ```
 
 ---
@@ -125,7 +120,6 @@ from pentester.config.settings import TargetType, clear_settings_cache, get_sett
 # 1. Default settings
 settings = get_settings()
 print("=== Default settings ===")
-print(f"  output_dir  : {settings.output_dir}")
 print(f"  target_type : {settings.target_type}")
 print(f"  target_type value: {settings.target_type.value!r}")
 
@@ -135,13 +129,11 @@ print("\n=== Singleton cache ===")
 print(f"  get_settings() is get_settings(): {settings is settings2}")
 
 # 3. Env var override — clear cache first so the new values are picked up
-os.environ["PENTESTER_OUTPUT_DIR"] = "/tmp/demo-scan"
 os.environ["PENTESTER_TARGET_TYPE"] = "LLM"
 clear_settings_cache()
 
 overridden = get_settings()
 print("\n=== After env var override + cache clear ===")
-print(f"  output_dir  : {overridden.output_dir}")
 print(f"  target_type : {overridden.target_type}")
 
 # 4. Enumerate all TargetType members
@@ -165,7 +157,6 @@ PYTHONPATH=src python src/configuration_sample.py
 
 ```
 === Default settings ===
-  output_dir  : output
   target_type : SEMANTIC_FENCE
   target_type value: 'SEMANTIC_FENCE'
 
@@ -173,7 +164,6 @@ PYTHONPATH=src python src/configuration_sample.py
   get_settings() is get_settings(): True
 
 === After env var override + cache clear ===
-  output_dir  : /tmp/demo-scan
   target_type : LLM
 
 === TargetType members ===
@@ -187,5 +177,5 @@ PYTHONPATH=src python src/configuration_sample.py
 **Override at the command line:**
 
 ```bash
-PENTESTER_OUTPUT_DIR=/tmp/scans PENTESTER_TARGET_TYPE=LLM PYTHONPATH=src python src/configuration_sample.py
+PENTESTER_TARGET_TYPE=LLM PYTHONPATH=src python src/configuration_sample.py
 ```
