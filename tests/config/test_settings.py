@@ -7,10 +7,10 @@ from pentester.config.reporting import ReportingSettings
 from pentester.config.scanner import ScannerSettings
 from pentester.config.settings import (
     PentesterSettings,
-    TargetType,
     clear_settings_cache,
     get_settings,
 )
+from pentester.enums.target_type import TargetType
 
 
 @pytest.fixture(autouse=True)
@@ -22,10 +22,6 @@ def reset_cache() -> None:
 
 
 class TestDefaults:
-    def test_default_output_dir(self) -> None:
-        settings = PentesterSettings()
-        assert settings.output_dir == Path("./output")
-
     def test_default_target_type(self) -> None:
         settings = PentesterSettings()
         assert settings.target_type == TargetType.SEMANTIC_FENCE
@@ -73,11 +69,6 @@ class TestScannerEnvVarOverrides:
 
 
 class TestEnvVarOverrides:
-    def test_override_output_dir(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PENTESTER_OUTPUT_DIR", "/tmp/results")
-        settings = PentesterSettings()
-        assert settings.output_dir == Path("/tmp/results")
-
     def test_override_target_type_network(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -94,12 +85,6 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("PENTESTER_TARGET_TYPE", "invalid_value")
         with pytest.raises(ValidationError):
             PentesterSettings()
-
-    def test_path_coercion_from_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PENTESTER_OUTPUT_DIR", "/tmp/out")
-        settings = PentesterSettings()
-        assert settings.output_dir == Path("/tmp/out")
-        assert isinstance(settings.output_dir, Path)
 
 
 class TestReportingEnvVarOverrides:
@@ -121,17 +106,17 @@ class TestReportingEnvVarOverrides:
 class TestEnvFileLoading:
     def test_env_file_loaded(self, tmp_path: Path) -> None:
         env_file = tmp_path / ".env"
-        env_file.write_text("PENTESTER_OUTPUT_DIR=/tmp/from-env\n")
+        env_file.write_text("PENTESTER_TARGET_TYPE=LLM\n")
         settings = PentesterSettings(_env_file=str(env_file))
-        assert settings.output_dir == Path("/tmp/from-env")
+        assert settings.target_type == TargetType.LLM
 
     def test_env_local_overrides_env(self, tmp_path: Path) -> None:
         env_file = tmp_path / ".env"
         env_local_file = tmp_path / ".env.local"
-        env_file.write_text("PENTESTER_OUTPUT_DIR=/tmp/from-env\n")
-        env_local_file.write_text("PENTESTER_OUTPUT_DIR=/tmp/from-env-local\n")
+        env_file.write_text("PENTESTER_TARGET_TYPE=LLM\n")
+        env_local_file.write_text("PENTESTER_TARGET_TYPE=SEMANTIC_FENCE\n")
         settings = PentesterSettings(_env_file=[str(env_file), str(env_local_file)])
-        assert settings.output_dir == Path("/tmp/from-env-local")
+        assert settings.target_type == TargetType.SEMANTIC_FENCE
 
 
 class TestSettingsSingleton:
@@ -149,10 +134,10 @@ class TestSettingsSingleton:
     ) -> None:
         s1 = get_settings()
         clear_settings_cache()
-        monkeypatch.setenv("PENTESTER_OUTPUT_DIR", "/tmp/new-value")
+        monkeypatch.setenv("PENTESTER_TARGET_TYPE", "LLM")
         s2 = get_settings()
         assert s1 is not s2
-        assert s2.output_dir == Path("/tmp/new-value")
+        assert s2.target_type == TargetType.LLM
 
 
 class TestTargetTypeEnum:

@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import MagicMock, patch
 from requests import Response
 
@@ -5,6 +6,7 @@ from pentester.scanners.request_handlers.curl_handlers.curl_reader_handler impor
     CurlReaderHandler,
 )
 from pentester.scanners.models.target_response import TargetResponse
+from pentester.scanners.exceptions import CurlParseException
 
 _REQUEST_PATH = "pentester.scanners.request_handlers.curl_handlers.curl_handler.request"
 
@@ -69,6 +71,12 @@ def test_request_bypassed_uses_serializer_when_present() -> None:
 
 
 # ── CurlReaderhandler._parse_command ──────────────────────────────────────────────────
+
+
+def test_exec_http_request_raises_when_url_missing() -> None:
+    handler = CurlReaderHandler(curl_command="curl", response_serializer=None)
+    with pytest.raises(CurlParseException, match="URL"):
+        handler._parse_command("curl")
 
 
 def test_parse_extracts_method() -> None:
