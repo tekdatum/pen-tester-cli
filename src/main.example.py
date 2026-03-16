@@ -53,7 +53,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 from pentester.config.llm import LLMProvider
 from pentester.config.logging import setup_logging
-from pentester.config.settings import TargetType, get_settings  # noqa: E402
+from pentester.config.settings import get_settings  # noqa: E402
+from pentester.enums.target_type import TargetType  # noqa: E402
 from pentester.orchestrator import Orchestrator  # noqa: E402
 
 
