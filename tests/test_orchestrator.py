@@ -9,6 +9,8 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Stub our auditor module so garak internals never load.
 # ---------------------------------------------------------------------------
@@ -21,6 +23,13 @@ from pentester.config.reporting import ReportingSettings  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.orchestrator import Orchestrator  # noqa: E402
 from pentester.reporting.reporting import Reporting  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _patch_promptfoo_auditor():
+    """Mock PromptfooAuditor at the factory boundary so its __init__ never runs."""
+    with patch("pentester.auditors.auditor_factory.PromptfooAuditor"):
+        yield
 
 
 def _make_settings(**reporting_kwargs) -> PentesterSettings:
