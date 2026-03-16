@@ -26,9 +26,9 @@ class TestDefaults:
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 4
 
-    def test_target_type_default(self) -> None:
+    def test_output_path_default(self) -> None:
         settings = PromptfooSettings()
-        assert settings.target_type == "SEMANTIC_FENCE"
+        assert settings.output_path == "./output/promptfoo"
 
 
 class TestComputedFields:
@@ -36,19 +36,17 @@ class TestComputedFields:
         settings = PromptfooSettings()
         assert settings.config_file.endswith("promptfooconfig.yaml")
 
-    def test_tests_path_is_config_path_plus_tests(self) -> None:
+    def test_tests_path_is_output_path_plus_tests(self) -> None:
         settings = PromptfooSettings()
-        expected = Path(settings.config_path) / "tests"
-        assert settings.tests_path == expected
+        assert settings.tests_path == Path("./output/promptfoo") / "tests"
 
     def test_tests_path_returns_path_instance(self) -> None:
         settings = PromptfooSettings()
         assert isinstance(settings.tests_path, Path)
 
-    def test_results_path_is_config_path_plus_results(self) -> None:
+    def test_results_path_is_output_path_plus_results(self) -> None:
         settings = PromptfooSettings()
-        expected = Path(settings.config_path) / "results"
-        assert settings.results_path == expected
+        assert settings.results_path == Path("./output/promptfoo") / "results"
 
     def test_results_path_returns_path_instance(self) -> None:
         settings = PromptfooSettings()
@@ -66,27 +64,35 @@ class TestComputedFields:
         settings = PromptfooSettings()
         assert isinstance(settings.config_file, str)
 
+    def test_tests_path_reflects_custom_output_path(self) -> None:
+        settings = PromptfooSettings(output_path="/custom/output")
+        assert settings.tests_path == Path("/custom/output") / "tests"
+
+    def test_results_path_reflects_custom_output_path(self) -> None:
+        settings = PromptfooSettings(output_path="/custom/output")
+        assert settings.results_path == Path("/custom/output") / "results"
+
 
 class TestComputedFieldsWithCustomPath:
     def test_config_file_reflects_custom_path(self) -> None:
         settings = PromptfooSettings(config_path="/custom/path")
         assert settings.config_file == "/custom/path/promptfooconfig.yaml"
 
-    def test_tests_path_reflects_custom_path(self) -> None:
+    def test_tests_path_is_independent_of_config_path(self) -> None:
         settings = PromptfooSettings(config_path="/custom/path")
-        assert settings.tests_path == Path("/custom/path/tests")
+        assert settings.tests_path == Path("./output/promptfoo") / "tests"
 
-    def test_results_path_reflects_custom_path(self) -> None:
+    def test_results_path_is_independent_of_config_path(self) -> None:
         settings = PromptfooSettings(config_path="/custom/path")
-        assert settings.results_path == Path("/custom/path/results")
+        assert settings.results_path == Path("./output/promptfoo") / "results"
 
-    def test_tests_path_configurations_reflects_custom_path(self) -> None:
-        settings = PromptfooSettings(config_path="/custom/path")
-        assert settings.tests_path_configurations == Path("/custom/path/tests/configurations")
+    def test_tests_path_configurations_reflects_custom_output_path(self) -> None:
+        settings = PromptfooSettings(output_path="/custom/output")
+        assert settings.tests_path_configurations == Path("/custom/output/tests/configurations")
 
-    def test_tests_path_llm_assert_reflects_custom_path(self) -> None:
-        settings = PromptfooSettings(config_path="/custom/path")
-        assert settings.tests_path_llm_assert == Path("/custom/path/tests/llm_as_judge_assert")
+    def test_tests_path_llm_assert_reflects_custom_output_path(self) -> None:
+        settings = PromptfooSettings(output_path="/custom/output")
+        assert settings.tests_path_llm_assert == Path("/custom/output/tests/llm_as_judge_assert")
 
 
 class TestDirectInit:
@@ -110,9 +116,9 @@ class TestDirectInit:
         settings = PromptfooSettings(internal_concurrency=8)
         assert settings.internal_concurrency == 8
 
-    def test_set_target_type(self) -> None:
-        settings = PromptfooSettings(target_type="LLM")
-        assert settings.target_type == "LLM"
+    def test_set_output_path(self) -> None:
+        settings = PromptfooSettings(output_path="/my/output")
+        assert settings.output_path == "/my/output"
 
     def test_all_fields_set_together(self) -> None:
         settings = PromptfooSettings(
@@ -121,14 +127,14 @@ class TestDirectInit:
             replace_existing_file=True,
             files_parallel=3,
             internal_concurrency=2,
-            target_type="LLM",
+            output_path="/my/output",
         )
         assert settings.config_path == "/custom"
         assert settings.assertion_wrapper_path == "/wrap.py"
         assert settings.replace_existing_file is True
         assert settings.files_parallel == 3
         assert settings.internal_concurrency == 2
-        assert settings.target_type == "LLM"
+        assert settings.output_path == "/my/output"
 
 
 class TestEnvVarOverrides:
@@ -157,7 +163,7 @@ class TestEnvVarOverrides:
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 16
 
-    def test_target_type_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("TARGET_TYPE", "LLM")
+    def test_output_path_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OUTPUT_PATH", "/env/output")
         settings = PromptfooSettings()
-        assert settings.target_type == "LLM"
+        assert settings.output_path == "/env/output"

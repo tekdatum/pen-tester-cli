@@ -55,7 +55,7 @@ _garak_command_mod = sys.modules["garak.command"]
 from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
-from pentester.config.settings import TargetType  # noqa: E402
+from pentester.enums.target_type import TargetType  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402  # noqa: E402
 
 # ---------------------------------------------------------------------------
