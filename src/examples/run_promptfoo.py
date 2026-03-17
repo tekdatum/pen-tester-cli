@@ -29,12 +29,29 @@ CURL_COMMAND = (
 )
 
 settings = get_settings()
-scanner = Scanner.from_curl(CURL_COMMAND)
-auditor = PromptfooAuditor(settings=settings.promptfoo, scanner=scanner)
+print("--- General settings ---")
+print(f"  target_type:              {settings.target_type}")
+print("--- Promptfoo settings ---")
+print(f"  config_path:              {settings.promptfoo.config_path}")
+print(f"  assertion_wrapper_path:   {settings.promptfoo.assertion_wrapper_path}")
+print(f"  replace_existing_file:    {settings.promptfoo.replace_existing_file}")
+print(f"  files_parallel:           {settings.promptfoo.files_parallel}")
+print(f"  internal_concurrency:     {settings.promptfoo.internal_concurrency}")
+print(f"  max_tests:                {settings.promptfoo.max_tests}")
+print(f"  output_path:              {settings.promptfoo.output_path}")
+print("--- Reporting settings ---")
+print(f"  output_dir_path:          {settings.reporting.output_dir_path}")
+print(f"  generator_keys:           {settings.reporting.generator_keys}")
+print("--------------------------")
 
-# results = auditor.audit()
-auditor.results_df = auditor.collector.build_dataframe()
-results = auditor._generate_probe_results()
+scanner = Scanner.from_curl(CURL_COMMAND)
+auditor = PromptfooAuditor(
+    settings=settings.promptfoo, scanner=scanner, target_type=settings.target_type
+)
+
+results = auditor.audit()
+# auditor.results_df = auditor.collector.build_dataframe()
+# results = auditor._generate_probe_results()
 
 reporting = Reporting()
 generator_keys = [k.strip() for k in settings.reporting.generator_keys.split(",")]
