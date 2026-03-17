@@ -106,6 +106,31 @@ def test_from_settings_returns_none_when_no_curl_command() -> None:
     assert Scanner.from_settings(ScannerSettings()) is None
 
 
+def test_from_settings_returns_scanner_when_curl_file_set(tmp_path) -> None:
+    f = tmp_path / "cmd.curl"
+    f.write_text(CURL_COMMAND)
+    settings = ScannerSettings(curl_file=str(f))
+    assert isinstance(Scanner.from_settings(settings), Scanner)
+
+
+def test_from_settings_curl_file_loads_command(tmp_path) -> None:
+    f = tmp_path / "cmd.curl"
+    f.write_text(CURL_COMMAND)
+    settings = ScannerSettings(curl_file=str(f))
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
+    assert scanner.request_handler.curl_command == CURL_COMMAND
+
+
+def test_from_settings_curl_command_takes_priority_over_curl_file(tmp_path) -> None:
+    f = tmp_path / "cmd.curl"
+    f.write_text("curl http://from-file")
+    settings = ScannerSettings(curl_command=CURL_COMMAND, curl_file=str(f))
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
+    assert scanner.request_handler.curl_command == CURL_COMMAND
+
+
 def test_from_settings_returns_scanner_when_curl_command_set() -> None:
     settings = ScannerSettings(curl_command=CURL_COMMAND)
     assert isinstance(Scanner.from_settings(settings), Scanner)
