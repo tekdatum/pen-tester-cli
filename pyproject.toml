@@ -59,7 +59,7 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "mako.*", "uncurl.*", "tqdm", "pandas.*", "click", "click.*"]
+module = ["requests.*", "mako.*", "uncurl.*", "tqdm", "pandas.*", "pyrit", "pyrit.*", "click", "click.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -81,7 +81,7 @@ target-version = "py310"
 # I: isort (import sorting)
 # ... https://docs.astral.sh/ruff/rules/
 [tool.ruff.lint]
-select = ["E", "F"] 
+select = ["E", "F"]
 ignore = []
 
 # ------------------------------------------------------------------

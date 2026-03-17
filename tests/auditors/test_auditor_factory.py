@@ -1,17 +1,18 @@
 """Tests for AuditorFactory.
 
-garak.* is stubbed via sys.modules so the suite runs without the real package.
+garak.* and pyrit.* are stubbed via sys.modules so the suite runs without
+the real packages present.
 """
 
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # ---------------------------------------------------------------------------
-# Stub garak before any pentester import resolves it.
+# Stub garak and pyrit before any pentester import resolves them.
 # ---------------------------------------------------------------------------
 
 _garak_config_mod = MagicMock(name="garak._config")
@@ -22,11 +23,33 @@ _garak_mod._config = _garak_config_mod
 _garak_mod._plugins = _garak_plugins_mod
 _garak_mod.command = _garak_command_mod
 
+_pyrit_setup_mod = MagicMock(name="pyrit.setup")
+_pyrit_setup_mod.initialize_pyrit_async = AsyncMock()
+
+_tqdm_stub = MagicMock(name="tqdm")
+_tqdm_stub.tqdm = lambda iterable, **_kwargs: iterable
+
 for _name, _stub in [
     ("garak", _garak_mod),
     ("garak._config", _garak_config_mod),
     ("garak._plugins", _garak_plugins_mod),
     ("garak.command", _garak_command_mod),
+    ("garak.attempt", MagicMock(name="garak.attempt")),
+    ("garak.generators", MagicMock(name="garak.generators")),
+    ("garak.generators.litellm", MagicMock(name="garak.generators.litellm")),
+    ("garak.generators.openai", MagicMock(name="garak.generators.openai")),
+    ("pyrit", MagicMock(name="pyrit")),
+    ("pyrit.datasets", MagicMock(name="pyrit.datasets")),
+    ("pyrit.setup", _pyrit_setup_mod),
+    ("pyrit.prompt_target", MagicMock(name="pyrit.prompt_target")),
+    ("pyrit.score", MagicMock(name="pyrit.score")),
+    ("pyrit.score.true_false", MagicMock(name="pyrit.score.true_false")),
+    (
+        "pyrit.score.true_false.self_ask_true_false_scorer",
+        MagicMock(name="pyrit.score.true_false.self_ask_true_false_scorer"),
+    ),
+    ("pyrit.models", MagicMock(name="pyrit.models")),
+    ("tqdm", _tqdm_stub),
 ]:
     sys.modules.setdefault(_name, _stub)
 
@@ -40,9 +63,7 @@ from pentester.scanners.scanner import Scanner  # noqa: E402
 @pytest.fixture(autouse=True)
 def _patch_promptfoo_auditor():
     """Mock PromptfooAuditor at the factory boundary so its __init__ never runs."""
-    with patch(
-        "pentester.auditors.auditor_factory.PromptfooAuditor"
-    ) as mock_cls:
+    with patch("pentester.auditors.auditor_factory.PromptfooAuditor") as mock_cls:
         yield mock_cls
 
 
