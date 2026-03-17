@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, mock_open, patch
@@ -50,7 +52,7 @@ def _make_auditor(
     with (
         patch("pathlib.Path.mkdir"),
         patch("builtins.open", mock_open(read_data="")),
-        patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
+        patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
     ):
         return PromptfooAuditor(settings=s, scanner=scanner, target_type=target_type)
 
@@ -75,7 +77,7 @@ class TestInit:
         with (
             patch("pathlib.Path.mkdir"),
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
+            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
         ):
             auditor = PromptfooAuditor(settings=None)
 
@@ -96,7 +98,7 @@ class TestEnsureDirectories:
         with (
             patch("pathlib.Path.mkdir") as mock_mkdir,
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
+            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
         ):
             PromptfooAuditor(settings=_make_settings())
             
@@ -110,7 +112,7 @@ class TestLoadConfig:
         auditor = _make_auditor()
         with (
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
+            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
         ):
             config = auditor._load_config(Path("/fake.yaml"))
             
@@ -164,17 +166,21 @@ class TestWritePluginConfigs:
         auditor = _make_auditor(target_type=TargetType.LLM)
         configs_dir = tmp_path / "configurations"
         configs_dir.mkdir()
-        
+
         with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
             auditor._write_plugin_configs(["harmful:hate", "harmful:xss"], configs_dir)
-            
-        assert mock_dump.called
-        written_config = mock_dump.call_args[0][0]
-        
-        assert "metadata" not in written_config
-        assert written_config["redteam"]["plugins"] == ["harmful:hate"]
-        assert "defaultAssertions" not in written_config["redteam"]
+
+        assert mock_dump.call_count == 2
+        first_config = mock_dump.call_args_list[0][0][0]
+        second_config = mock_dump.call_args_list[1][0][0]
+
+        assert "metadata" not in first_config
+        assert first_config["redteam"]["plugins"] == ["harmful:hate"]
+        assert "defaultAssertions" not in first_config["redteam"]
+        assert second_config["redteam"]["plugins"] == ["harmful:xss"]
         assert (configs_dir / "test_1.yaml").exists()
+        assert (configs_dir / "test_2.yaml").exists()
+        assert "defaultAssertions" in auditor.config["redteam"]  # original unchanged
 
     def test_handles_existing_files_based_on_replace_setting(self, tmp_path: Path) -> None:
         configs_dir = tmp_path / "configurations"
@@ -277,7 +283,7 @@ class TestCleanConfig:
         
         with (
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=_FAKE_CONFIG.copy()),
+            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
             patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump,
         ):
             auditor.clean_config(Path("/test.yaml"), output)
@@ -360,8 +366,8 @@ class TestProcessEvalResults:
 # ---------------------------------------------------------------------------
 
 class TestGenerateProbeResults:
-    def _make_results_df(self) -> pd.DataFrame:
-        return pd.DataFrame([{
+    def _make_results_df(self, **overrides: object) -> pd.DataFrame:
+        row: dict = {
             "reason_code": "category_0",
             "prompt": "my_prompt",
             "api_response": {"data": "response_data"},
@@ -373,7 +379,10 @@ class TestGenerateProbeResults:
             "cached": False,
             "strategy_id": "jailbreak-templates",
             "plugin_id": "competitors",
-        }])
+            "error": None,
+        }
+        row.update(overrides)
+        return pd.DataFrame([row])
 
     def test_maps_dataframe_rows_to_probe_results_correctly(self) -> None:
         auditor = _make_auditor()
@@ -395,13 +404,71 @@ class TestGenerateProbeResults:
             "http_status": 200,
             "duration": 1.5,
             "latency_ms": 100,
-            "cached": False
+            "cached": False,
+            "error": None,
         }
 
     def test_returns_empty_list_for_empty_dataframe(self) -> None:
         auditor = _make_auditor()
         auditor.results_df = pd.DataFrame()
         assert auditor._generate_probe_results() == []
+
+    def test_score_defaults_to_zero_when_accept_score_is_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(accept_score=None)
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].score == 0.0
+
+    def test_error_included_in_metadata(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(error="some error")
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].metadata["error"] == "some error"
+
+    def test_no_error_metadata_is_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(error=None)
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].metadata["error"] is None
+
+# ---------------------------------------------------------------------------
+# Test Pre-audit Precondition Validation
+# ---------------------------------------------------------------------------
+
+class TestValidatePreconditions:
+    def test_semantic_fence_passes_when_assert_file_exists(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        with patch("pathlib.Path.exists", return_value=True):
+            auditor._validate_preconditions()  # should not raise
+
+    def test_semantic_fence_raises_when_assert_file_missing(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        with patch("pathlib.Path.exists", return_value=False):
+            with pytest.raises(ValueError, match="Assert file not found"):
+                auditor._validate_preconditions()
+
+    def test_llm_passes_when_openai_key_is_set(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=True):
+            auditor._validate_preconditions()  # should not raise
+
+    def test_llm_passes_when_any_known_key_is_set(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True):
+            auditor._validate_preconditions()  # should not raise
+
+    def test_llm_raises_when_no_key_is_set(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ValueError, match="No LLM API key found"):
+                auditor._validate_preconditions()
+
 
 # ---------------------------------------------------------------------------
 # Test Audit Pipeline orchestration
@@ -414,8 +481,9 @@ class TestAudit:
         runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
         expected_df = pd.DataFrame({"col": [1]})
         expected_probes = [MagicMock(spec=ProbeResult)]
-        
+
         with (
+            patch.object(auditor, "_validate_preconditions"),
             patch.object(auditor, "generate_tests_files") as mock_gen,
             patch.object(auditor.collector, "clean") as mock_clean,
             patch.object(auditor, "_prepare_audit_files", return_value=files) as mock_prep,
@@ -440,6 +508,7 @@ class TestAudit:
     def test_returns_empty_list_when_no_results(self) -> None:
         auditor = _make_auditor()
         with (
+            patch.object(auditor, "_validate_preconditions"),
             patch.object(auditor, "generate_tests_files"),
             patch.object(auditor.collector, "clean"),
             patch.object(auditor, "_prepare_audit_files", return_value=[]),
@@ -449,3 +518,88 @@ class TestAudit:
             patch.object(auditor, "_generate_probe_results", return_value=[]),
         ):
             assert auditor.audit() == []
+
+    def test_builds_dataframe_and_logs_errors_when_all_evals_failed(self) -> None:
+        auditor = _make_auditor()
+        all_failed = [
+            (Path("/a.yaml"), False, "a.yaml", "error A"),
+            (Path("/b.yaml"), False, "b.yaml", "error B"),
+        ]
+        expected_df = pd.DataFrame({"col": [1]})
+        error_probe = MagicMock(spec=ProbeResult)
+        error_probe.is_error = True
+        error_probe.attack_category = "cat"
+        error_probe.attack_type = "type"
+        error_probe.metadata = {"error": "something went wrong"}
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=[Path("/a.yaml"), Path("/b.yaml")]),
+            patch.object(auditor.runner, "run_all", return_value=all_failed),
+            patch.object(auditor, "_process_eval_results"),
+            patch.object(auditor.collector, "build_dataframe", return_value=expected_df) as mock_build,
+            patch.object(auditor, "_generate_probe_results", return_value=[error_probe]) as mock_gen_probes,
+            patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
+        ):
+            result = auditor.audit()
+
+        mock_build.assert_called_once()
+        mock_gen_probes.assert_called_once()
+        mock_logger.error.assert_called_once_with(
+            "Probe error — category: %s | type: %s | error: %s",
+            "cat",
+            "type",
+            "something went wrong",
+        )
+        assert result == []
+        assert auditor.results_df is expected_df
+
+    def test_no_error_logs_when_all_evals_failed_but_no_error_probes(self) -> None:
+        auditor = _make_auditor()
+        all_failed = [
+            (Path("/a.yaml"), False, "a.yaml", "error A"),
+        ]
+        non_error_probe = MagicMock(spec=ProbeResult)
+        non_error_probe.is_error = False
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=[Path("/a.yaml")]),
+            patch.object(auditor.runner, "run_all", return_value=all_failed),
+            patch.object(auditor, "_process_eval_results"),
+            patch.object(auditor.collector, "build_dataframe", return_value=pd.DataFrame()),
+            patch.object(auditor, "_generate_probe_results", return_value=[non_error_probe]),
+            patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
+        ):
+            result = auditor.audit()
+
+        mock_logger.error.assert_not_called()
+        assert result == []
+
+    def test_calls_build_dataframe_when_at_least_one_eval_succeeded(self) -> None:
+        auditor = _make_auditor()
+        mixed_results = [
+            (Path("/a.yaml"), True, "a.yaml", "ok"),
+            (Path("/b.yaml"), False, "b.yaml", "error B"),
+        ]
+        expected_df = pd.DataFrame({"col": [1]})
+        expected_probes = [MagicMock(spec=ProbeResult)]
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=[Path("/a.yaml"), Path("/b.yaml")]),
+            patch.object(auditor.runner, "run_all", return_value=mixed_results),
+            patch.object(auditor, "_process_eval_results"),
+            patch.object(auditor.collector, "build_dataframe", return_value=expected_df) as mock_build,
+            patch.object(auditor, "_generate_probe_results", return_value=expected_probes),
+        ):
+            result = auditor.audit()
+
+        mock_build.assert_called_once()
+        assert result is expected_probes

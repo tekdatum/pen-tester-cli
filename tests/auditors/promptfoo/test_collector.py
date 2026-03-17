@@ -26,8 +26,9 @@ def _make_jsonl_row(
     raw_response: object = None,
     strategy_id: str = "base64",
     plugin_id: str = "competitors",
+    error: str | None = None,
 ) -> dict:
-    return {
+    row: dict = {
         "provider": {"id": provider_id},
         "prompt": {"raw": prompt_raw},
         "vars": {"input": vars_input},
@@ -46,6 +47,9 @@ def _make_jsonl_row(
         },
         "metadata": {"strategyId": strategy_id, "pluginId": plugin_id},
     }
+    if error is not None:
+        row["error"] = error
+    return row
 
 
 class TestClean:
@@ -168,7 +172,7 @@ class TestExtractRows:
             "provider_url", "prompt", "input", "valid", "reason_code",
             "duration", "accept_score", "reject_score", "latency_ms",
             "http_status", "cached", "api_response", "source_file",
-            "strategy_id", "plugin_id",
+            "strategy_id", "plugin_id", "error",
         }
         assert set(result.columns) == expected_cols
 
@@ -201,6 +205,45 @@ class TestExtractRows:
         assert result["strategy_id"].iloc[0] is None
         assert result["plugin_id"].iloc[0] is None
 
+    def test_includes_error_column_when_error_present(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        df = pd.DataFrame([_make_jsonl_row(error="FileNotFoundError: assert.py not found")])
+
+        result = collector._extract_rows(df, "test.jsonl")
+
+        assert result["error"].iloc[0] == "FileNotFoundError: assert.py not found"
+
+    def test_error_column_is_none_when_no_error(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        df = pd.DataFrame([_make_jsonl_row()])
+
+        result = collector._extract_rows(df, "test.jsonl")
+
+        assert result["error"].iloc[0] is None
+
+    def test_handles_missing_response_column_gracefully(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        # Rows as produced by promptfoo when the grader fails — no "response" key
+        df = pd.DataFrame([
+            {
+                "provider": {"id": "http://example.com"},
+                "prompt": {"raw": "test prompt"},
+                "vars": {"input": "user input"},
+                "error": "OpenAI API error: missing key",
+                "success": False,
+                "failureReason": "GRADER_ERROR",
+            }
+        ])
+
+        result = collector._extract_rows(df, "test.jsonl")
+
+        assert len(result) == 1
+        assert result["latency_ms"].iloc[0] is None
+        assert result["cached"].iloc[0] is None
+        assert result["http_status"].iloc[0] is None
+        assert result["api_response"].iloc[0] == {}
+        assert result["error"].iloc[0] == "OpenAI API error: missing key"
+
 
 class TestBuildDataframe:
     def test_concatenates_valid_files_while_ignoring_invalid_ones(self, tmp_path: Path) -> None:
@@ -221,6 +264,19 @@ class TestBuildDataframe:
 
     def test_returns_empty_dataframe_when_no_valid_files_exist(self, tmp_path: Path) -> None:
         result = _make_collector(tmp_path).build_dataframe()
-        
+
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
+
+    def test_includes_errored_rows_in_output(self, tmp_path: Path) -> None:
+        rows = [
+            json.dumps(_make_jsonl_row()),
+            json.dumps(_make_jsonl_row(error="Error running Python script: FileNotFoundError")),
+        ]
+        (tmp_path / "test.jsonl").write_text("\n".join(rows) + "\n")
+
+        result = _make_collector(tmp_path).build_dataframe()
+
+        assert len(result) == 2
+        assert pd.isna(result["error"].iloc[0])
+        assert result["error"].iloc[1] == "Error running Python script: FileNotFoundError"
