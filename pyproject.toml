@@ -63,7 +63,7 @@ module = ["requests.*", "mako.*", "uncurl.*", "tqdm", "pandas.*", "click", "clic
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["garak", "garak.*"]
+module = ["garak", "garak.*", "inspect_ai"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
