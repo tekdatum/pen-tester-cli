@@ -10,8 +10,8 @@ Configure the remaining options via environment variables or a .env file before 
     PENTESTER_PROMPTFOO__FILES_PARALLEL=5
     PENTESTER_PROMPTFOO__INTERNAL_CONCURRENCY=4
     PENTESTER_PROMPTFOO__MAX_TESTS=20000
-    PENTESTER_PROMPTFOO__PLUGINS_PER_FILE=1   # plugins per test YAML (1-5)
-    PENTESTER_PROMPTFOO__MAX_TEST_FILES=5     # cap on test YAMLs (omit for all)
+    PENTESTER_PROMPTFOO__PLUGINS_PER_FILE=1   # plugins bundled per test YAML (1-5)
+    PENTESTER_PROMPTFOO__MAX_TEST_FILES=5     # cap on generated test YAMLs (omit for all)
     PENTESTER_PROMPTFOO__OUTPUT_PATH=./output/promptfoo
     PENTESTER_REPORTING__OUTPUT_DIR_PATH=./output/examples
     PENTESTER_REPORTING__GENERATOR_KEYS=html,csv
@@ -26,6 +26,7 @@ import logging
 from pentester.auditors.promptfoo.auditor import PromptfooAuditor
 from pentester.config.logging import setup_logging
 from pentester.config.settings import get_settings
+from pentester.reporting.reporting import Reporting
 from pentester.scanners.scanner import Scanner
 
 setup_logging(level=logging.INFO)
