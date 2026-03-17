@@ -148,7 +148,7 @@ class TestInitTarget:
     def test_openai_passes_openai_endpoint(self) -> None:
         _make_auditor(llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))._init_target()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
-            model_name="gpt-4o", endpoint="https://api.openai.com/v1"
+            model_name="gpt-4o", endpoint="https://api.openai.com/v1", is_json_supported=True
         )
 
     def test_openai_passes_endpoint(self) -> None:
@@ -158,7 +158,9 @@ class TestInitTarget:
     def test_anthropic_passes_anthropic_endpoint(self) -> None:
         _make_auditor(llm_settings=LLMSettings(model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC))._init_target()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
-            model_name="claude-3-5-sonnet", endpoint="https://api.anthropic.com/v1"
+            model_name="claude-3-5-sonnet",
+            endpoint="https://api.anthropic.com/v1",
+            is_json_supported=True,
         )
 
     def test_gemini_passes_gemini_endpoint(self) -> None:
@@ -166,6 +168,7 @@ class TestInitTarget:
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
             model_name="gemini-1.5-pro",
             endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
+            is_json_supported=True,
         )
 
     def test_returns_openai_chat_target(self) -> None:
@@ -187,13 +190,15 @@ class TestInitScorer:
     def test_creates_scorer_target_with_llm_model(self) -> None:
         _make_auditor(llm_settings=LLMSettings(model="gpt-4o"))._init_scorer()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
-            model_name="gpt-4o", endpoint="https://api.openai.com/v1"
+            model_name="gpt-4o", endpoint="https://api.openai.com/v1", is_json_supported=True
         )
 
     def test_scorer_passes_anthropic_endpoint_when_provider_anthropic(self) -> None:
         _make_auditor(llm_settings=LLMSettings(model="claude-3-5-haiku", provider=LLMProvider.ANTHROPIC))._init_scorer()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
-            model_name="claude-3-5-haiku", endpoint="https://api.anthropic.com/v1"
+            model_name="claude-3-5-haiku",
+            endpoint="https://api.anthropic.com/v1",
+            is_json_supported=False,
         )
 
     def test_scorer_passes_gemini_endpoint_when_provider_gemini(self) -> None:
@@ -201,7 +206,18 @@ class TestInitScorer:
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
             model_name="gemini-1.5-flash",
             endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
+            is_json_supported=True,
         )
+
+    def test_anthropic_scorer_disables_json_response(self) -> None:
+        _make_auditor(llm_settings=LLMSettings(model="claude-3-5-haiku", provider=LLMProvider.ANTHROPIC))._init_scorer()
+        call_kwargs = _pyrit_prompt_target_mod.OpenAIChatTarget.call_args.kwargs
+        assert call_kwargs["is_json_supported"] is False
+
+    def test_non_anthropic_scorer_keeps_json_response_enabled(self) -> None:
+        _make_auditor(llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))._init_scorer()
+        call_kwargs = _pyrit_prompt_target_mod.OpenAIChatTarget.call_args.kwargs
+        assert call_kwargs["is_json_supported"] is True
 
     def test_passes_scorer_target_to_self_ask_scorer(self) -> None:
         scorer_target = MagicMock()

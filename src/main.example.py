@@ -61,6 +61,8 @@ from pentester.orchestrator import Orchestrator  # noqa: E402
 def main() -> None:
     setup_logging(level=logging.DEBUG)
     settings = get_settings()
+    # settings.auditors = ["garak", "pyrit"]
+    settings.auditors = ["pyrit"]
     settings.garak.probes = [
         "probes.test.Test",
     ]
@@ -69,7 +71,7 @@ def main() -> None:
     settings.llm.model = "claude-sonnet-4-6"
     settings.target_type = TargetType.LLM
     orchestrator = Orchestrator(settings)
-    orchestrator.execute_auditors(["garak"])
+    orchestrator.execute_auditors(settings.auditors)
     # orchestrator.execute()
 
 

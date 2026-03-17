@@ -9,6 +9,8 @@ from __future__ import annotations
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Stub garak and pyrit before any pentester import resolves them.
 # ---------------------------------------------------------------------------
@@ -60,9 +62,7 @@ from pentester.scanners.scanner import Scanner  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _patch_promptfoo_auditor():
-    """Mock PromptfooAuditor at the factory boundary so its __init__ never runs."""
-    with patch(
-        "pentester.auditors.auditor_factory.PromptfooAuditor"
+    with patch("pentester.auditors.auditor_factory.PromptfooAuditor") as mock_cls:
     ) as mock_cls:
         yield mock_cls
 
