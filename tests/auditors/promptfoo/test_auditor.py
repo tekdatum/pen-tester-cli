@@ -182,15 +182,66 @@ class TestWritePluginConfigs:
         assert (configs_dir / "test_2.yaml").exists()
         assert "defaultAssertions" in auditor.config["redteam"]  # original unchanged
 
+    def test_warns_when_existing_file_has_different_plugin_count(self, tmp_path: Path) -> None:
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+        existing_file = configs_dir / "test_1.yaml"
+        existing_file.write_text("placeholder")
+
+        auditor = _make_auditor(_make_settings(plugins_per_file=1, replace_existing_file=False))
+
+        existing_config = copy.deepcopy(_FAKE_CONFIG)
+        existing_config["redteam"]["plugins"] = ["harmful:hate", "harmful:xss"]  # 2 plugins
+
+        with (
+            patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=existing_config,
+            ),
+        ):
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        mock_logger.warning.assert_called_once()
+        assert "differs from" in mock_logger.warning.call_args[0][0]
+
+    def test_no_warning_when_existing_file_has_matching_plugin_count(self, tmp_path: Path) -> None:
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+        existing_file = configs_dir / "test_1.yaml"
+        existing_file.write_text("placeholder")
+
+        auditor = _make_auditor(_make_settings(plugins_per_file=1, replace_existing_file=False))
+
+        existing_config = copy.deepcopy(_FAKE_CONFIG)
+        existing_config["redteam"]["plugins"] = ["harmful:hate"]  # matches plugins_per_file=1
+
+        with (
+            patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=existing_config,
+            ),
+        ):
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        mock_logger.warning.assert_not_called()
+        mock_logger.info.assert_called()
+
     def test_handles_existing_files_based_on_replace_setting(self, tmp_path: Path) -> None:
         configs_dir = tmp_path / "configurations"
         configs_dir.mkdir()
         existing_file = configs_dir / "test_1.yaml"
         
-        # Test replace = False
+        # Test replace = False — mock safe_load so _load_config returns a valid dict
         s_no_replace = _make_settings(replace_existing_file=False)
-        existing_file.write_text("existing")
-        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+        existing_file.write_text("placeholder")
+        on_disk = copy.deepcopy(_FAKE_CONFIG)
+        on_disk["redteam"]["plugins"] = ["harmful:hate"]  # 1 plugin matches default plugins_per_file
+        with (
+            patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump,
+            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=on_disk),
+        ):
             _make_auditor(s_no_replace)._write_plugin_configs(["harmful:hate"], configs_dir)
             mock_dump.assert_not_called()
 
@@ -200,6 +251,58 @@ class TestWritePluginConfigs:
         with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
             _make_auditor(s_replace)._write_plugin_configs(["harmful:hate"], configs_dir)
             mock_dump.assert_called()
+
+
+class TestWritePluginConfigsChunking:
+    def test_plugins_per_file_chunks_correctly(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(_make_settings(plugins_per_file=2))
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+        plugins = ["a", "b", "c", "d", "e"]
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(plugins, configs_dir)
+
+        assert mock_dump.call_count == 3  # ceil(5/2) = 3
+        assert mock_dump.call_args_list[0][0][0]["redteam"]["plugins"] == ["a", "b"]
+        assert mock_dump.call_args_list[1][0][0]["redteam"]["plugins"] == ["c", "d"]
+        assert mock_dump.call_args_list[2][0][0]["redteam"]["plugins"] == ["e"]
+
+    def test_max_test_files_caps_output(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(_make_settings(max_test_files=2))
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+        plugins = ["a", "b", "c", "d", "e"]
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(plugins, configs_dir)
+
+        assert mock_dump.call_count == 2
+        assert mock_dump.call_args_list[0][0][0]["redteam"]["plugins"] == ["a"]
+        assert mock_dump.call_args_list[1][0][0]["redteam"]["plugins"] == ["b"]
+
+    def test_plugins_per_file_and_max_test_files_combined(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(_make_settings(plugins_per_file=2, max_test_files=1))
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+        plugins = ["a", "b", "c", "d"]
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(plugins, configs_dir)
+
+        assert mock_dump.call_count == 1
+        assert mock_dump.call_args_list[0][0][0]["redteam"]["plugins"] == ["a", "b"]
+
+    def test_max_test_files_none_generates_all(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(_make_settings(max_test_files=None))
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+        plugins = ["a", "b", "c"]
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(plugins, configs_dir)
+
+        assert mock_dump.call_count == 3
 
 
 class TestRunRedteamGenerateForConfigs:

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from pentester.config.auditors.promptfoo_settings import PromptfooSettings
 
@@ -143,6 +144,49 @@ class TestDirectInit:
         assert settings.files_parallel == 3
         assert settings.internal_concurrency == 2
         assert settings.output_path == "/my/output"
+
+
+class TestPluginsPerFile:
+    def test_default_is_one(self) -> None:
+        assert PromptfooSettings().plugins_per_file == 1
+
+    def test_accepts_boundary_values(self) -> None:
+        assert PromptfooSettings(plugins_per_file=1).plugins_per_file == 1
+        assert PromptfooSettings(plugins_per_file=5).plugins_per_file == 5
+
+    def test_accepts_mid_range(self) -> None:
+        assert PromptfooSettings(plugins_per_file=3).plugins_per_file == 3
+
+    def test_rejects_zero(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(plugins_per_file=0)
+
+    def test_rejects_six(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(plugins_per_file=6)
+
+    def test_rejects_negative(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(plugins_per_file=-1)
+
+
+class TestMaxTestFiles:
+    def test_default_is_none(self) -> None:
+        assert PromptfooSettings().max_test_files is None
+
+    def test_accepts_one(self) -> None:
+        assert PromptfooSettings(max_test_files=1).max_test_files == 1
+
+    def test_accepts_large_value(self) -> None:
+        assert PromptfooSettings(max_test_files=100).max_test_files == 100
+
+    def test_rejects_zero(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(max_test_files=0)
+
+    def test_rejects_negative(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(max_test_files=-1)
 
 
 class TestEnvVarOverrides:
