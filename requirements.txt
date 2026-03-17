@@ -12,6 +12,10 @@ uncurl>=0.0.11
 python-dotenv>=1.2
 inspect_ai>=0.3.189
 inspect_evals>=0.5.0
+promptfoo>=0.1.3
+PyYAML>=6.0.3
+types-PyYAML>=6.0.12.20250915
+
 # Dev / tooling
 pytest
 pytest-cov
