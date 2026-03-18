@@ -27,6 +27,10 @@ def _make_jsonl_row(
     strategy_id: str = "base64",
     plugin_id: str = "competitors",
     error: str | None = None,
+    success: bool = True,
+    score: float = 1.0,
+    failure_reason: int | str = 0,
+    grading_reason: str = "All assertions passed",
 ) -> dict:
     row: dict = {
         "provider": {"id": provider_id},
@@ -46,6 +50,10 @@ def _make_jsonl_row(
             "metadata": {"http": {"status": http_status}},
         },
         "metadata": {"strategyId": strategy_id, "pluginId": plugin_id},
+        "success": success,
+        "score": score,
+        "failureReason": failure_reason,
+        "gradingResult": {"reason": grading_reason},
     }
     if error is not None:
         row["error"] = error
@@ -173,6 +181,7 @@ class TestExtractRows:
             "duration", "accept_score", "reject_score", "latency_ms",
             "http_status", "cached", "api_response", "source_file",
             "strategy_id", "plugin_id", "error",
+            "success", "grading_score", "grading_reason",
         }
         assert set(result.columns) == expected_cols
 
@@ -193,6 +202,9 @@ class TestExtractRows:
         assert row["source_file"] == "test.jsonl"
         assert row["strategy_id"] == "jailbreak-templates"
         assert row["plugin_id"] == "competitors"
+        assert row["success"] == True
+        assert row["grading_score"] == 1.0
+        assert row["grading_reason"] == "All assertions passed"
 
     def test_handles_missing_nested_keys_gracefully(self) -> None:
         collector = PromptfooResultCollector(results_path=Path("/tmp"))
@@ -204,10 +216,16 @@ class TestExtractRows:
         assert result["prompt"].iloc[0] is None
         assert result["strategy_id"].iloc[0] is None
         assert result["plugin_id"].iloc[0] is None
+        assert result["success"].iloc[0] is None
+        assert result["grading_score"].iloc[0] is None
+        assert result["grading_reason"].iloc[0] is None
 
     def test_includes_error_column_when_error_present(self) -> None:
         collector = PromptfooResultCollector(results_path=Path("/tmp"))
-        df = pd.DataFrame([_make_jsonl_row(error="FileNotFoundError: assert.py not found")])
+        df = pd.DataFrame([_make_jsonl_row(
+            error="FileNotFoundError: assert.py not found",
+            failure_reason="GRADER_ERROR",
+        )])
 
         result = collector._extract_rows(df, "test.jsonl")
 
@@ -271,12 +289,15 @@ class TestBuildDataframe:
     def test_includes_errored_rows_in_output(self, tmp_path: Path) -> None:
         rows = [
             json.dumps(_make_jsonl_row()),
-            json.dumps(_make_jsonl_row(error="Error running Python script: FileNotFoundError")),
+            json.dumps(_make_jsonl_row(
+                error="Error running Python script: FileNotFoundError",
+                failure_reason="GRADER_ERROR",
+            )),
         ]
         (tmp_path / "test.jsonl").write_text("\n".join(rows) + "\n")
 
         result = _make_collector(tmp_path).build_dataframe()
 
         assert len(result) == 2
-        assert pd.isna(result["error"].iloc[0])
+        assert result["error"].iloc[0] is None
         assert result["error"].iloc[1] == "Error running Python script: FileNotFoundError"

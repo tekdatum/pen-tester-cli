@@ -483,6 +483,9 @@ class TestGenerateProbeResults:
             "strategy_id": "jailbreak-templates",
             "plugin_id": "competitors",
             "error": None,
+            "success": True,
+            "grading_score": 1.0,
+            "grading_reason": "All assertions passed",
         }
         row.update(overrides)
         return pd.DataFrame([row])
@@ -501,14 +504,15 @@ class TestGenerateProbeResults:
         assert res.attack_type == "competitors"
         assert res.prompt == "my_prompt"
         assert "response_data" in res.response
-        assert res.bypassed is True
-        assert res.score == 0.9
+        assert res.bypassed is False
+        assert res.score == 1.0
         assert res.metadata == {
             "http_status": 200,
             "duration": 1.5,
             "latency_ms": 100,
             "cached": False,
             "error": None,
+            "grading_reason": "All assertions passed",
         }
 
     def test_returns_empty_list_for_empty_dataframe(self) -> None:
@@ -518,7 +522,7 @@ class TestGenerateProbeResults:
 
     def test_score_defaults_to_zero_when_accept_score_is_none(self) -> None:
         auditor = _make_auditor()
-        auditor.results_df = self._make_results_df(accept_score=None)
+        auditor.results_df = self._make_results_df(grading_score=None, accept_score=None)
 
         results = auditor._generate_probe_results()
 
@@ -571,6 +575,48 @@ class TestValidatePreconditions:
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ValueError, match="No LLM API key found"):
                 auditor._validate_preconditions()
+
+    def test_semantic_fence_unsets_llm_api_keys(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test", "ANTHROPIC_API_KEY": "sk-ant"}, clear=True),
+        ):
+            auditor._validate_preconditions()
+
+            assert "OPENAI_API_KEY" not in os.environ
+            assert "ANTHROPIC_API_KEY" not in os.environ
+            assert auditor._saved_llm_keys == {
+                "OPENAI_API_KEY": "sk-test",
+                "ANTHROPIC_API_KEY": "sk-ant",
+            }
+
+    def test_semantic_fence_does_not_fail_when_no_keys_present(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            auditor._validate_preconditions()
+            assert auditor._saved_llm_keys == {}
+
+
+class TestRestoreLlmApiKeys:
+    def test_restores_saved_keys_to_environment(self) -> None:
+        auditor = _make_auditor()
+        auditor._saved_llm_keys = {"OPENAI_API_KEY": "sk-restored"}
+
+        with patch.dict(os.environ, {}, clear=True):
+            auditor._restore_llm_api_keys()
+
+            assert os.environ["OPENAI_API_KEY"] == "sk-restored"
+            assert auditor._saved_llm_keys == {}
+
+    def test_noop_when_no_saved_keys(self) -> None:
+        auditor = _make_auditor()
+        with patch.dict(os.environ, {}, clear=True):
+            auditor._restore_llm_api_keys()  # should not raise
+            assert auditor._saved_llm_keys == {}
 
 
 # ---------------------------------------------------------------------------
@@ -648,15 +694,15 @@ class TestAudit:
         ):
             result = auditor.audit()
 
-        mock_build.assert_called_once()
-        mock_gen_probes.assert_called_once()
+        assert mock_build.call_count == 2
+        assert mock_gen_probes.call_count == 2
         mock_logger.error.assert_called_once_with(
             "Probe error — category: %s | type: %s | error: %s",
             "cat",
             "type",
             "something went wrong",
         )
-        assert result == []
+        assert result == [error_probe]
         assert auditor.results_df is expected_df
 
     def test_no_error_logs_when_all_evals_failed_but_no_error_probes(self) -> None:
@@ -681,7 +727,7 @@ class TestAudit:
             result = auditor.audit()
 
         mock_logger.error.assert_not_called()
-        assert result == []
+        assert result == [non_error_probe]
 
     def test_calls_build_dataframe_when_at_least_one_eval_succeeded(self) -> None:
         auditor = _make_auditor()
