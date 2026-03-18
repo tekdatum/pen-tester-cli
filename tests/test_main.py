@@ -91,6 +91,26 @@ class TestMain:
             == default_settings.reporting.output_dir_path
         )
 
+    def test_curl_file_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, ["--curl-file", "/path/to/cmd.curl"])
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.scanner.curl_file == "/path/to/cmd.curl"
+
+    def test_custom_handler_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, ["--custom-handler", "handler.py:MyHandler"])
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.scanner.custom_handler == "handler.py:MyHandler"
+
     def test_exit_code_zero(self) -> None:
         runner = click.testing.CliRunner()
         with patch("pentester.main.Orchestrator") as mock_orchestrator_cls:
