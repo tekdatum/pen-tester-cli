@@ -582,7 +582,7 @@ class TestValidatePreconditions:
             patch("pathlib.Path.exists", return_value=True),
             patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test", "ANTHROPIC_API_KEY": "sk-ant"}, clear=True),
         ):
-            auditor._validate_preconditions()
+            auditor._unset_llm_api_keys()
 
             assert "OPENAI_API_KEY" not in os.environ
             assert "ANTHROPIC_API_KEY" not in os.environ
@@ -597,7 +597,7 @@ class TestValidatePreconditions:
             patch("pathlib.Path.exists", return_value=True),
             patch.dict(os.environ, {}, clear=True),
         ):
-            auditor._validate_preconditions()
+            auditor._unset_llm_api_keys()
             assert auditor._saved_llm_keys == {}
 
 

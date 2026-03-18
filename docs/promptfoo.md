@@ -38,11 +38,12 @@ graph TB
 
 ## Audit Workflow
 
-The `audit()` method orchestrates the full lifecycle in five stages:
+The `audit()` method orchestrates the full lifecycle in eight stages:
 
 ```mermaid
 flowchart TD
-    Start([audit]) --> LoadConfig["1. Load promptfooconfig.yaml<br/>Extract: prompts, providers, redteam,<br/>defaultTest, tests, commandLineOptions"]
+    Start([audit]) --> Preconditions["0. Validate preconditions<br/>SEMANTIC_FENCE: assert.py exists<br/>LLM: at least one LLM API key set"]
+    Preconditions --> LoadConfig["1. Load promptfooconfig.yaml<br/>Extract: prompts, providers, redteam,<br/>defaultTest, tests, commandLineOptions"]
     LoadConfig --> EnsureDirs["Create subdirectories:<br/>configurations/, llm_as_judge_assert/,<br/>custom_assert/, results/"]
     EnsureDirs --> GenTests["2. Generate test files"]
 
@@ -56,7 +57,8 @@ flowchart TD
 
     PrepareFiles --> TargetCheck{TargetType?}
     TargetCheck -->|LLM| UseLLM["Use llm_as_judge_assert/<br/>files directly"]
-    TargetCheck -->|SEMANTIC_FENCE| CleanConfig["Run clean_config()<br/>Replace LLM assertions<br/>with Python assertions<br/>→ custom_assert/test_N.yaml"]
+    TargetCheck -->|SEMANTIC_FENCE| UnsetKeys["Temporarily unset LLM API keys<br/>to enable remote generation"]
+    UnsetKeys --> CleanConfig["Run clean_config()<br/>Replace LLM assertions<br/>with Python assertions<br/>→ custom_assert/test_N.yaml"]
 
     UseLLM --> RunEval["5. Run evaluations in parallel<br/>ThreadPoolExecutor(max_workers=files_parallel)"]
     CleanConfig --> RunEval
@@ -71,10 +73,13 @@ flowchart TD
     RunEval --> Validate["6. Validate JSONL output<br/>(line count matches test count)"]
     Validate --> BuildDF["7. Build DataFrame<br/>Flatten nested JSON into columns"]
     BuildDF --> ProbeResults["8. Generate ProbeResults<br/>Map each row → ProbeResult"]
-    ProbeResults --> End(["return list[ProbeResult]"])
+    ProbeResults --> RestoreKeys["Restore LLM API keys<br/>(try/finally)"]
+    RestoreKeys --> End(["return list[ProbeResult]"])
 ```
 
 ### Stage Details
+
+0. **Validate preconditions** — `_validate_preconditions()` checks target-type-specific requirements before any work begins. For `SEMANTIC_FENCE`, it verifies that `assert.py` exists at the configured `assertion_wrapper_path`. For `LLM`, it verifies that at least one LLM API key is set in the environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_TOKEN`). Raises `ValueError` on failure.
 
 1. **Load config** — Parses `promptfooconfig.yaml` and extracts top-level keys: `prompts`, `providers`, `redteam`, `defaultTest`, `tests`, `commandLineOptions`, `metadata`.
 
@@ -82,7 +87,7 @@ flowchart TD
 
 3. **Clean results** — Deletes all existing `*.jsonl` files from `results/`.
 
-4. **Prepare audit files** — Selects or transforms YAML files based on `TargetType` (see [Target Type Paths](#target-type-paths)).
+4. **Prepare audit files** — Selects or transforms YAML files based on `TargetType` (see [Target Type Paths](#target-type-paths)). For `SEMANTIC_FENCE` targets, LLM API keys are temporarily unset via `_unset_llm_api_keys()` before evaluation to ensure promptfoo uses remote generation instead of local LLM calls. Keys are restored in a `finally` block via `_restore_llm_api_keys()`.
 
 5. **Run evaluations** — Executes `promptfoo eval` for each YAML file in parallel using `ThreadPoolExecutor`. Each evaluation produces a JSONL file with one record per test case.
 
@@ -219,7 +224,12 @@ Each `promptfoo eval` run produces a JSONL file (one JSON object per line, one l
   "metadata": {
     "pluginId": "competitors",
     "strategyId": "base64"
-  }
+  },
+  "success": true,
+  "score": 0.85,
+  "gradingResult": { "reason": "The response correctly refused..." },
+  "error": null,
+  "failureReason": null
 }
 ```
 
@@ -232,7 +242,7 @@ Each `promptfoo eval` run produces a JSONL file (one JSON object per line, one l
 | `provider_url` | `provider.id` | Target endpoint URL |
 | `prompt` | `prompt.raw` | The adversarial prompt sent |
 | `input` | `vars.input` | Original input variable |
-| `valid` | `response.raw` → `Field that indicates whether the attack was rejected` | Whether the target accepted the input |
+| `valid` | `response.raw` → `data.valid` | Whether the target accepted the input |
 | `reason_code` | `response.raw` → `data.reason_code` | Rejection reason (e.g. `within_denied_threshold`) |
 | `duration` | `response.raw` → `data.duration` | Target processing time (seconds) |
 | `accept_score` | `response.raw` → `data.extra.accept_score` | ML accept probability (0-1) |
@@ -244,6 +254,29 @@ Each `promptfoo eval` run produces a JSONL file (one JSON object per line, one l
 | `source_file` | (derived) | Which JSONL file the row came from |
 | `strategy_id` | `metadata.strategyId` | Attack encoding strategy (may be `None`) |
 | `plugin_id` | `metadata.pluginId` | Attack plugin (e.g. `competitors`) |
+| `success` | `file_df["success"]` | Overall pass/fail from promptfoo |
+| `grading_score` | `file_df["score"]` | LLM judge score |
+| `grading_reason` | `file_df["gradingResult"]["reason"]` | LLM judge reasoning |
+| `error` | `_classify_errors()` | Execution errors only (grading outcomes filtered out) |
+
+### Error Classification
+
+The `_classify_errors()` static method on `PromptfooResultCollector` distinguishes real execution errors from grading outcomes. Promptfoo populates the `error` field for both cases, so the collector applies a heuristic based on `failureReason`:
+
+- **String `failureReason`** (e.g. `"GRADER_ERROR"`) → real execution error, kept as-is.
+- **Numeric `failureReason`** (e.g. `0`, `1`) → grading outcome, not an actual error. The `error` value is discarded (set to `None`).
+
+This prevents grading-failure explanations from being treated as probe errors in downstream reporting.
+
+### Score Resolution
+
+The `_resolve_score()` static method determines the final score for each `ProbeResult`:
+
+1. If `grading_score` is present and not `NaN`, use it (this is the LLM judge score).
+2. Otherwise fall back to `accept_score` (the ML model's accept probability).
+3. If neither is available, default to `0.0`.
+
+This allows LLM-target evaluations (which produce grading scores) and semantic-fence evaluations (which produce accept scores) to both map cleanly to a single score field.
 
 ### Mapping to ProbeResult
 
@@ -252,20 +285,33 @@ Each DataFrame row becomes a `ProbeResult`:
 ```python
 ProbeResult(
     auditor="PromptfooAuditor",
-    attack_category=row["strategy_id"],   # e.g. "base64", "leetspeak"
-    attack_type=row["plugin_id"],         # e.g. "competitors"
-    prompt=row["prompt"],
-    response=str(row["api_response"]),
-    bypassed=bool(row["valid"]),          # True = attack got through
-    score=float(row["accept_score"]),
+    attack_category=(
+        row.get("strategy_id")
+        if pd.notna(row.get("strategy_id"))
+        else row.get("plugin_id")
+    )
+    or "promptfoo",
+    attack_type=row.get("plugin_id", "promptfoo"),
+    prompt=row.get("prompt", ""),
+    response=str(row.get("api_response", "")),
+    bypassed=not bool(row.get("success", True)),
+    score=self._resolve_score(row),
     metadata={
-        "http_status": row["http_status"],
-        "duration": row["duration"],
-        "latency_ms": row["latency_ms"],
-        "cached": row["cached"],
+        "http_status": row.get("http_status"),
+        "duration": row.get("duration"),
+        "latency_ms": row.get("latency_ms"),
+        "cached": row.get("cached"),
+        "error": row.get("error"),
+        "grading_reason": row.get("grading_reason"),
     },
 )
 ```
+
+Key mapping details:
+- **`bypassed`**: Inverted from `success` — `not bool(row.get("success", True))`. A failed evaluation (`success=False`) means the attack bypassed the target.
+- **`score`**: Uses `_resolve_score()` which prefers `grading_score` over `accept_score` (see [Score Resolution](#score-resolution)).
+- **`attack_category`**: Falls back from `strategy_id` → `plugin_id` → `"promptfoo"`.
+- **`metadata`**: Includes `error` and `grading_reason` for downstream diagnostics.
 
 ## Target Type Paths
 
@@ -279,7 +325,7 @@ flowchart TD
     Decision -->|SEMANTIC_FENCE| SFPath["Replace with Python assertions<br/>type: python → assert.py:get_assert"]
 
     LLMPath --> LLMEval["promptfoo eval<br/>LLM evaluates pass/fail<br/>via rubric scoring"]
-    SFPath --> SFEval["promptfoo eval<br/>Python function evaluates<br/>Field that indicates whether the attack was rejected from API response"]
+    SFPath --> SFEval["promptfoo eval<br/>Python function evaluates<br/>valid field from API response"]
 
     LLMEval --> Results["JSONL Results"]
     SFEval --> Results
@@ -308,9 +354,11 @@ flowchart TD
 |--------|-----|----------------|
 | **Target** | Generalist LLM | Purpose-built semantic fence API |
 | **Assertion type** | `llm-rubric` (LLM-as-judge) | `python` (custom function) |
-| **Evaluation logic** | LLM judges if response is safe | Python checks `Field that indicates whether the attack was rejected` field |
+| **Evaluation logic** | LLM judges if response is safe | Python checks `valid` field |
 | **Config files used** | `llm_as_judge_assert/` | `custom_assert/` |
 | **`defaultAssertions`** | Removed from config | Kept in config |
+| **Preconditions** | At least one LLM API key set | `assert.py` exists at configured path |
+| **API key handling** | Keys kept in environment | Keys temporarily unset during eval (try/finally restore) |
 
 ## Directory Structure
 
@@ -343,5 +391,18 @@ Settings are configured via environment variables with the `PENTESTER_PROMPTFOO_
 | `PENTESTER_PROMPTFOO__TARGET_TYPE` | `SEMANTIC_FENCE` | `LLM` or `SEMANTIC_FENCE` |
 | `PENTESTER_PROMPTFOO__FILES_PARALLEL` | `5` | Max concurrent YAML evaluations |
 | `PENTESTER_PROMPTFOO__INTERNAL_CONCURRENCY` | `4` | Promptfoo `-j` flag per evaluation |
+| `PENTESTER_PROMPTFOO__MAX_TESTS` | `20000` | Max tests per eval run (`-n` flag) |
+| `PENTESTER_PROMPTFOO__PLUGINS_PER_FILE` | `1` | Plugins bundled per test YAML (1-5) |
+| `PENTESTER_PROMPTFOO__MAX_TEST_FILES` | `None` | Cap on generated test YAMLs; `None` means all |
 | `PENTESTER_PROMPTFOO__REPLACE_EXISTING_FILE` | `false` | Force regenerate existing files |
 | `PENTESTER_PROMPTFOO__ASSERTION_WRAPPER_PATH` | `../assert.py` | Path to custom assertion Python file |
+
+## Example Usage
+
+See `src/examples/run_promptfoo.py` for a complete end-to-end example that configures the auditor, runs an evaluation, and generates reports.
+
+```bash
+python3 -m examples.run_promptfoo
+```
+
+The example sets a curl command targeting a local semantic fence API, runs the full audit pipeline, and outputs HTML/CSV reports. Configure settings via environment variables or a `.env` file before running (see the file header for the full list of variables).
