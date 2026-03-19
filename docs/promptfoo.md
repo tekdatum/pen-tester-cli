@@ -12,7 +12,7 @@ The Promptfoo auditor is a red-teaming module that generates adversarial prompts
 | `PromptfooRunner` | `auditors/promptfoo/runner.py` | Executes `promptfoo` CLI subprocesses (`redteam generate`, `eval`) with parallel threading |
 | `PromptfooResultCollector` | `auditors/promptfoo/collector.py` | Parses JSONL result files into a flat pandas DataFrame |
 | `PromptfooHTTPProvider` | `auditors/promptfoo/http_provider.py` | Pydantic model representing the HTTP provider configuration |
-| `PromptfooSettings` | `config/auditors/promptfoo_settings.py` | Pydantic settings for paths, parallelism, and target type |
+| `PromptfooSettings` | `config/auditors/promptfoo_settings.py` | Pydantic settings for paths and parallelism |
 
 ### Component Diagram
 
@@ -36,6 +36,19 @@ graph TB
     style D fill:#9b59b6,color:#fff
 ```
 
+### PromptfooHTTPProvider Fields
+
+The `PromptfooHTTPProvider` Pydantic model represents the HTTP provider configuration extracted from `promptfooconfig.yaml`. It includes a `model_validator` that transforms promptfoo's native config format (e.g. `body.text` → `body_template`, `responseParser` → `response_parser`).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `url` | `str` | *(required)* | Target endpoint URL |
+| `method` | `str` | `"POST"` | HTTP method |
+| `headers` | `dict[str, str]` | `{}` | Request headers |
+| `timeout` | `int` | `5000` | Request timeout in milliseconds |
+| `body_template` | `str` | `"{{prompt}}"` | Request body template (extracted from `body.text` if present) |
+| `response_parser` | `str \| None` | `None` | JavaScript expression for parsing responses (mapped from `responseParser`) |
+
 ## Audit Workflow
 
 The `audit()` method orchestrates the full lifecycle in eight stages:
@@ -49,7 +62,9 @@ flowchart TD
 
     subgraph GenTests_Detail ["Step 2: Generate Test Files"]
         direction TB
-        WritePlugins["Write per-plugin configs<br/>→ configurations/test_N.yaml"] --> RedteamGen["Run: promptfoo redteam generate<br/>→ llm_as_judge_assert/test_N.yaml"]
+        WritePlugins["Write per-plugin configs<br/>→ configurations/test_N.yaml"] --> ConfigProvider["Configure provider from scanner<br/>(if scanner is set)"]
+        ConfigProvider --> RedteamGen["Run: promptfoo redteam generate<br/>→ llm_as_judge_assert/test_N.yaml"]
+        RedteamGen --> RemoveCloud["Remove cloud-only tests<br/>(LLM targets only:<br/>jailbreak:meta)"]
     end
 
     GenTests --> CleanResults["3. Clean old JSONL results"]
@@ -83,7 +98,11 @@ flowchart TD
 
 1. **Load config** — Parses `promptfooconfig.yaml` and extracts top-level keys: `prompts`, `providers`, `redteam`, `defaultTest`, `tests`, `commandLineOptions`, `metadata`.
 
-2. **Generate test files** — For each plugin set, writes a minimal YAML config to `configurations/`, then invokes `promptfoo redteam generate` to produce test cases with adversarial prompts (using strategies like base64, leetspeak, emoji encoding, etc.). Output lands in `llm_as_judge_assert/`.
+2. **Generate test files** — `generate_tests_files()` runs four sub-steps:
+   1. `_write_plugin_configs()` — writes a minimal YAML config per plugin set to `configurations/`.
+   2. `_configure_provider_in_test_files()` — if a `Scanner` with a `CurlHandler` is attached, injects the HTTP provider config into each test file.
+   3. `_run_redteam_generate_for_configs()` — invokes `promptfoo redteam generate` to produce test cases with adversarial prompts (strategies like base64, leetspeak, emoji encoding, etc.). Output lands in `llm_as_judge_assert/`.
+   4. `_remove_cloud_only_tests()` — *LLM targets only*: removes tests with `strategyId == "jailbreak:meta"` from the generated YAML files, as this strategy requires Promptfoo cloud.
 
 3. **Clean results** — Deletes all existing `*.jsonl` files from `results/`.
 
@@ -261,16 +280,18 @@ Each `promptfoo eval` run produces a JSONL file (one JSON object per line, one l
 
 ### Error Classification
 
-The `_classify_errors()` static method on `PromptfooResultCollector` distinguishes real execution errors from grading outcomes. Promptfoo populates the `error` field for both cases, so the collector applies a heuristic based on `failureReason`:
+The `_classify_errors()` static method on `PromptfooResultCollector` distinguishes real execution errors from grading outcomes. Promptfoo populates the `error` field for both cases, so the collector applies a heuristic based on `failureReason` and HTTP status:
 
+- **No `error` field but HTTP status >= 400** → target error, returns `"HTTP {status} error"`.
 - **String `failureReason`** (e.g. `"GRADER_ERROR"`) → real execution error, kept as-is.
-- **Numeric `failureReason`** (e.g. `0`, `1`) → grading outcome, not an actual error. The `error` value is discarded (set to `None`).
+- **Numeric `failureReason`** (e.g. `0`, `1`) with HTTP status >= 400 → target error, returns `"HTTP {status} error"`.
+- **Numeric `failureReason`** with HTTP status < 400 → grading outcome, not an actual error. The `error` value is discarded (set to `None`).
 
-This prevents grading-failure explanations from being treated as probe errors in downstream reporting.
+This prevents grading-failure explanations from being treated as probe errors in downstream reporting, while still surfacing HTTP errors that indicate target-side failures.
 
 ### Score Resolution
 
-The `_resolve_score()` static method determines the final score for each `ProbeResult`:
+The `_resolve_score()` static method on `PromptfooAuditor` determines the final score for each `ProbeResult`:
 
 1. If `grading_score` is present and not `NaN`, use it (this is the LLM judge score).
 2. Otherwise fall back to `accept_score` (the ML model's accept probability).
@@ -293,7 +314,8 @@ ProbeResult(
     attack_type=row.get("plugin_id", "promptfoo"),
     prompt=row.get("prompt", ""),
     response=str(row.get("api_response", "")),
-    bypassed=not bool(row.get("success", True)),
+    bypassed=not bool(row.get("success", True))
+    and not bool(row.get("error")),
     score=self._resolve_score(row),
     metadata={
         "http_status": row.get("http_status"),
@@ -307,7 +329,7 @@ ProbeResult(
 ```
 
 Key mapping details:
-- **`bypassed`**: Inverted from `success` — `not bool(row.get("success", True))`. A failed evaluation (`success=False`) means the attack bypassed the target.
+- **`bypassed`**: Requires both `success=False` and no execution error — `not bool(row.get("success", True)) and not bool(row.get("error"))`. A failed evaluation means the attack bypassed the target, but only if there was no execution error (e.g. HTTP failures are not counted as bypasses).
 - **`score`**: Uses `_resolve_score()` which prefers `grading_score` over `accept_score` (see [Score Resolution](#score-resolution)).
 - **`attack_category`**: Uses `strategy_id` when present, defaults to `"basic"` (the no-encoding strategy) when null.
 - **`metadata`**: Includes `error` and `grading_reason` for downstream diagnostics.
@@ -358,6 +380,7 @@ flowchart TD
 | **`defaultAssertions`** | Removed from config | Kept in config |
 | **Preconditions** | At least one LLM API key set | `assert.py` exists at configured path |
 | **API key handling** | Keys kept in environment | Keys temporarily unset during eval (try/finally restore) |
+| **Post-generation cleanup** | Cloud-only tests (`jailbreak:meta`) removed | No cleanup needed |
 
 ## Directory Structure
 
@@ -381,13 +404,22 @@ output/promptfoo/                  # All runtime-generated files (configurable v
 
 ## Configuration
 
-Settings are configured via environment variables with the `PENTESTER_PROMPTFOO__` prefix:
+### Global Setting
+
+The target type is a **global** setting in `PentesterSettings`, not a promptfoo-specific setting:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PENTESTER_TARGET_TYPE` | `SEMANTIC_FENCE` | `LLM` or `SEMANTIC_FENCE` — determines assertion and evaluation strategy |
+
+### Promptfoo Settings
+
+Promptfoo-specific settings use the `PENTESTER_PROMPTFOO__` prefix:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PENTESTER_PROMPTFOO__CONFIG_PATH` | `./pentester/config/auditor_files/promptfoo` | Path to promptfoo config directory (static `promptfooconfig.yaml`) |
 | `PENTESTER_PROMPTFOO__OUTPUT_PATH` | `./output/promptfoo` | Path for runtime-generated files (`tests/`, `results/`) |
-| `PENTESTER_PROMPTFOO__TARGET_TYPE` | `SEMANTIC_FENCE` | `LLM` or `SEMANTIC_FENCE` |
 | `PENTESTER_PROMPTFOO__FILES_PARALLEL` | `5` | Max concurrent YAML evaluations |
 | `PENTESTER_PROMPTFOO__INTERNAL_CONCURRENCY` | `4` | Promptfoo `-j` flag per evaluation |
 | `PENTESTER_PROMPTFOO__MAX_TESTS` | `20000` | Max tests per eval run (`-n` flag) |
@@ -395,6 +427,18 @@ Settings are configured via environment variables with the `PENTESTER_PROMPTFOO_
 | `PENTESTER_PROMPTFOO__MAX_TEST_FILES` | `None` | Cap on generated test YAMLs; `None` means all |
 | `PENTESTER_PROMPTFOO__REPLACE_EXISTING_FILE` | `false` | Force regenerate existing files |
 | `PENTESTER_PROMPTFOO__ASSERTION_WRAPPER_PATH` | `../assert.py` | Path to custom assertion Python file |
+
+### Computed Properties
+
+`PromptfooSettings` also exposes read-only computed properties derived from the settings above:
+
+| Property | Value | Description |
+|----------|-------|-------------|
+| `config_file` | `{config_path}/promptfooconfig.yaml` | Full path to the base config file |
+| `tests_path` | `{output_path}/tests` | Root directory for generated test files |
+| `results_path` | `{output_path}/results` | Directory for JSONL evaluation results |
+| `tests_path_configurations` | `{tests_path}/configurations` | Directory for per-plugin config files |
+| `tests_path_llm_assert` | `{tests_path}/llm_as_judge_assert` | Directory for generated test cases with LLM assertions |
 
 ## Example Usage
 
