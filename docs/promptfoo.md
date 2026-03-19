@@ -288,9 +288,8 @@ ProbeResult(
     attack_category=(
         row.get("strategy_id")
         if pd.notna(row.get("strategy_id"))
-        else row.get("plugin_id")
-    )
-    or "promptfoo",
+        else "basic"
+    ),
     attack_type=row.get("plugin_id", "promptfoo"),
     prompt=row.get("prompt", ""),
     response=str(row.get("api_response", "")),
@@ -310,7 +309,7 @@ ProbeResult(
 Key mapping details:
 - **`bypassed`**: Inverted from `success` — `not bool(row.get("success", True))`. A failed evaluation (`success=False`) means the attack bypassed the target.
 - **`score`**: Uses `_resolve_score()` which prefers `grading_score` over `accept_score` (see [Score Resolution](#score-resolution)).
-- **`attack_category`**: Falls back from `strategy_id` → `plugin_id` → `"promptfoo"`.
+- **`attack_category`**: Uses `strategy_id` when present, defaults to `"basic"` (the no-encoding strategy) when null.
 - **`metadata`**: Includes `error` and `grading_reason` for downstream diagnostics.
 
 ## Target Type Paths

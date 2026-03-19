@@ -745,6 +745,15 @@ class TestGenerateProbeResults:
             "grading_reason": "All assertions passed",
         }
 
+    def test_attack_category_defaults_to_basic_when_strategy_id_is_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(strategy_id=None)
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].attack_category == "basic"
+        assert results[0].attack_type == "competitors"
+
     def test_returns_empty_list_for_empty_dataframe(self) -> None:
         auditor = _make_auditor()
         auditor.results_df = pd.DataFrame()
