@@ -595,6 +595,8 @@ class TestCleanConfig:
     def test_cleans_and_writes_config_correctly(self, tmp_path: Path) -> None:
         auditor = _make_auditor(_make_settings(assertion_wrapper_path="/my/assert.py"))
         output = tmp_path / "output"
+        output.mkdir()
+        (output / "test.yaml").write_text("old")
 
         with (
             patch("builtins.open", mock_open(read_data="")),
@@ -619,11 +621,18 @@ class TestCleanConfig:
         output.mkdir()
         (output / "test.yaml").write_text("old")
 
-        # Test replace = False
+        # For SEMANTIC_FENCE, clean_config always rewrites regardless of replace_existing_file
         auditor_no_replace = _make_auditor(_make_settings(replace_existing_file=False))
-        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+        with (
+            patch("builtins.open", mock_open(read_data="")),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=copy.deepcopy(_FAKE_CONFIG),
+            ),
+            patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump,
+        ):
             auditor_no_replace.clean_config(Path("/test.yaml"), output)
-            mock_dump.assert_not_called()
+            mock_dump.assert_called()
 
 
 # ---------------------------------------------------------------------------
