@@ -776,6 +776,32 @@ class TestGenerateProbeResults:
 
         assert results[0].metadata["error"] is None
 
+    def test_bypassed_is_false_when_error_present(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(
+            success=False, error="HTTP 422 error"
+        )
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].bypassed is False
+
+    def test_bypassed_is_true_when_success_false_and_no_error(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(success=False, error=None)
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].bypassed is True
+
+    def test_bypassed_is_false_when_success_true(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(success=True, error=None)
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].bypassed is False
+
 
 # ---------------------------------------------------------------------------
 # Test Pre-audit Precondition Validation

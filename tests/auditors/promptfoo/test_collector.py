@@ -263,6 +263,96 @@ class TestExtractRows:
         assert result["error"].iloc[0] == "OpenAI API error: missing key"
 
 
+class TestClassifyErrors:
+    def test_returns_none_for_successful_row_with_http_200(self) -> None:
+        df = pd.DataFrame([{"error": None, "failureReason": 0}])
+        http = pd.Series([200])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] is None
+
+    def test_returns_http_error_when_status_ge_400_and_no_error_field(self) -> None:
+        df = pd.DataFrame([{"failureReason": 1}])
+        http = pd.Series([422])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "HTTP 422 error"
+
+    def test_returns_http_error_when_status_ge_400_and_numeric_failure_reason(self) -> None:
+        df = pd.DataFrame([{"error": "some assertion text", "failureReason": 1}])
+        http = pd.Series([500])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "HTTP 500 error"
+
+    def test_returns_error_for_string_failure_reason(self) -> None:
+        df = pd.DataFrame([{"error": "FileNotFoundError", "failureReason": "GRADER_ERROR"}])
+        http = pd.Series([200])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "FileNotFoundError"
+
+    def test_returns_none_for_numeric_failure_reason_with_http_200(self) -> None:
+        df = pd.DataFrame([{"error": "assertion failed", "failureReason": 1}])
+        http = pd.Series([200])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] is None
+
+    def test_returns_none_when_no_error_and_http_200(self) -> None:
+        df = pd.DataFrame([{"failureReason": 1}])
+        http = pd.Series([200])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] is None
+
+    def test_returns_http_error_for_various_4xx_5xx_codes(self) -> None:
+        df = pd.DataFrame([
+            {"failureReason": 1},
+            {"failureReason": 1},
+            {"failureReason": 1},
+        ])
+        http = pd.Series([400, 403, 503])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "HTTP 400 error"
+        assert result.iloc[1] == "HTTP 403 error"
+        assert result.iloc[2] == "HTTP 503 error"
+
+    def test_handles_nan_http_status(self) -> None:
+        df = pd.DataFrame([{"failureReason": 1}])
+        http = pd.Series([float("nan")])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] is None
+
+    def test_handles_none_http_status(self) -> None:
+        df = pd.DataFrame([{"failureReason": 1}])
+        http = pd.Series([None], dtype=object)
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] is None
+
+
+class TestExtractRowsHttpErrorClassification:
+    def test_http_422_with_numeric_failure_reason_produces_error(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        df = pd.DataFrame([_make_jsonl_row(
+            http_status=422,
+            success=False,
+            score=0.0,
+            failure_reason=1,
+        )])
+
+        result = collector._extract_rows(df, "test.jsonl")
+
+        assert result["error"].iloc[0] == "HTTP 422 error"
+
+    def test_http_200_with_numeric_failure_reason_produces_no_error(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        df = pd.DataFrame([_make_jsonl_row(
+            http_status=200,
+            success=False,
+            score=0.0,
+            failure_reason=1,
+        )])
+
+        result = collector._extract_rows(df, "test.jsonl")
+
+        assert result["error"].iloc[0] is None
+
+
 class TestBuildDataframe:
     def test_concatenates_valid_files_while_ignoring_invalid_ones(self, tmp_path: Path) -> None:
         # Create 3 valid files (3 rows each), 1 invalid JSONL, 1 non-JSONL text file
