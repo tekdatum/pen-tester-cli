@@ -37,6 +37,7 @@ _FAKE_CONFIG: dict[str, Any] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_settings(**kwargs: object) -> PromptfooSettings:
     defaults: dict[str, object] = {"config_path": "/tmp/promptfoo_test"}
     defaults.update(kwargs)
@@ -52,19 +53,26 @@ def _make_auditor(
     with (
         patch("pathlib.Path.mkdir"),
         patch("builtins.open", mock_open(read_data="")),
-        patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
+        patch(
+            "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+            return_value=copy.deepcopy(_FAKE_CONFIG),
+        ),
     ):
         return PromptfooAuditor(settings=s, scanner=scanner, target_type=target_type)
+
 
 # ---------------------------------------------------------------------------
 # TestInit & TestEnsureDirectories
 # ---------------------------------------------------------------------------
 
+
 class TestInit:
     def test_initializes_with_explicit_settings(self) -> None:
-        s = _make_settings(config_path="/custom", files_parallel=7, internal_concurrency=3)
+        s = _make_settings(
+            config_path="/custom", files_parallel=7, internal_concurrency=3
+        )
         auditor = _make_auditor(s)
-        
+
         assert auditor.settings is s
         assert auditor.runner.results_path == Path("./output/promptfoo") / "results"
         assert auditor.runner.files_parallel == 7
@@ -77,7 +85,10 @@ class TestInit:
         with (
             patch("pathlib.Path.mkdir"),
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=copy.deepcopy(_FAKE_CONFIG),
+            ),
         ):
             auditor = PromptfooAuditor(settings=None)
 
@@ -98,25 +109,40 @@ class TestEnsureDirectories:
         with (
             patch("pathlib.Path.mkdir") as mock_mkdir,
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=copy.deepcopy(_FAKE_CONFIG),
+            ),
         ):
             PromptfooAuditor(settings=_make_settings())
-            
+
         assert mock_mkdir.call_count == 4
         for call_obj in mock_mkdir.call_args_list:
             assert call_obj[1].get("parents") is True
             assert call_obj[1].get("exist_ok") is True
+
 
 class TestLoadConfig:
     def test_extracts_all_expected_fields_from_yaml(self) -> None:
         auditor = _make_auditor()
         with (
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=copy.deepcopy(_FAKE_CONFIG),
+            ),
         ):
             config = auditor._load_config(Path("/fake.yaml"))
-            
-        expected_keys = {"prompts", "providers", "redteam", "defaultTest", "tests", "commandLineOptions", "metadata"}
+
+        expected_keys = {
+            "prompts",
+            "providers",
+            "redteam",
+            "defaultTest",
+            "tests",
+            "commandLineOptions",
+            "metadata",
+        }
         assert set(config.keys()) == expected_keys
         assert config["prompts"] == _FAKE_CONFIG["prompts"]
         assert config["providers"] == _FAKE_CONFIG["providers"]
@@ -124,20 +150,28 @@ class TestLoadConfig:
 
     def test_applies_defaults_for_missing_fields(self) -> None:
         auditor = _make_auditor()
-        minimal_config = {"prompts": ["p"]}  # Missing providers and metadata, prompts supplied
+        minimal_config = {
+            "prompts": ["p"]
+        }  # Missing providers and metadata, prompts supplied
         with (
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=minimal_config),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=minimal_config,
+            ),
         ):
             config = auditor._load_config(Path("/fake.yaml"))
-            
+
         assert config["providers"] is None
         assert config["metadata"] == {}
-        
+
         # Test missing prompts specifically
         with (
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value={"providers": None}),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value={"providers": None},
+            ),
         ):
             empty_prompts_config = auditor._load_config(Path("/fake.yaml"))
             assert empty_prompts_config["prompts"] == []
@@ -147,7 +181,7 @@ class TestOpenConfig:
     def test_sets_all_config_attributes(self) -> None:
         # _open_config is implicitly called during _make_auditor init
         auditor = _make_auditor()
-        
+
         assert isinstance(auditor.config, dict)
         assert auditor.prompts == _FAKE_CONFIG["prompts"]
         assert auditor.providers == _FAKE_CONFIG["providers"]
@@ -157,9 +191,11 @@ class TestOpenConfig:
         assert auditor.commandLineOptions == _FAKE_CONFIG["commandLineOptions"]
         assert auditor.metadata == _FAKE_CONFIG["metadata"]
 
+
 # ---------------------------------------------------------------------------
 # Test Plugin Configs & Redteam Generation
 # ---------------------------------------------------------------------------
+
 
 class TestWritePluginConfigs:
     def test_writes_new_configs_with_correct_formatting(self, tmp_path: Path) -> None:
@@ -182,16 +218,23 @@ class TestWritePluginConfigs:
         assert (configs_dir / "test_2.yaml").exists()
         assert "defaultAssertions" in auditor.config["redteam"]  # original unchanged
 
-    def test_warns_when_existing_file_has_different_plugin_count(self, tmp_path: Path) -> None:
+    def test_warns_when_existing_file_has_different_plugin_count(
+        self, tmp_path: Path
+    ) -> None:
         configs_dir = tmp_path / "configurations"
         configs_dir.mkdir()
         existing_file = configs_dir / "test_1.yaml"
         existing_file.write_text("placeholder")
 
-        auditor = _make_auditor(_make_settings(plugins_per_file=1, replace_existing_file=False))
+        auditor = _make_auditor(
+            _make_settings(plugins_per_file=1, replace_existing_file=False)
+        )
 
         existing_config = copy.deepcopy(_FAKE_CONFIG)
-        existing_config["redteam"]["plugins"] = ["harmful:hate", "harmful:xss"]  # 2 plugins
+        existing_config["redteam"]["plugins"] = [
+            "harmful:hate",
+            "harmful:xss",
+        ]  # 2 plugins
 
         with (
             patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
@@ -205,16 +248,22 @@ class TestWritePluginConfigs:
         mock_logger.warning.assert_called_once()
         assert "differs from" in mock_logger.warning.call_args[0][0]
 
-    def test_no_warning_when_existing_file_has_matching_plugin_count(self, tmp_path: Path) -> None:
+    def test_no_warning_when_existing_file_has_matching_plugin_count(
+        self, tmp_path: Path
+    ) -> None:
         configs_dir = tmp_path / "configurations"
         configs_dir.mkdir()
         existing_file = configs_dir / "test_1.yaml"
         existing_file.write_text("placeholder")
 
-        auditor = _make_auditor(_make_settings(plugins_per_file=1, replace_existing_file=False))
+        auditor = _make_auditor(
+            _make_settings(plugins_per_file=1, replace_existing_file=False)
+        )
 
         existing_config = copy.deepcopy(_FAKE_CONFIG)
-        existing_config["redteam"]["plugins"] = ["harmful:hate"]  # matches plugins_per_file=1
+        existing_config["redteam"]["plugins"] = [
+            "harmful:hate"
+        ]  # matches plugins_per_file=1
 
         with (
             patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
@@ -228,28 +277,39 @@ class TestWritePluginConfigs:
         mock_logger.warning.assert_not_called()
         mock_logger.info.assert_called()
 
-    def test_handles_existing_files_based_on_replace_setting(self, tmp_path: Path) -> None:
+    def test_handles_existing_files_based_on_replace_setting(
+        self, tmp_path: Path
+    ) -> None:
         configs_dir = tmp_path / "configurations"
         configs_dir.mkdir()
         existing_file = configs_dir / "test_1.yaml"
-        
+
         # Test replace = False — mock safe_load so _load_config returns a valid dict
         s_no_replace = _make_settings(replace_existing_file=False)
         existing_file.write_text("placeholder")
         on_disk = copy.deepcopy(_FAKE_CONFIG)
-        on_disk["redteam"]["plugins"] = ["harmful:hate"]  # 1 plugin matches default plugins_per_file
+        on_disk["redteam"]["plugins"] = [
+            "harmful:hate"
+        ]  # 1 plugin matches default plugins_per_file
         with (
             patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump,
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=on_disk),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=on_disk,
+            ),
         ):
-            _make_auditor(s_no_replace)._write_plugin_configs(["harmful:hate"], configs_dir)
+            _make_auditor(s_no_replace)._write_plugin_configs(
+                ["harmful:hate"], configs_dir
+            )
             mock_dump.assert_not_called()
 
         # Test replace = True
         s_replace = _make_settings(replace_existing_file=True)
         existing_file.write_text("old data")
         with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
-            _make_auditor(s_replace)._write_plugin_configs(["harmful:hate"], configs_dir)
+            _make_auditor(s_replace)._write_plugin_configs(
+                ["harmful:hate"], configs_dir
+            )
             mock_dump.assert_called()
 
 
@@ -306,28 +366,151 @@ class TestWritePluginConfigsChunking:
 
 
 class TestRunRedteamGenerateForConfigs:
-    def test_calls_runner_for_all_configs_handling_replace_setting(self, tmp_path: Path) -> None:
+    def test_calls_runner_for_all_configs_handling_replace_setting(
+        self, tmp_path: Path
+    ) -> None:
         configs_dir = tmp_path / "configurations"
         llm_dir = tmp_path / "llm_assert"
         configs_dir.mkdir()
         llm_dir.mkdir()
-        
+
         (configs_dir / "test_1.yaml").write_text("data")
         (configs_dir / "test_2.yaml").write_text("data")
-        
+
         # Setup auditor
         auditor = _make_auditor(_make_settings(replace_existing_file=False))
         auditor.runner = MagicMock()
-        
+
         # If replace is false and output exists, it should skip. Let's make test_1 exist.
         (llm_dir / "test_1.yaml").write_text("existing output")
-        
+
         auditor._run_redteam_generate_for_configs(configs_dir, llm_dir)
-        
+
         # test_1 was skipped, test_2 was generated
         assert auditor.runner.run_redteam_generate.call_count == 1
         call_args = auditor.runner.run_redteam_generate.call_args
         assert call_args[0][1] == llm_dir / "test_2.yaml"
+
+
+class TestRemoveCloudOnlyTests:
+    def test_removes_jailbreak_meta_tests_from_yaml(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        llm_dir = tmp_path / "llm_assert"
+        llm_dir.mkdir()
+
+        config_with_mixed = {
+            "prompts": ["p"],
+            "providers": None,
+            "redteam": [],
+            "defaultTest": [],
+            "tests": [
+                {"vars": {"input": "a"}, "metadata": {"strategyId": "jailbreak:meta"}},
+                {"vars": {"input": "b"}, "metadata": {"strategyId": "other"}},
+                {"vars": {"input": "c"}, "metadata": {"strategyId": "jailbreak:meta"}},
+            ],
+            "commandLineOptions": [],
+            "metadata": {},
+        }
+        with open(llm_dir / "test_1.yaml", "w") as f:
+            import yaml
+
+            yaml.dump(config_with_mixed, f)
+
+        auditor._remove_cloud_only_tests(llm_dir)
+
+        with open(llm_dir / "test_1.yaml") as f:
+            result = yaml.safe_load(f)
+        assert len(result["tests"]) == 1
+        assert result["tests"][0]["vars"]["input"] == "b"
+
+    def test_skips_file_when_no_jailbreak_meta_tests(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        llm_dir = tmp_path / "llm_assert"
+        llm_dir.mkdir()
+
+        config_no_meta = {
+            "prompts": ["p"],
+            "providers": None,
+            "redteam": [],
+            "defaultTest": [],
+            "tests": [
+                {"vars": {"input": "a"}, "metadata": {"strategyId": "other"}},
+            ],
+            "commandLineOptions": [],
+            "metadata": {},
+        }
+        file_path = llm_dir / "test_1.yaml"
+        import yaml
+
+        with open(file_path, "w") as f:
+            yaml.dump(config_no_meta, f)
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._remove_cloud_only_tests(llm_dir)
+            mock_dump.assert_not_called()
+
+    def test_handles_tests_without_metadata(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        llm_dir = tmp_path / "llm_assert"
+        llm_dir.mkdir()
+
+        config = {
+            "prompts": ["p"],
+            "providers": None,
+            "redteam": [],
+            "defaultTest": [],
+            "tests": [
+                {"vars": {"input": "a"}},
+                {"vars": {"input": "b"}, "metadata": {}},
+                {"vars": {"input": "c"}, "metadata": {"strategyId": "jailbreak:meta"}},
+            ],
+            "commandLineOptions": [],
+            "metadata": {},
+        }
+        import yaml
+
+        with open(llm_dir / "test_1.yaml", "w") as f:
+            yaml.dump(config, f)
+
+        auditor._remove_cloud_only_tests(llm_dir)
+
+        with open(llm_dir / "test_1.yaml") as f:
+            result = yaml.safe_load(f)
+        assert len(result["tests"]) == 2
+        assert result["tests"][0]["vars"]["input"] == "a"
+        assert result["tests"][1]["vars"]["input"] == "b"
+
+    def test_logs_removal_count(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        llm_dir = tmp_path / "llm_assert"
+        llm_dir.mkdir()
+
+        config = {
+            "prompts": ["p"],
+            "providers": None,
+            "redteam": [],
+            "defaultTest": [],
+            "tests": [
+                {"vars": {"input": "a"}, "metadata": {"strategyId": "jailbreak:meta"}},
+                {"vars": {"input": "b"}, "metadata": {"strategyId": "jailbreak:meta"}},
+                {"vars": {"input": "c"}, "metadata": {"strategyId": "other"}},
+            ],
+            "commandLineOptions": [],
+            "metadata": {},
+        }
+        import yaml
+
+        with open(llm_dir / "test_1.yaml", "w") as f:
+            yaml.dump(config, f)
+
+        with patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger:
+            auditor._remove_cloud_only_tests(llm_dir)
+
+        mock_logger.info.assert_any_call(
+            "Removed %d jailbreak:meta test(s) from %s",
+            2,
+            "test_1.yaml",
+        )
 
 
 class TestGenerateTestsFiles:
@@ -338,14 +521,42 @@ class TestGenerateTestsFiles:
             patch.object(auditor, "_run_redteam_generate_for_configs") as mock_gen,
         ):
             auditor.generate_tests_files()
-            
+
         mock_write.assert_called_once()
         assert mock_write.call_args[0][0] == _FAKE_CONFIG["redteam"]["plugins"]
         mock_gen.assert_called_once()
 
+    def test_calls_remove_cloud_only_tests_for_llm_target(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        with (
+            patch.object(auditor, "_write_plugin_configs"),
+            patch.object(auditor, "_configure_provider_in_test_files"),
+            patch.object(auditor, "_run_redteam_generate_for_configs"),
+            patch.object(auditor, "_remove_cloud_only_tests") as mock_remove,
+        ):
+            auditor.generate_tests_files()
+
+        mock_remove.assert_called_once_with(
+            auditor.settings.tests_path / "llm_as_judge_assert"
+        )
+
+    def test_does_not_call_remove_cloud_only_tests_for_semantic_fence(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        with (
+            patch.object(auditor, "_write_plugin_configs"),
+            patch.object(auditor, "_configure_provider_in_test_files"),
+            patch.object(auditor, "_run_redteam_generate_for_configs"),
+            patch.object(auditor, "_remove_cloud_only_tests") as mock_remove,
+        ):
+            auditor.generate_tests_files()
+
+        mock_remove.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Test Providers & Config Cleaning
 # ---------------------------------------------------------------------------
+
 
 class TestProviders:
     def test_sets_html_provider_correctly(self) -> None:
@@ -356,14 +567,15 @@ class TestProviders:
 
     def test_retrieves_http_provider_correctly(self) -> None:
         from pentester.auditors.promptfoo.http_provider import PromptfooHTTPProvider
+
         auditor = _make_auditor()
-        
+
         # Mix of valid and invalid providers
         auditor.config["providers"] = [
             {"id": "openai", "config": {}},
             {"id": "http", "config": {"url": "http://example.com"}},
         ]
-        
+
         providers = auditor.get_providers()
         assert len(providers) == 1
         assert isinstance(providers["http"], PromptfooHTTPProvider)
@@ -383,45 +595,57 @@ class TestCleanConfig:
     def test_cleans_and_writes_config_correctly(self, tmp_path: Path) -> None:
         auditor = _make_auditor(_make_settings(assertion_wrapper_path="/my/assert.py"))
         output = tmp_path / "output"
-        
+
         with (
             patch("builtins.open", mock_open(read_data="")),
-            patch("pentester.auditors.promptfoo.auditor.yaml.safe_load", return_value=copy.deepcopy(_FAKE_CONFIG)),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=copy.deepcopy(_FAKE_CONFIG),
+            ),
             patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump,
         ):
             auditor.clean_config(Path("/test.yaml"), output)
-            
+
         assert output.exists()
         written = mock_dump.call_args[0][0]
         for test in written["tests"]:
             assert test["assert"][0]["type"] == "python"
             assert "/my/assert.py" in test["assert"][0]["value"]
 
-    def test_handles_existing_files_based_on_replace_setting(self, tmp_path: Path) -> None:
+    def test_handles_existing_files_based_on_replace_setting(
+        self, tmp_path: Path
+    ) -> None:
         output = tmp_path / "output"
         output.mkdir()
         (output / "test.yaml").write_text("old")
-        
+
         # Test replace = False
         auditor_no_replace = _make_auditor(_make_settings(replace_existing_file=False))
         with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
             auditor_no_replace.clean_config(Path("/test.yaml"), output)
             mock_dump.assert_not_called()
 
+
 # ---------------------------------------------------------------------------
 # Test Audit Preparation & Results Processing
 # ---------------------------------------------------------------------------
 
+
 class TestPrepareAuditFiles:
     def test_raises_error_when_no_yaml_files_found(self, tmp_path: Path) -> None:
-        auditor = _make_auditor(_make_settings(output_path=str(tmp_path)), target_type=TargetType.LLM)
+        auditor = _make_auditor(
+            _make_settings(output_path=str(tmp_path)), target_type=TargetType.LLM
+        )
         (tmp_path / "tests" / "llm_as_judge_assert").mkdir(parents=True, exist_ok=True)
 
         with pytest.raises(FileNotFoundError):
             auditor._prepare_audit_files()
 
     def test_prepares_semantic_fence_files(self, tmp_path: Path) -> None:
-        auditor = _make_auditor(_make_settings(output_path=str(tmp_path)), target_type=TargetType.SEMANTIC_FENCE)
+        auditor = _make_auditor(
+            _make_settings(output_path=str(tmp_path)),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
         llm_dir = tmp_path / "tests" / "llm_as_judge_assert"
         custom_dir = tmp_path / "tests" / "custom_assert"
         llm_dir.mkdir(parents=True, exist_ok=True)
@@ -437,7 +661,9 @@ class TestPrepareAuditFiles:
         assert all(str(f).startswith(str(custom_dir)) for f in files)
 
     def test_prepares_llm_target_files(self, tmp_path: Path) -> None:
-        auditor = _make_auditor(_make_settings(output_path=str(tmp_path)), target_type=TargetType.LLM)
+        auditor = _make_auditor(
+            _make_settings(output_path=str(tmp_path)), target_type=TargetType.LLM
+        )
         llm_dir = tmp_path / "tests" / "llm_as_judge_assert"
         llm_dir.mkdir(parents=True, exist_ok=True)
         (llm_dir / "test_1.yaml").write_text("data")
@@ -456,17 +682,21 @@ class TestProcessEvalResults:
             (Path("/b.yaml"), False, "b.yaml", "error"),
             (Path("/c.yaml"), True, "c.yaml", "ok"),
         ]
-        
+
         with patch.object(auditor, "_load_config", return_value={"tests": [1, 2]}):
             auditor._process_eval_results(results)
-            
+
         # Only validates the 2 successful ones. Each yaml loaded had 2 tests.
         assert auditor.collector.validate.call_count == 2
-        assert auditor.collector.validate.call_args_list[0][0][2] == 2  # Checks test count is passed
+        assert (
+            auditor.collector.validate.call_args_list[0][0][2] == 2
+        )  # Checks test count is passed
+
 
 # ---------------------------------------------------------------------------
 # Test Probe Results Generation
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateProbeResults:
     def _make_results_df(self, **overrides: object) -> pd.DataFrame:
@@ -522,7 +752,9 @@ class TestGenerateProbeResults:
 
     def test_score_defaults_to_zero_when_accept_score_is_none(self) -> None:
         auditor = _make_auditor()
-        auditor.results_df = self._make_results_df(grading_score=None, accept_score=None)
+        auditor.results_df = self._make_results_df(
+            grading_score=None, accept_score=None
+        )
 
         results = auditor._generate_probe_results()
 
@@ -544,9 +776,11 @@ class TestGenerateProbeResults:
 
         assert results[0].metadata["error"] is None
 
+
 # ---------------------------------------------------------------------------
 # Test Pre-audit Precondition Validation
 # ---------------------------------------------------------------------------
+
 
 class TestValidatePreconditions:
     def test_semantic_fence_passes_when_assert_file_exists(self) -> None:
@@ -580,7 +814,11 @@ class TestValidatePreconditions:
         auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
         with (
             patch("pathlib.Path.exists", return_value=True),
-            patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test", "ANTHROPIC_API_KEY": "sk-ant"}, clear=True),
+            patch.dict(
+                os.environ,
+                {"OPENAI_API_KEY": "sk-test", "ANTHROPIC_API_KEY": "sk-ant"},
+                clear=True,
+            ),
         ):
             auditor._unset_llm_api_keys()
 
@@ -623,6 +861,7 @@ class TestRestoreLlmApiKeys:
 # Test Audit Pipeline orchestration
 # ---------------------------------------------------------------------------
 
+
 class TestAudit:
     def test_executes_full_audit_pipeline(self) -> None:
         auditor = _make_auditor()
@@ -635,14 +874,22 @@ class TestAudit:
             patch.object(auditor, "_validate_preconditions"),
             patch.object(auditor, "generate_tests_files") as mock_gen,
             patch.object(auditor.collector, "clean") as mock_clean,
-            patch.object(auditor, "_prepare_audit_files", return_value=files) as mock_prep,
-            patch.object(auditor.runner, "run_all", return_value=runner_output) as mock_run,
+            patch.object(
+                auditor, "_prepare_audit_files", return_value=files
+            ) as mock_prep,
+            patch.object(
+                auditor.runner, "run_all", return_value=runner_output
+            ) as mock_run,
             patch.object(auditor, "_process_eval_results") as mock_proc,
-            patch.object(auditor.collector, "build_dataframe", return_value=expected_df) as mock_build,
-            patch.object(auditor, "_generate_probe_results", return_value=expected_probes) as mock_gen_probes,
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=expected_df
+            ) as mock_build,
+            patch.object(
+                auditor, "_generate_probe_results", return_value=expected_probes
+            ) as mock_gen_probes,
         ):
             result = auditor.audit()
-            
+
         mock_gen.assert_called_once()
         mock_clean.assert_called_once()
         mock_prep.assert_called_once()
@@ -650,7 +897,7 @@ class TestAudit:
         mock_proc.assert_called_once_with(runner_output)
         mock_build.assert_called_once()
         mock_gen_probes.assert_called_once()
-        
+
         assert auditor.results_df is expected_df
         assert result is expected_probes
 
@@ -663,7 +910,9 @@ class TestAudit:
             patch.object(auditor, "_prepare_audit_files", return_value=[]),
             patch.object(auditor.runner, "run_all", return_value=[]),
             patch.object(auditor, "_process_eval_results"),
-            patch.object(auditor.collector, "build_dataframe", return_value=pd.DataFrame()),
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=pd.DataFrame()
+            ),
             patch.object(auditor, "_generate_probe_results", return_value=[]),
         ):
             assert auditor.audit() == []
@@ -685,11 +934,19 @@ class TestAudit:
             patch.object(auditor, "_validate_preconditions"),
             patch.object(auditor, "generate_tests_files"),
             patch.object(auditor.collector, "clean"),
-            patch.object(auditor, "_prepare_audit_files", return_value=[Path("/a.yaml"), Path("/b.yaml")]),
+            patch.object(
+                auditor,
+                "_prepare_audit_files",
+                return_value=[Path("/a.yaml"), Path("/b.yaml")],
+            ),
             patch.object(auditor.runner, "run_all", return_value=all_failed),
             patch.object(auditor, "_process_eval_results"),
-            patch.object(auditor.collector, "build_dataframe", return_value=expected_df) as mock_build,
-            patch.object(auditor, "_generate_probe_results", return_value=[error_probe]) as mock_gen_probes,
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=expected_df
+            ) as mock_build,
+            patch.object(
+                auditor, "_generate_probe_results", return_value=[error_probe]
+            ) as mock_gen_probes,
             patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
         ):
             result = auditor.audit()
@@ -717,11 +974,17 @@ class TestAudit:
             patch.object(auditor, "_validate_preconditions"),
             patch.object(auditor, "generate_tests_files"),
             patch.object(auditor.collector, "clean"),
-            patch.object(auditor, "_prepare_audit_files", return_value=[Path("/a.yaml")]),
+            patch.object(
+                auditor, "_prepare_audit_files", return_value=[Path("/a.yaml")]
+            ),
             patch.object(auditor.runner, "run_all", return_value=all_failed),
             patch.object(auditor, "_process_eval_results"),
-            patch.object(auditor.collector, "build_dataframe", return_value=pd.DataFrame()),
-            patch.object(auditor, "_generate_probe_results", return_value=[non_error_probe]),
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=pd.DataFrame()
+            ),
+            patch.object(
+                auditor, "_generate_probe_results", return_value=[non_error_probe]
+            ),
             patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
         ):
             result = auditor.audit()
@@ -742,11 +1005,19 @@ class TestAudit:
             patch.object(auditor, "_validate_preconditions"),
             patch.object(auditor, "generate_tests_files"),
             patch.object(auditor.collector, "clean"),
-            patch.object(auditor, "_prepare_audit_files", return_value=[Path("/a.yaml"), Path("/b.yaml")]),
+            patch.object(
+                auditor,
+                "_prepare_audit_files",
+                return_value=[Path("/a.yaml"), Path("/b.yaml")],
+            ),
             patch.object(auditor.runner, "run_all", return_value=mixed_results),
             patch.object(auditor, "_process_eval_results"),
-            patch.object(auditor.collector, "build_dataframe", return_value=expected_df) as mock_build,
-            patch.object(auditor, "_generate_probe_results", return_value=expected_probes),
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=expected_df
+            ) as mock_build,
+            patch.object(
+                auditor, "_generate_probe_results", return_value=expected_probes
+            ),
         ):
             result = auditor.audit()
 

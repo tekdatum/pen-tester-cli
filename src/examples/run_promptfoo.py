@@ -33,7 +33,7 @@ setup_logging(level=logging.INFO)
 CURL_COMMAND = (
     "curl -X POST 'http://localhost:8090/api/v1/fence/validate/2'"
     " -H 'Content-Type: application/json'"
-    " --data-raw '{\"text\": $PROMPT}'"
+    " --data-raw '{\"text\": \"$PROMPT\"}'"
 )
 
 settings = get_settings()
