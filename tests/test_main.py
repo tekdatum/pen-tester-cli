@@ -1,14 +1,38 @@
-"""Tests for src/pentester/main.py."""
+"""Tests for src/pentester/main.py.
+
+Auditor modules (garak, pyrit, inspect_ai) are stubbed via sys.modules so the
+suite runs without the real packages installed.
+"""
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import MagicMock, patch
 
-import click.testing
+# ---------------------------------------------------------------------------
+# Stub auditor modules so their heavy third-party imports never load.
+# ---------------------------------------------------------------------------
+for _mod in (
+    "pentester.auditors.garak",
+    "pentester.auditors.pyrit",
+    "pentester.auditors.inspect_ai",
+    "pyrit",
+    "pyrit.datasets",
+    "pyrit.models",
+    "pyrit.prompt_target",
+    "pyrit.score",
+    "pyrit.score.true_false",
+    "pyrit.score.true_false.self_ask_true_false_scorer",
+    "pyrit.setup",
+    "inspect_ai",
+):
+    sys.modules.setdefault(_mod, MagicMock())
 
-from pentester.config.settings import PentesterSettings
-from pentester.enums.target_type import TargetType
-from pentester.main import main
+import click.testing  # noqa: E402
+
+from pentester.config.settings import PentesterSettings  # noqa: E402
+from pentester.enums.target_type import TargetType  # noqa: E402
+from pentester.main import main  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -117,3 +141,149 @@ class TestMain:
             mock_orchestrator_cls.return_value.execute.return_value = None
             result = runner.invoke(main, ["--target-type", "LLM"])
         assert result.exit_code == 0
+
+
+class TestAuditorsCLI:
+    def test_auditors_calls_execute_auditors(self) -> None:
+        mock_orchestrator = MagicMock()
+        runner = click.testing.CliRunner()
+        with patch(
+            "pentester.main.Orchestrator", return_value=mock_orchestrator
+        ):
+            result = runner.invoke(main, ["--auditors", "promptfoo"])
+        assert result.exit_code == 0
+        mock_orchestrator.execute_auditors.assert_called_once_with(["promptfoo"])
+        mock_orchestrator.execute.assert_not_called()
+
+    def test_auditors_multiple_calls_execute_auditors(self) -> None:
+        mock_orchestrator = MagicMock()
+        runner = click.testing.CliRunner()
+        with patch(
+            "pentester.main.Orchestrator", return_value=mock_orchestrator
+        ):
+            result = runner.invoke(main, ["--auditors", "promptfoo,garak"])
+        assert result.exit_code == 0
+        mock_orchestrator.execute_auditors.assert_called_once_with(
+            ["promptfoo", "garak"]
+        )
+
+    def test_no_auditors_calls_execute(self) -> None:
+        mock_orchestrator = MagicMock()
+        runner = click.testing.CliRunner()
+        with patch(
+            "pentester.main.Orchestrator", return_value=mock_orchestrator
+        ):
+            result = runner.invoke(main, [])
+        assert result.exit_code == 0
+        mock_orchestrator.execute.assert_called_once()
+        mock_orchestrator.execute_auditors.assert_not_called()
+
+
+class TestPromptfooCLI:
+    def test_promptfoo_config_path_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-config-path", "./custom"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.config_path == "./custom"
+
+    def test_promptfoo_output_path_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-output-path", "./out"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.output_path == "./out"
+
+    def test_promptfoo_plugins_per_file_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-plugins-per-file", "3"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.plugins_per_file == 3
+
+    def test_promptfoo_max_test_files_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-max-test-files", "10"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.max_test_files == 10
+
+    def test_promptfoo_assertion_wrapper_path_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-assertion-wrapper-path", "assert.py"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.assertion_wrapper_path == "assert.py"
+
+    def test_promptfoo_replace_existing_file_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-replace-existing-file"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.replace_existing_file is True
+
+    def test_promptfoo_files_parallel_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-files-parallel", "5"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.files_parallel == 5
+
+    def test_promptfoo_internal_concurrency_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-internal-concurrency", "4"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.internal_concurrency == 4
+
+    def test_promptfoo_max_tests_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(
+                main, ["--promptfoo-max-tests", "10"]
+            )
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.promptfoo.max_tests == 10
