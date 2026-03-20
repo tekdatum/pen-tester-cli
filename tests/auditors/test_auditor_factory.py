@@ -1,15 +1,18 @@
 """Tests for AuditorFactory.
 
-garak.* is stubbed via sys.modules so the suite runs without the real package.
+garak.* and pyrit.* are stubbed via sys.modules so the suite runs without
+the real packages present.
 """
 
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # ---------------------------------------------------------------------------
-# Stub garak before any pentester import resolves it.
+# Stub garak and pyrit before any pentester import resolves them.
 # ---------------------------------------------------------------------------
 
 _garak_config_mod = MagicMock(name="garak._config")
@@ -20,11 +23,33 @@ _garak_mod._config = _garak_config_mod
 _garak_mod._plugins = _garak_plugins_mod
 _garak_mod.command = _garak_command_mod
 
+_pyrit_setup_mod = MagicMock(name="pyrit.setup")
+_pyrit_setup_mod.initialize_pyrit_async = AsyncMock()
+
+_tqdm_stub = MagicMock(name="tqdm")
+_tqdm_stub.tqdm = lambda iterable, **_kwargs: iterable
+
 for _name, _stub in [
     ("garak", _garak_mod),
     ("garak._config", _garak_config_mod),
     ("garak._plugins", _garak_plugins_mod),
     ("garak.command", _garak_command_mod),
+    ("garak.attempt", MagicMock(name="garak.attempt")),
+    ("garak.generators", MagicMock(name="garak.generators")),
+    ("garak.generators.litellm", MagicMock(name="garak.generators.litellm")),
+    ("garak.generators.openai", MagicMock(name="garak.generators.openai")),
+    ("pyrit", MagicMock(name="pyrit")),
+    ("pyrit.datasets", MagicMock(name="pyrit.datasets")),
+    ("pyrit.setup", _pyrit_setup_mod),
+    ("pyrit.prompt_target", MagicMock(name="pyrit.prompt_target")),
+    ("pyrit.score", MagicMock(name="pyrit.score")),
+    ("pyrit.score.true_false", MagicMock(name="pyrit.score.true_false")),
+    (
+        "pyrit.score.true_false.self_ask_true_false_scorer",
+        MagicMock(name="pyrit.score.true_false.self_ask_true_false_scorer"),
+    ),
+    ("pyrit.models", MagicMock(name="pyrit.models")),
+    ("tqdm", _tqdm_stub),
 ]:
     sys.modules.setdefault(_name, _stub)
 
@@ -33,6 +58,13 @@ from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.auditors.models.base_auditor import BaseAuditor  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _patch_promptfoo_auditor():
+    """Mock PromptfooAuditor at the factory boundary so its __init__ never runs."""
+    with patch("pentester.auditors.auditor_factory.PromptfooAuditor") as mock_cls:
+        yield mock_cls
 
 
 def _make_settings(**scanner_kwargs) -> PentesterSettings:
@@ -87,6 +119,22 @@ class TestScannerInjection:
         auditor = factory.get_auditor("garak")
         assert isinstance(auditor._scanner, Scanner)
 
+    def test_promptfoo_auditor_receives_none_scanner_when_not_configured(
+        self, _patch_promptfoo_auditor
+    ) -> None:
+        AuditorFactory(_make_settings())
+        _patch_promptfoo_auditor.assert_called_once()
+        _, kwargs = _patch_promptfoo_auditor.call_args
+        assert kwargs["scanner"] is None
+
+    def test_promptfoo_auditor_receives_scanner_when_configured(
+        self, _patch_promptfoo_auditor
+    ) -> None:
+        AuditorFactory(_make_settings(curl_command="curl http://example.com"))
+        _patch_promptfoo_auditor.assert_called_once()
+        _, kwargs = _patch_promptfoo_auditor.call_args
+        assert isinstance(kwargs["scanner"], Scanner)
+
 
 # ---------------------------------------------------------------------------
 # get_auditor
@@ -97,6 +145,13 @@ class TestGetAuditor:
     def test_get_garak_returns_garak_auditor(self) -> None:
         factory = AuditorFactory(_make_settings())
         assert isinstance(factory.get_auditor("garak"), GarakAuditor)
+
+    def test_get_promptfoo_returns_promptfoo_auditor(
+        self, _patch_promptfoo_auditor
+    ) -> None:
+        factory = AuditorFactory(_make_settings())
+        auditor = factory.get_auditor("promptfoo")
+        assert auditor is _patch_promptfoo_auditor.return_value
 
     def test_get_unknown_key_raises(self) -> None:
         factory = AuditorFactory(_make_settings())
@@ -122,10 +177,17 @@ class TestGetAvailableAuditors:
         auditors = factory.get_available_auditors()
         assert any(isinstance(a, GarakAuditor) for a in auditors)
 
-    def test_all_items_are_base_auditors(self) -> None:
+    def test_contains_promptfoo_auditor(self, _patch_promptfoo_auditor) -> None:
+        factory = AuditorFactory(_make_settings())
+        auditors = factory.get_available_auditors()
+        assert _patch_promptfoo_auditor.return_value in auditors
+
+    def test_all_items_are_base_auditors(self, _patch_promptfoo_auditor) -> None:
         factory = AuditorFactory(_make_settings())
         for auditor in factory.get_available_auditors():
-            assert isinstance(auditor, BaseAuditor)
+            is_real = isinstance(auditor, BaseAuditor)
+            is_mock = auditor is _patch_promptfoo_auditor.return_value
+            assert is_real or is_mock
 
 
 # ---------------------------------------------------------------------------

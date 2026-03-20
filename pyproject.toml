@@ -26,6 +26,9 @@ dependencies = [
     "weasyprint>=68.1",
     "pandas>=2.0",
     "python-dotenv>=1.2",
+    "promptfoo>=0.1.3",
+    "PyYAML>=6.0.3",
+    "types-PyYAML>=6.0.12.20250915",
 ]
 [project.scripts]
 pentester = "pentester.main:main"
@@ -56,11 +59,11 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "mako.*", "uncurl.*", "tqdm", "pandas.*", "click", "click.*"]
+module = ["requests.*", "mako.*", "uncurl.*", "tqdm", "pandas.*", "pyrit", "pyrit.*", "click", "click.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["garak", "garak.*"]
+module = ["garak", "garak.*", "inspect_ai"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
@@ -78,7 +81,7 @@ target-version = "py310"
 # I: isort (import sorting)
 # ... https://docs.astral.sh/ruff/rules/
 [tool.ruff.lint]
-select = ["E", "F"] 
+select = ["E", "F"]
 ignore = []
 
 # ------------------------------------------------------------------

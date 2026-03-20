@@ -38,6 +38,12 @@ class TestDefaults:
         settings = PentesterSettings()
         assert settings.scanner.json_dot_target is None
 
+    def test_default_promptfoo_is_promptfoo_settings(self) -> None:
+        from pentester.config.auditors.promptfoo_settings import PromptfooSettings
+
+        settings = PentesterSettings()
+        assert isinstance(settings.promptfoo, PromptfooSettings)
+
     def test_default_reporting_is_reporting_settings(self) -> None:
         settings = PentesterSettings()
         assert isinstance(settings.reporting, ReportingSettings)
@@ -50,6 +56,20 @@ class TestDefaults:
         settings = PentesterSettings()
         for key in ("pdf", "csv", "html", "markdown"):
             assert key in settings.reporting.generator_keys
+
+    def test_default_llm_is_llm_settings(self) -> None:
+        from pentester.config.llm import LLMSettings
+        settings = PentesterSettings()
+        assert isinstance(settings.llm, LLMSettings)
+
+    def test_default_llm_provider_is_openai(self) -> None:
+        from pentester.config.llm import LLMProvider
+        settings = PentesterSettings()
+        assert settings.llm.provider == LLMProvider.OPENAI
+
+    def test_default_llm_model_is_empty(self) -> None:
+        settings = PentesterSettings()
+        assert settings.llm.model == ""
 
 
 class TestScannerEnvVarOverrides:
@@ -138,6 +158,19 @@ class TestSettingsSingleton:
         s2 = get_settings()
         assert s1 is not s2
         assert s2.target_type == TargetType.LLM
+
+
+class TestLLMEnvVarOverrides:
+    def test_llm_provider_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from pentester.config.llm import LLMProvider
+        monkeypatch.setenv("PENTESTER_LLM__PROVIDER", "anthropic")
+        settings = PentesterSettings()
+        assert settings.llm.provider == LLMProvider.ANTHROPIC
+
+    def test_llm_model_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PENTESTER_LLM__MODEL", "gpt-4o")
+        settings = PentesterSettings()
+        assert settings.llm.model == "gpt-4o"
 
 
 class TestTargetTypeEnum:
