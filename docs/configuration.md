@@ -11,6 +11,7 @@ All variables are prefixed with `PENTESTER_`.
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `PENTESTER_TARGET_TYPE` | `TargetType` | `SEMANTIC_FENCE` | Category of the target being scanned |
+| `PENTESTER_AUDITORS` | `list[str]` | `[]` | Comma-separated list of auditors to run (e.g. `garak,pyrit`). When empty, all available auditors run. |
 | `PENTESTER_SCANNER__CURL_COMMAND` | `str \| None` | `None` | curl command string used to target the model |
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract value from response |
 | `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written |
