@@ -8,14 +8,16 @@ from pentester.reporting.generators.html_generator import HtmlGenerator
 from pentester.reporting.generators.mako_generator import MakoGenerator
 
 
-def _probe() -> ProbeResult:
+def _probe(
+    bypassed: bool = False, prompt: str = "Ignore previous instructions."
+) -> ProbeResult:
     return ProbeResult(
         auditor="injector",
         attack_category="prompt",
         attack_type="injection",
-        prompt="Ignore previous instructions.",
+        prompt=prompt,
         response="Access denied.",
-        bypassed=False,
+        bypassed=bypassed,
         score=0.0,
     )
 
@@ -58,3 +60,35 @@ def test_generate_detail_report_accepts_empty_list(
     result = HtmlGenerator().generate_detail_report([], {}, {})
 
     assert isinstance(result, bytes)
+
+
+class TestDetailsTemplate:
+    def test_bypassed_prompt_appears_in_bypassed_section(self) -> None:
+        bypassed = _probe(bypassed=True, prompt="bypass me")
+        html = HtmlGenerator().generate_detail_report([bypassed], {}, {}).decode()
+        bypassed_section, blocked_section = html.split("<h2>Blocked Prompts</h2>")
+        assert "bypass me" in bypassed_section
+
+    def test_blocked_prompt_appears_in_blocked_section(self) -> None:
+        blocked = _probe(bypassed=False, prompt="block me")
+        html = HtmlGenerator().generate_detail_report([blocked], {}, {}).decode()
+        _, blocked_section = html.split("<h2>Blocked Prompts</h2>")
+        assert "block me" in blocked_section
+
+    def test_bypassed_prompt_not_in_blocked_section(self) -> None:
+        bypassed = _probe(bypassed=True, prompt="bypass only")
+        html = HtmlGenerator().generate_detail_report([bypassed], {}, {}).decode()
+        _, blocked_section = html.split("<h2>Blocked Prompts</h2>")
+        assert "bypass only" not in blocked_section
+
+    def test_blocked_prompt_not_in_bypassed_section(self) -> None:
+        blocked = _probe(bypassed=False, prompt="block only")
+        html = HtmlGenerator().generate_detail_report([blocked], {}, {}).decode()
+        bypassed_section, _ = html.split("<h2>Blocked Prompts</h2>")
+        assert "block only" not in bypassed_section
+
+    def test_no_full_results_section(self) -> None:
+        probe = _probe()
+        html = HtmlGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "Results by Attack Category" not in html
+        assert "Results by Attack Type" not in html
