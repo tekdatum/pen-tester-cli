@@ -111,6 +111,16 @@ class TestMain:
         called_settings = mock_orchestrator_cls.call_args.args[0]
         assert called_settings.scanner.custom_handler == "handler.py:MyHandler"
 
+    def test_auditors_sets_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, ["--auditors", "garak,pyrit"])
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.auditors == ["garak", "pyrit"]
+
     def test_exit_code_zero(self) -> None:
         runner = click.testing.CliRunner()
         with patch("pentester.main.Orchestrator") as mock_orchestrator_cls:

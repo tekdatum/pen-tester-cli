@@ -195,6 +195,11 @@ class TestGetAvailableAuditors:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# get_auditors
+# ---------------------------------------------------------------------------
+
+
 class TestGetAuditors:
     def test_returns_requested_auditors(self) -> None:
         factory = AuditorFactory(_make_settings())
