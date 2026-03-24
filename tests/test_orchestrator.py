@@ -32,8 +32,13 @@ def _patch_promptfoo_auditor():
         yield
 
 
-def _make_settings(**reporting_kwargs) -> PentesterSettings:
-    return PentesterSettings(reporting=ReportingSettings(**reporting_kwargs))
+def _make_settings(
+    auditors: list[str] | None = None, **reporting_kwargs
+) -> PentesterSettings:
+    kwargs: dict = {"reporting": ReportingSettings(**reporting_kwargs)}
+    if auditors is not None:
+        kwargs["auditors"] = auditors
+    return PentesterSettings(**kwargs)
 
 
 def _make_probe_result() -> ProbeResult:
@@ -69,32 +74,47 @@ class TestOrchestratorInit:
 
 
 class TestExecute:
-    def test_calls_get_available_auditors(self) -> None:
+    def test_calls_get_available_auditors_when_no_settings_auditors(self) -> None:
         orch = Orchestrator(_make_settings())
         with (
             patch.object(
                 orch._auditor_factory, "get_available_auditors", return_value=[]
-            ) as mock_auditors,
+            ) as mock_available,
             patch.object(orch._reporting, "generate"),
         ):
             orch.execute()
-            mock_auditors.assert_called_once()
+            mock_available.assert_called_once()
 
+    def test_uses_settings_auditors_when_present(self) -> None:
+        orch = Orchestrator(_make_settings(auditors=["garak"]))
+        with (
+            patch.object(
+                orch._auditor_factory, "get_available_auditors"
+            ) as mock_available,
+            patch.object(
+                orch._auditor_factory, "get_auditors", return_value=[]
+            ) as mock_get,
+            patch.object(orch._reporting, "generate"),
+        ):
+            orch.execute()
+            mock_available.assert_not_called()
+            mock_get.assert_called_once_with(["garak"])
+
+
+# ---------------------------------------------------------------------------
+# TestRunAndReport
+# ---------------------------------------------------------------------------
+
+
+class TestRunAndReport:
     def test_calls_audit_on_each_auditor(self) -> None:
         orch = Orchestrator(_make_settings())
         auditor_a = MagicMock()
         auditor_a.audit.return_value = []
         auditor_b = MagicMock()
         auditor_b.audit.return_value = []
-        with (
-            patch.object(
-                orch._auditor_factory,
-                "get_available_auditors",
-                return_value=[auditor_a, auditor_b],
-            ),
-            patch.object(orch._reporting, "generate"),
-        ):
-            orch.execute()
+        with patch.object(orch._reporting, "generate"):
+            orch._run_and_report([auditor_a, auditor_b])
             auditor_a.audit.assert_called_once()
             auditor_b.audit.assert_called_once()
 
@@ -106,48 +126,26 @@ class TestExecute:
         auditor_a.audit.return_value = [result_a]
         auditor_b = MagicMock()
         auditor_b.audit.return_value = [result_b]
-        with (
-            patch.object(
-                orch._auditor_factory,
-                "get_available_auditors",
-                return_value=[auditor_a, auditor_b],
-            ),
-            patch.object(orch._reporting, "generate") as mock_generate,
-        ):
-            orch.execute()
+        with patch.object(orch._reporting, "generate") as mock_generate:
+            orch._run_and_report([auditor_a, auditor_b])
             called_data = mock_generate.call_args.kwargs["data"]
             assert result_a in called_data
             assert result_b in called_data
 
     def test_passes_output_dir_path_to_generate(self) -> None:
         orch = Orchestrator(_make_settings(output_dir_path="/tmp/out/"))
-        with (
-            patch.object(
-                orch._auditor_factory, "get_available_auditors", return_value=[]
-            ),
-            patch.object(orch._reporting, "generate") as mock_generate,
-        ):
-            orch.execute()
+        with patch.object(orch._reporting, "generate") as mock_generate:
+            orch._run_and_report([])
             assert mock_generate.call_args.kwargs["output_dir_path"] == "/tmp/out/"
 
     def test_passes_parsed_generator_keys_to_generate(self) -> None:
         orch = Orchestrator(_make_settings(generator_keys="pdf,csv"))
-        with (
-            patch.object(
-                orch._auditor_factory, "get_available_auditors", return_value=[]
-            ),
-            patch.object(orch._reporting, "generate") as mock_generate,
-        ):
-            orch.execute()
+        with patch.object(orch._reporting, "generate") as mock_generate:
+            orch._run_and_report([])
             assert mock_generate.call_args.kwargs["generator_keys"] == ["pdf", "csv"]
 
-    def test_empty_auditors_calls_generate_with_empty_list(self) -> None:
+    def test_empty_auditors_calls_generate_with_empty_data(self) -> None:
         orch = Orchestrator(_make_settings())
-        with (
-            patch.object(
-                orch._auditor_factory, "get_available_auditors", return_value=[]
-            ),
-            patch.object(orch._reporting, "generate") as mock_generate,
-        ):
-            orch.execute()
+        with patch.object(orch._reporting, "generate") as mock_generate:
+            orch._run_and_report([])
             assert mock_generate.call_args.kwargs["data"] == []

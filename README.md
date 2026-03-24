@@ -41,6 +41,7 @@ All options are optional. Defaults load from environment variables or a `.env` /
 | `--output-dir-path` | Directory where report files are written | `./output/` |
 | `--generator-keys` | Comma-separated list of report formats: `pdf`, `csv`, `html`, `markdown` | all four |
 | `--target-type` | Category of the target: `LLM` or `SEMANTIC_FENCE` | `SEMANTIC_FENCE` |
+| `--auditors` | Comma-separated list of auditors to run: `garak`, `pyrit`, `inspect_ai`, `promptfoo` | all |
 
 ---
 
@@ -77,7 +78,15 @@ pentester \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
 ```
 
-### 4. Use the Orchestrator in your own code
+### 4. Specify auditors
+
+Use `--auditors` with a comma-separated list of auditor names to run only a subset:
+
+```
+pentester --auditors garak,pyrit --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+```
+
+### 5. Use the Orchestrator in your own code
 
 You can drive scans programmatically by constructing a `PentesterSettings` object and passing it to `Orchestrator`:
 

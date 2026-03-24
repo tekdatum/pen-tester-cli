@@ -11,6 +11,7 @@ def _probe(
     attack_type: str = "direct",
     bypassed: bool = False,
     score: float = 0.0,
+    metadata: dict | None = None,
 ) -> ProbeResult:
     return ProbeResult(
         auditor=auditor,
@@ -20,6 +21,7 @@ def _probe(
         response="Access denied.",
         bypassed=bypassed,
         score=score,
+        metadata=metadata or {},
     )
 
 
@@ -156,3 +158,51 @@ def test_unique_auditors_returns_sorted_unique_values() -> None:
 def test_unique_auditors_single_auditor() -> None:
     data = [_probe(auditor="garak"), _probe(auditor="garak")]
     assert Summarizer.unique_auditors(data) == ["garak"]
+
+
+# --- error counting ---
+
+
+def test_summary_counts_errors() -> None:
+    data = [
+        _probe(bypassed=False),
+        _probe(bypassed=True),
+        _probe(metadata={"error": "HTTP 422"}),
+        _probe(metadata={"error": "script not found"}),
+    ]
+    result = Summarizer.summarize(data)
+    assert result.total_errors == 2
+
+
+def test_success_rate_excludes_errors_from_denominator() -> None:
+    data = [
+        _probe(bypassed=False),
+        _probe(bypassed=True),
+        _probe(bypassed=True),
+        _probe(metadata={"error": "HTTP 422"}),
+        _probe(metadata={"error": "script not found"}),
+    ]
+    result = Summarizer.summarize(data)
+    # valid=3 (5 total - 2 errors), bypassed=2 → success_rate = (3-2)/3 * 100 ≈ 33.33
+    assert result.success_rate == pytest.approx(33.33, abs=0.01)
+
+
+def test_success_rate_is_zero_when_all_probes_errored() -> None:
+    data = [
+        _probe(metadata={"error": "HTTP 422"}),
+        _probe(metadata={"error": "HTTP 422"}),
+        _probe(metadata={"error": "script not found"}),
+    ]
+    result = Summarizer.summarize(data)
+    assert result.success_rate == 0.0
+
+
+def test_group_by_counts_errors_per_group() -> None:
+    data = [
+        _probe(auditor="garak", metadata={"error": "HTTP 422"}),
+        _probe(auditor="garak", bypassed=False),
+        _probe(auditor="pyrit", bypassed=False),
+    ]
+    result = Summarizer.summarize_by_auditor(data)
+    assert result["garak"].total_errors == 1
+    assert result["pyrit"].total_errors == 0

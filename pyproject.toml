@@ -55,6 +55,7 @@ explicit_package_bases = true
 exclude = [
     "docs/",
     "venv/",
+    "pentester_env/",
     "engine_sdk/"
 ]
 
