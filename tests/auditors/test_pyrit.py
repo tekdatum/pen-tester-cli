@@ -25,8 +25,17 @@ import pytest
 _pyrit_mod = MagicMock(name="pyrit")
 _pyrit_datasets_mod = MagicMock(name="pyrit.datasets")
 _pyrit_setup_mod = MagicMock(name="pyrit.setup")
+class _FakePromptChatTarget:
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def get_identifier(self) -> dict:
+        return {}
+
+
 _pyrit_prompt_target_mod = MagicMock(name="pyrit.prompt_target")
 _pyrit_prompt_target_mod.OpenAIChatTarget = MagicMock(name="OpenAIChatTarget")
+_pyrit_prompt_target_mod.PromptChatTarget = _FakePromptChatTarget
 _pyrit_score_mod = MagicMock(name="pyrit.score")
 _pyrit_score_tf_mod = MagicMock(name="pyrit.score.true_false")
 _pyrit_score_tf_scorer_mod = MagicMock(name="pyrit.score.true_false.self_ask_true_false_scorer")
@@ -66,6 +75,7 @@ _pyrit_score_tf_scorer_mod = sys.modules["pyrit.score.true_false.self_ask_true_f
 _pyrit_models_mod = sys.modules["pyrit.models"]
 
 from pentester.auditors.pyrit.auditor import PyritAuditor as PyritProbe  # noqa: E402
+from pentester.auditors.pyrit.scanner_target import ScannerTarget  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
@@ -566,8 +576,8 @@ class TestAuditMultiturn:
             run_strategy_return.last_score = None
 
         auditor = _make_multiturn_auditor(settings=settings)
+        auditor._scanner = self.mock_scanner
         with (
-            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
             patch.object(auditor, "_init_target", return_value=self.mock_target),
             patch.object(auditor, "_init_scorer", return_value=self.mock_scorer),
             patch.object(
@@ -575,7 +585,7 @@ class TestAuditMultiturn:
                 "_run_strategy_async",
                 new=AsyncMock(return_value=run_strategy_return),
             ) as mock_run,
-            patch.object(auditor, "_build_probe_results", return_value=[]) as mock_build,
+            patch.object(auditor, "_build_probe_results", return_value=[]),
         ):
             auditor.audit()
             return mock_run.call_args_list
@@ -600,3 +610,32 @@ class TestAuditMultiturn:
         )
         strategies_used = {c.kwargs["strategy"] for c in calls}
         assert strategies_used == set(MultiTurnStrategy)
+
+
+
+# ---------------------------------------------------------------------------
+# _init_objective_target
+# ---------------------------------------------------------------------------
+
+
+class TestInitObjectiveTarget:
+    def test_returns_scanner_target_when_scanner_set(self) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        result = auditor._init_objective_target()
+        assert isinstance(result, ScannerTarget)
+
+    def test_scanner_target_wraps_injected_scanner(self) -> None:
+        mock_scanner = MagicMock()
+        auditor = _make_auditor()
+        auditor._scanner = mock_scanner
+        result = auditor._init_objective_target()
+        assert result.scanner is mock_scanner
+
+    def test_returns_llm_target_when_scanner_is_none(self) -> None:
+        auditor = _make_auditor(llm_settings=LLMSettings(model="gpt-4o"))
+        auditor._scanner = None
+        mock_llm_target = MagicMock()
+        with patch.object(auditor, "_init_target", return_value=mock_llm_target):
+            result = auditor._init_objective_target()
+        assert result is mock_llm_target
