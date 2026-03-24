@@ -1,10 +1,18 @@
 """Example: run the PromptFoo auditor end-to-end and generate reports.
 
-Configure via environment variables or a .env file before running:
+The curl command is set directly in this file via the CURL_COMMAND constant.
+Configure the remaining options via environment variables or a .env file before running:
 
-    PENTESTER_PROMPTFOO__CONFIG_FILE=./promptfooconfig.yaml
+    PENTESTER_TARGET_TYPE=LLM
     PENTESTER_PROMPTFOO__CONFIG_PATH=./src/pentester/config/auditor_files/promptfoo
-    PENTESTER_SCANNER__CURL_COMMAND="curl -X POST http://localhost:8080/chat ..."
+    PENTESTER_PROMPTFOO__ASSERTION_WRAPPER_PATH=../assert.py
+    PENTESTER_PROMPTFOO__REPLACE_EXISTING_FILE=False
+    PENTESTER_PROMPTFOO__FILES_PARALLEL=5
+    PENTESTER_PROMPTFOO__INTERNAL_CONCURRENCY=4
+    PENTESTER_PROMPTFOO__MAX_TESTS=20000
+    PENTESTER_PROMPTFOO__PLUGINS_PER_FILE=1   # plugins bundled per test YAML (1-5)
+    PENTESTER_PROMPTFOO__MAX_TEST_FILES=5 # cap on generated test YAMLs (omit for all)
+    PENTESTER_PROMPTFOO__OUTPUT_PATH=./output/promptfoo
     PENTESTER_REPORTING__OUTPUT_DIR_PATH=./output/examples
     PENTESTER_REPORTING__GENERATOR_KEYS=html,csv
 
@@ -15,17 +23,41 @@ Then run:
 
 import logging
 
-from pentester.auditors.auditor_factory import AuditorFactory
+from pentester.auditors.promptfoo.auditor import PromptfooAuditor
 from pentester.config.logging import setup_logging
 from pentester.config.settings import get_settings
 from pentester.reporting.reporting import Reporting
+from pentester.scanners.scanner import Scanner
 
 setup_logging(level=logging.INFO)
+CURL_COMMAND = (
+    "curl -X POST 'http://localhost:8090/api/v1/fence/validate/2'"
+    " -H 'Content-Type: application/json'"
+    ' --data-raw \'{"text": "{{prompt}}"}\''
+)
 
 settings = get_settings()
+print("--- General settings ---")
+print(f"  target_type:              {settings.target_type}")
+print("--- Promptfoo settings ---")
+print(f"  config_path:              {settings.promptfoo.config_path}")
+print(f"  assertion_wrapper_path:   {settings.promptfoo.assertion_wrapper_path}")
+print(f"  replace_existing_file:    {settings.promptfoo.replace_existing_file}")
+print(f"  files_parallel:           {settings.promptfoo.files_parallel}")
+print(f"  internal_concurrency:     {settings.promptfoo.internal_concurrency}")
+print(f"  max_tests:                {settings.promptfoo.max_tests}")
+print(f"  plugins_per_file:         {settings.promptfoo.plugins_per_file}")
+print(f"  max_test_files:           {settings.promptfoo.max_test_files}")
+print(f"  output_path:              {settings.promptfoo.output_path}")
+print("--- Reporting settings ---")
+print(f"  output_dir_path:          {settings.reporting.output_dir_path}")
+print(f"  generator_keys:           {settings.reporting.generator_keys}")
+print("--------------------------")
 
-factory = AuditorFactory(settings)
-auditor = factory.get_auditor("promptfoo")
+scanner = Scanner.from_curl(CURL_COMMAND)
+auditor = PromptfooAuditor(
+    settings=settings.promptfoo, scanner=scanner, target_type=settings.target_type
+)
 
 results = auditor.audit()
 # auditor.results_df = auditor.collector.build_dataframe()

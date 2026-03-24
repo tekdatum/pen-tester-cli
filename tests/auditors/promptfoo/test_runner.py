@@ -18,9 +18,9 @@ def _make_runner(**kwargs: Any) -> PromptfooRunner:
 class TestInit:
     def test_initializes_with_explicit_arguments(self) -> None:
         runner = _make_runner(
-            results_path=Path("/my/results"), 
-            files_parallel=10, 
-            concurrency=8
+            results_path=Path("/my/results"),
+            files_parallel=10,
+            concurrency=8,
         )
         assert runner.results_path == Path("/my/results")
         assert runner.files_parallel == 10
@@ -30,6 +30,11 @@ class TestInit:
         runner = PromptfooRunner(results_path=Path("/tmp"))
         assert runner.files_parallel == 5
         assert runner.concurrency == 4
+        assert runner.max_tests == 20000
+
+    def test_initializes_with_max_tests(self) -> None:
+        runner = _make_runner(max_tests=500)
+        assert runner.max_tests == 500
 
 
 class TestRunEval:
@@ -48,16 +53,24 @@ class TestRunEval:
         assert name == "config.yaml"
         assert output == "eval output"
 
-    def test_returns_expected_values_on_error(self) -> None:
-        self.mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="error details")
+    def test_returns_success_on_non_zero_exit_code(self) -> None:
+        self.mock_result.returncode = 1
+        success, name, output = _make_runner().run_eval(Path("/test/config.yaml"))
+
+        assert success is True
+        assert name == "config.yaml"
+        assert output == "eval output"
+
+    def test_returns_false_on_os_error(self) -> None:
+        self.mock_run.side_effect = OSError("promptfoo not found")
         success, _, output = _make_runner().run_eval(Path("/test/config.yaml"))
-        
+
         assert success is False
-        assert output == "error details"
+        assert output == "promptfoo not found"
 
     def test_builds_correct_subprocess_command(self) -> None:
         _make_runner(concurrency=12).run_eval(Path("/test/my_test.yaml"))
-        
+
         self.mock_run.assert_called_once()
         command = self.mock_run.call_args[0][0]
         kwargs = self.mock_run.call_args[1]
@@ -66,19 +79,26 @@ class TestRunEval:
         assert command[0:2] == ["promptfoo", "eval"]
         assert "-c" in command and command[command.index("-c") + 1] == "/test/my_test.yaml"
         assert "-j" in command and command[command.index("-j") + 1] == "12"
+        assert "-n" in command and command[command.index("-n") + 1] == "20000"
         assert "--output" in command
         assert "my_test_result" in command[command.index("--output") + 1]
         assert command[command.index("--output") + 1].endswith(".jsonl")
-        
+
         # Verify boolean flags
         assert "--no-cache" in command
         assert "--no-progress-bar" in command
         assert "--no-table" in command
 
-        # Verify subprocess parameters
-        assert kwargs["check"] is True
+        # Verify subprocess parameters — check=True is no longer used
+        assert "check" not in kwargs
         assert kwargs["capture_output"] is True
         assert kwargs["text"] is True
+
+    def test_max_tests_flag_uses_configured_value(self) -> None:
+        _make_runner(max_tests=42).run_eval(Path("/test/my_test.yaml"))
+
+        command = self.mock_run.call_args[0][0]
+        assert "-n" in command and command[command.index("-n") + 1] == "42"
 
 
 class TestRunRedteamGenerate:
