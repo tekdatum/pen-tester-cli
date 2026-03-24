@@ -70,6 +70,27 @@ def main() -> None:
     settings.llm.provider = LLMProvider.ANTHROPIC
     settings.llm.model = "claude-sonnet-4-6"
     settings.target_type = TargetType.LLM
+
+    # --- Promptfoo settings ---
+    settings.auditors = ["promptfoo"]
+    CURL_COMMAND = (
+        "curl -X POST 'http://localhost:8090/api/v1/fence/validate/2'"
+        " -H 'Content-Type: application/json'"
+        ' --data-raw \'{"text": "{{prompt}}"}\''
+    )
+    # semantic fence example:
+    settings.scanner.curl_command = CURL_COMMAND
+    settings.promptfoo.config_path = "pentester/config/auditor_files/promptfoo"
+    settings.promptfoo.assertion_wrapper_path = "assert.py"
+    settings.promptfoo.replace_existing_file = False
+    settings.promptfoo.files_parallel = 5
+    settings.promptfoo.internal_concurrency = 4
+    settings.promptfoo.max_tests = 10
+    settings.promptfoo.plugins_per_file = 1
+    settings.promptfoo.max_test_files = 1
+    settings.promptfoo.output_path = "./output/promptfoo"
+    settings.target_type = TargetType.SEMANTIC_FENCE
+
     orchestrator = Orchestrator(settings)
     orchestrator.execute_auditors(settings.auditors)
     # orchestrator.execute()
