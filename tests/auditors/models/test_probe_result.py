@@ -74,6 +74,24 @@ def test_is_error_false_when_error_is_none() -> None:
     assert r.is_error is False
 
 
+class TestFormattedPrompt:
+    def test_plain_ascii_is_unchanged(self) -> None:
+        r = _make_result(prompt="hello world")
+        assert r.formatted_prompt == "hello world"
+
+    def test_unicode_char_is_escaped(self) -> None:
+        r = _make_result(prompt="caf\u00e9")
+        assert r.formatted_prompt == "caf\\xe9"
+
+    def test_newline_is_escaped(self) -> None:
+        r = _make_result(prompt="line1\nline2")
+        assert r.formatted_prompt == "line1\\nline2"
+
+    def test_double_quote_is_not_csv_escaped(self) -> None:
+        r = _make_result(prompt='say "hello"')
+        assert r.formatted_prompt == 'say "hello"'
+
+
 def test_duration_defaults_to_none() -> None:
     assert _make_result().duration is None
 
