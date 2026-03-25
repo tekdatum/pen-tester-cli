@@ -57,3 +57,18 @@ def test_two_instances_with_different_values_are_not_equal() -> None:
     r1 = _make_result(bypassed=False)
     r2 = _make_result(bypassed=True)
     assert r1 != r2
+
+
+def test_is_error_true_when_error_in_metadata() -> None:
+    r = _make_result(metadata={"error": "HTTP 422"})
+    assert r.is_error is True
+
+
+def test_is_error_false_when_no_error_in_metadata() -> None:
+    r = _make_result()
+    assert r.is_error is False
+
+
+def test_is_error_false_when_error_is_none() -> None:
+    r = _make_result(metadata={"error": None})
+    assert r.is_error is False
