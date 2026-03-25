@@ -114,10 +114,12 @@ def test_generate_writes_summary_file(mock_path_cls: MagicMock, mocker) -> None:
         "pentester.reporting.reporting.Summarizer.summarize_by_auditor", return_value={}
     )
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
+    mock_dt = mocker.patch("pentester.reporting.reporting.datetime")
+    mock_dt.datetime.now.return_value.strftime.return_value = "20260101_000000"
 
     Reporting().generate([], "/out", ["md"])
 
-    mock_path_cls.assert_any_call("/out", "md")
+    mock_path_cls.assert_any_call("/out", "20260101_000000", "md")
     mock_path_cls.return_value.__truediv__.assert_any_call("summary.md")
 
 
@@ -181,9 +183,12 @@ def test_generate_writes_detail_file_per_auditor(
         return_value={},
     )
 
+    mock_dt = mocker.patch("pentester.reporting.reporting.datetime")
+    mock_dt.datetime.now.return_value.strftime.return_value = "20260101_000000"
+
     Reporting().generate([_probe("garak")], "/out", ["csv"])
 
-    mock_path_cls.assert_any_call("/out", "csv")
+    mock_path_cls.assert_any_call("/out", "20260101_000000", "csv")
     mock_path_cls.return_value.__truediv__.assert_any_call("garak_details.csv")
 
 
@@ -232,9 +237,12 @@ def test_generate_creates_generator_subdirectory(
     )
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
 
+    mock_dt = mocker.patch("pentester.reporting.reporting.datetime")
+    mock_dt.datetime.now.return_value.strftime.return_value = "20260101_000000"
+
     Reporting().generate([], "/out", ["csv"])
 
-    mock_path_cls.assert_any_call("/out", "csv")
+    mock_path_cls.assert_any_call("/out", "20260101_000000", "csv")
     mock_path_cls.return_value.mkdir.assert_called_with(parents=True, exist_ok=True)
 
 
@@ -275,3 +283,24 @@ def test_generate_passes_attack_breakdowns_to_detail_report(
     mock_gen.generate_detail_report.assert_called_once_with(
         [], category_results, type_results
     )
+
+
+@patch("pentester.reporting.reporting.Path")
+def test_generate_all_generators_use_same_timestamp(
+    mock_path_cls: MagicMock, mocker
+) -> None:
+    mock_a = _mock_generator("pdf", "pdf")
+    mock_b = _mock_generator("csv", "csv")
+    mocker.patch.object(GeneratorFactory, "get_all", return_value=[mock_a, mock_b])
+    mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
+    mocker.patch(
+        "pentester.reporting.reporting.Summarizer.summarize_by_auditor", return_value={}
+    )
+    mock_dt = mocker.patch("pentester.reporting.reporting.datetime")
+    mock_dt.datetime.now.return_value.strftime.return_value = "20260101_000000"
+
+    Reporting().generate([], "/out", ["pdf", "csv"])
+
+    mock_path_cls.assert_any_call("/out", "20260101_000000", "pdf")
+    mock_path_cls.assert_any_call("/out", "20260101_000000", "csv")
+    mock_dt.datetime.now.assert_called_once()
