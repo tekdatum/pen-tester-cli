@@ -49,7 +49,11 @@ def _make_sample(
     sample = MagicMock()
     sample.input = input_text
     sample.output.completion = completion
-    sample.scores = {"security_scorer": _make_score(score_value if score_value is not None else _CORRECT)}
+    sample.scores = {
+        "security_scorer": _make_score(
+            score_value if score_value is not None else _CORRECT
+        )
+    }
     sample.metadata = metadata if metadata is not None else {}
     sample.id = sample_id
     return sample
@@ -67,7 +71,9 @@ def _make_log(samples: list[MagicMock] | None = None) -> MagicMock:
 
 
 class TestInterpretScore:
-    def _run(self, score: MagicMock | None, score_max: float = 1.0) -> tuple[bool, float]:
+    def _run(
+        self, score: MagicMock | None, score_max: float = 1.0
+    ) -> tuple[bool, float]:
         return _make_auditor()._interpret_score(score, score_max=score_max)
 
     def test_correct_returns_bypassed_true_score_one(self) -> None:
@@ -135,11 +141,15 @@ class TestExtractAttackFields:
         return _make_auditor()._extract_attack_fields(sample, eval_name)
 
     def test_uses_category_from_metadata(self) -> None:
-        category, _ = self._run({"category": "prompt_injection", "attack_type": "ignore_prev"})
+        category, _ = self._run(
+            {"category": "prompt_injection", "attack_type": "ignore_prev"}
+        )
         assert category == "prompt_injection"
 
     def test_uses_attack_type_from_metadata(self) -> None:
-        _, attack_type = self._run({"category": "prompt_injection", "attack_type": "ignore_prev"})
+        _, attack_type = self._run(
+            {"category": "prompt_injection", "attack_type": "ignore_prev"}
+        )
         assert attack_type == "ignore_prev"
 
     def test_falls_back_to_eval_name_when_category_missing(self) -> None:
@@ -156,7 +166,9 @@ class TestExtractAttackFields:
         assert attack_type == "b3"
 
     def test_strips_whitespace_from_metadata_values(self) -> None:
-        category, attack_type = self._run({"category": "  pi  ", "attack_type": "  t  "})
+        category, attack_type = self._run(
+            {"category": "  pi  ", "attack_type": "  t  "}
+        )
         assert category == "pi"
         assert attack_type == "t"
 
@@ -217,14 +229,19 @@ class TestGetTask:
     def test_strong_reject_passes_judge_llm(self) -> None:
         factory = MagicMock()
         auditor = _make_auditor(judge_model="openai/gpt-4o-mini")
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"strong_reject": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
             auditor._get_task("strong_reject")
         factory.assert_called_once_with(judge_llm="openai/gpt-4o-mini")
 
     def test_non_strong_reject_eval_called_with_no_args_for_llm(self) -> None:
         factory = MagicMock()
         auditor = _make_auditor()  # target_type = LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             auditor._get_task("b3")
         factory.assert_called_once_with()
 
@@ -232,7 +249,9 @@ class TestGetTask:
         factory = MagicMock()
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             auditor._get_task("b3")
         factory.assert_called_once_with(task_types=["DIO", "IIO"])
 
@@ -387,7 +406,9 @@ class TestAudit:
         with (
             patch.object(auditor, "_get_task", return_value=MagicMock()),
             patch.object(
-                auditor, "_map_results", side_effect=[[_make_result()], [_make_result()]]
+                auditor,
+                "_map_results",
+                side_effect=[[_make_result()], [_make_result()]],
             ),
             patch("pentester.auditors.inspect_ai.auditor.inspect_eval") as m_eval,
         ):
@@ -465,7 +486,13 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial", "agentharm", "AgentDojo"]
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "fortress_adversarial",
+            "agentharm",
+            "AgentDojo",
+        ]
 
     def test_settings_evals_override_takes_precedence(self) -> None:
         auditor = InspectAIAuditor(
@@ -475,13 +502,17 @@ class TestDefaultEvalsForTarget:
         assert auditor._settings.evals == ["b3"]
 
     def test_empty_settings_evals_uses_fence_defaults(self) -> None:
-        auditor = InspectAIAuditor(settings=InspectSettings(evals=[]), scanner=MagicMock())
+        auditor = InspectAIAuditor(
+            settings=InspectSettings(evals=[]), scanner=MagicMock()
+        )
         auditor.target_type = TargetType.SEMANTIC_FENCE
         effective = auditor._settings.evals or auditor._default_evals_for_target()
         assert effective == ["strong_reject", "b3", "fortress_adversarial"]
 
     def test_empty_settings_evals_uses_llm_defaults(self) -> None:
-        auditor = InspectAIAuditor(settings=InspectSettings(evals=[]), scanner=MagicMock())
+        auditor = InspectAIAuditor(
+            settings=InspectSettings(evals=[]), scanner=MagicMock()
+        )
         auditor.target_type = TargetType.LLM
         effective = auditor._settings.evals or auditor._default_evals_for_target()
         assert "agentharm" in effective
@@ -501,7 +532,9 @@ class TestGetTaskFenceScorer:
         original_scorer = mock_task.scorer
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=mock_scanner)
         auditor.target_type = TargetType.LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             task = auditor._get_task("b3")
         assert task.scorer is original_scorer
 
@@ -511,8 +544,12 @@ class TestGetTaskFenceScorer:
         factory = MagicMock(return_value=mock_task)
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=mock_scanner)
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
-            with patch.object(auditor, "_make_fence_scorer", return_value="fence") as m_make:
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
+            with patch.object(
+                auditor, "_make_fence_scorer", return_value="fence"
+            ) as m_make:
                 auditor._get_task("b3")
         m_make.assert_called_once()
         assert mock_task.scorer == ["fence"]
@@ -525,7 +562,10 @@ class TestGetTaskFenceScorer:
             settings=InspectSettings(judge_model=None), scanner=mock_scanner
         )
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"strong_reject": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
             with patch.object(auditor, "_make_fence_scorer", return_value="fence"):
                 auditor._get_task("strong_reject")
         assert mock_task.scorer == ["fence"]

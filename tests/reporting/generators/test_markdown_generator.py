@@ -104,7 +104,9 @@ class TestDetailsTemplate:
     def test_error_prompt_not_in_bypassed_section(self) -> None:
         error = _error_probe(prompt="error only")
         md = MarkdownGenerator().generate_detail_report([error], {}, {}).decode()
-        bypassed_section = md.split("## Bypassed Prompts")[1].split("## Blocked Prompts")[0]
+        bypassed_section = md.split("## Bypassed Prompts")[1].split(
+            "## Blocked Prompts"
+        )[0]
         assert "error only" not in bypassed_section
 
     def test_error_prompt_not_in_blocked_section(self) -> None:

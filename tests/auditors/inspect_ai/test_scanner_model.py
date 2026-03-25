@@ -40,19 +40,27 @@ class TestScannerModelAPI:
 
     def test_generate_calls_scanner_scan_with_extracted_prompt(self) -> None:
         mock_scanner = MagicMock()
-        mock_scanner.scan.return_value = TargetResponse(response="safe reply", bypassed=False)
+        mock_scanner.scan.return_value = TargetResponse(
+            response="safe reply", bypassed=False
+        )
         api = self._make_api(scanner=mock_scanner)
         msg = self._make_message("attack prompt")
-        with patch("pentester.auditors.inspect_ai.scanner_model.ModelOutput") as _m_output:
+        with patch(
+            "pentester.auditors.inspect_ai.scanner_model.ModelOutput"
+        ) as _m_output:
             asyncio.run(api.generate([msg], [], None, MagicMock()))
         mock_scanner.scan.assert_called_once_with("attack prompt")
 
     def test_generate_returns_model_output_with_response_text(self) -> None:
         mock_scanner = MagicMock()
-        mock_scanner.scan.return_value = TargetResponse(response="blocked", bypassed=False)
+        mock_scanner.scan.return_value = TargetResponse(
+            response="blocked", bypassed=False
+        )
         api = self._make_api(scanner=mock_scanner)
         msg = self._make_message("evil prompt")
-        with patch("pentester.auditors.inspect_ai.scanner_model.ModelOutput") as m_output_cls:
+        with patch(
+            "pentester.auditors.inspect_ai.scanner_model.ModelOutput"
+        ) as m_output_cls:
             asyncio.run(api.generate([msg], [], None, MagicMock()))
         assert m_output_cls.called
         assert m_output_cls.call_args.kwargs.get("model") == "scanner/default"
