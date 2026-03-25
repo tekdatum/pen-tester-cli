@@ -64,6 +64,7 @@ from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
+from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
 
@@ -522,3 +523,7 @@ class TestAuditLLM:
         ):
             auditor.audit()
         m_scorer.assert_called_once()
+
+
+def test_auditor_key_is_pyrit() -> None:
+    assert _make_auditor().auditor_key == AuditorKey.PYRIT

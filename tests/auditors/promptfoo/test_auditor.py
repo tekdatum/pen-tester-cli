@@ -13,6 +13,7 @@ from pentester.auditors.models.probe_result import ProbeResult
 from pentester.auditors.promptfoo.auditor import PromptfooAuditor
 from pentester.config.auditors.promptfoo_settings import PromptfooSettings
 from pentester.config.settings import TargetType
+from pentester.enums.auditor_key import AuditorKey
 
 
 _FAKE_CONFIG: dict[str, Any] = {
@@ -738,7 +739,7 @@ class TestGenerateProbeResults:
         assert len(results) == 1
         res = results[0]
         assert isinstance(res, ProbeResult)
-        assert res.auditor == "PromptfooAuditor"
+        assert res.auditor == "promptfoo"
         assert res.attack_category == "jailbreak-templates"
         assert res.attack_type == "competitors"
         assert res.prompt == "my_prompt"
@@ -1067,3 +1068,7 @@ class TestAudit:
 
         mock_build.assert_called_once()
         assert result is expected_probes
+
+
+def test_auditor_key_is_promptfoo() -> None:
+    assert _make_auditor().auditor_key == AuditorKey.PROMPTFOO

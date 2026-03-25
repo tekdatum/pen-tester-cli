@@ -68,6 +68,7 @@ from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import clear_settings_cache  # noqa: E402
+from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 from pentester.enums.target_type import TargetType  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
@@ -716,3 +717,7 @@ class TestAuditLLM:
         probe = _make_probe("probes.dan.Dan1", [""])
         results = self._audit_with([probe])
         assert results == []
+
+
+def test_auditor_key_is_garak() -> None:
+    assert _make_auditor().auditor_key == AuditorKey.GARAK

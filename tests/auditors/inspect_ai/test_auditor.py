@@ -19,6 +19,7 @@ from pentester.auditors.inspect_ai.auditor import InspectAIAuditor  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.inspect_settings import InspectSettings  # noqa: E402
 from pentester.config.settings import TargetType  # noqa: E402
+from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -551,3 +552,7 @@ class TestMakeFenceScorer:
         result = auditor._make_fence_scorer()
         assert callable(result)
         assert asyncio.iscoroutinefunction(result)
+
+
+def test_auditor_key_is_inspect_ai() -> None:
+    assert _make_auditor().auditor_key == AuditorKey.INSPECT_AI

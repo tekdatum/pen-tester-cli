@@ -5,6 +5,7 @@ import pytest
 from pentester.auditors.models.audit_result import AuditResult
 from pentester.auditors.models.base_auditor import BaseAuditor
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.enums.auditor_key import AuditorKey
 from pentester.scanners.scanner import Scanner
 
 
@@ -27,6 +28,10 @@ class ConcreteAuditor(BaseAuditor):
     ) -> None:
         super().__init__(scanner)
         self._results = results
+
+    @property
+    def auditor_key(self) -> AuditorKey:
+        return AuditorKey.GARAK
 
     def audit(self) -> list[ProbeResult]:
         return self._results
@@ -93,3 +98,8 @@ def test_audit_n_track_results_match_audit_output() -> None:
     results = [_make_result()]
     auditor = ConcreteAuditor(results)
     assert auditor.audit_n_track().results == results
+
+
+def test_audit_n_track_auditor_key_is_set() -> None:
+    auditor = ConcreteAuditor([])
+    assert auditor.audit_n_track().auditor_key == AuditorKey.GARAK
