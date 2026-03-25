@@ -88,6 +88,10 @@ _inspect_evals_b3_mod = MagicMock(name="inspect_evals.b3")
 _inspect_evals_fortress_mod = MagicMock(name="inspect_evals.fortress")
 _inspect_evals_agentharm_mod = MagicMock(name="inspect_evals.agentharm")
 _inspect_evals_agentdojo_mod = MagicMock(name="inspect_evals.agentdojo")
+_inspect_evals_make_me_pay_mod = MagicMock(name="inspect_evals.make_me_pay")
+_inspect_evals_wmdp_mod = MagicMock(name="inspect_evals.wmdp")
+_inspect_evals_makemesay_mod = MagicMock(name="inspect_evals.makemesay")
+_inspect_evals_mind2web_sc_mod = MagicMock(name="inspect_evals.mind2web_sc")
 
 _STUBS = [
     ("inspect_ai", _inspect_ai_mod),
@@ -101,6 +105,10 @@ _STUBS = [
     ("inspect_evals.fortress", _inspect_evals_fortress_mod),
     ("inspect_evals.agentharm", _inspect_evals_agentharm_mod),
     ("inspect_evals.agentdojo", _inspect_evals_agentdojo_mod),
+    ("inspect_evals.make_me_pay", _inspect_evals_make_me_pay_mod),
+    ("inspect_evals.wmdp", _inspect_evals_wmdp_mod),
+    ("inspect_evals.makemesay", _inspect_evals_makemesay_mod),
+    ("inspect_evals.mind2web_sc", _inspect_evals_mind2web_sc_mod),
 ]
 
 

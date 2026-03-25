@@ -6,16 +6,20 @@ Runs adversarial safety evaluations against a target model or semantic fence usi
 
 ## How It Works
 
-The auditor acts as a bridge between the pen-tester `Scanner` and the `inspect_ai` evaluation framework. Instead of letting `inspect_ai` call an external model provider, all model calls are intercepted and routed through the `Scanner`, which sends the attack prompt to the configured target endpoint.
+The auditor supports two operating modes depending on configuration:
+
+- **Scanner mode** (default): All model calls are intercepted and routed through the `Scanner`, which sends the attack prompt to the configured target endpoint.
+- **Native model mode**: When no `Scanner` is configured but `PENTESTER_LLM__MODEL` is set, the auditor calls the specified Inspect AI model provider (OpenAI, Anthropic, Google) directly.
 
 ### Key components
 
 | Component | Role |
 |---|---|
 | `InspectAIAuditor` | Orchestrates evaluation runs and maps results to `ProbeResult` objects |
-| `ScannerModelAPI` | Custom `inspect_ai` model provider — forwards prompts to the `Scanner` |
-| `FenceScorerAPI` | Replacement scorer for semantic fence targets — reads `bypassed` from the scanner response |
+| `ScannerModelAPI` | Custom `inspect_ai` model provider — forwards prompts to the `Scanner` (Scanner mode only) |
+| `FenceScorerAPI` | Replacement scorer for semantic fence targets — reads `bypassed` from the scanner response (Scanner mode only) |
 | `_constants.py` | Eval registry, score keys, default eval lists per target type |
+| `_inspect_model_string()` | Builds the Inspect AI model string from `LLMSettings` (e.g. `"google/gemini-flash"`) |
 
 ---
 
@@ -24,16 +28,19 @@ The auditor acts as a bridge between the pen-tester `Scanner` and the `inspect_a
 ```
 InspectAIAuditor.audit()
   │
-  ├─ Register ScannerModelAPI as a custom model provider ("scanner/default")
+  ├─ Scanner present?
+  │    ├─ YES → Register ScannerModelAPI ("scanner/default")
+  │    └─ NO  → LLM model set? → get_model("provider/model") [native mode]
+  │                               else → warn + return []
   │
   ├─ For each eval (e.g. strong_reject, b3, fortress_adversarial):
   │    │
   │    ├─ Build the Task via _get_task()
-  │    │    └─ If target is SEMANTIC_FENCE → replace scorer with FenceScorerAPI
+  │    │    ├─ Compute effective_judge = judge_model ?? llm.model
+  │    │    ├─ Pass effective_judge to each eval that supports a grader
+  │    │    └─ If SEMANTIC_FENCE + Scanner mode → replace scorer with FenceScorerAPI
   │    │
-  │    ├─ inspect_eval(tasks, model="scanner/default")
-  │    │    └─ inspect_ai calls ScannerModelAPI.generate()
-  │    │         └─ Scanner.scan(prompt) → TargetResponse
+  │    ├─ inspect_eval(tasks, model=model)
   │    │
   │    └─ _map_results(EvalLog) → list[ProbeResult]
   │
@@ -62,6 +69,19 @@ InspectAIAuditor.audit()
 
 ## Configuration
 
+### LLM target model (`PENTESTER_LLM__*`)
+
+Configure the native Inspect AI target model via root `LLMSettings` (env prefix `PENTESTER_LLM__`):
+
+| Field | Default | Description |
+|---|---|---|
+| `provider` | `openai` | Model provider: `openai`, `anthropic`, or `gemini` |
+| `model` | `""` | Model name (without provider prefix, e.g. `gpt-4o-mini`) |
+
+When both `provider` and `model` are set, the auditor uses `"<provider>/<model>"` as the Inspect AI model string. Note: `gemini` maps to `google` in Inspect AI (e.g. `PENTESTER_LLM__MODEL=gemini-flash` → `google/gemini-flash`).
+
+### Inspect auditor settings (`PENTESTER_INSPECT__*`)
+
 Settings live in `InspectSettings` (env prefix `PENTESTER_INSPECT__`):
 
 | Field | Default | Description |
@@ -69,12 +89,25 @@ Settings live in `InspectSettings` (env prefix `PENTESTER_INSPECT__`):
 | `evals` | `[]` | Eval keys to run. Empty = auto-select by target type |
 | `epochs` | `1` | Number of times each sample is evaluated |
 | `limit` | `None` | Cap the number of samples per eval (None = full dataset) |
-| `judge_model` | `openai/gpt-4o` | Model used to grade `strong_reject` responses |
+| `judge_model` | `None` | Explicit judge/grader model override. Falls back to `PENTESTER_LLM__MODEL`. When both are absent, each eval uses its own default. |
 
-Example:
+The effective judge passed to evals is resolved as: `judge_model` → `PENTESTER_LLM__MODEL` → `None` (eval default).
+
+Example — run against OpenAI GPT-4o as both target and judge:
 
 ```bash
+PENTESTER_LLM__PROVIDER=openai
+PENTESTER_LLM__MODEL=gpt-4o
+
 PENTESTER_INSPECT__EVALS='["strong_reject","b3"]'
 PENTESTER_INSPECT__EPOCHS=3
-PENTESTER_INSPECT__JUDGE_MODEL=openai/gpt-4o-mini
+```
+
+Example — separate target and judge:
+
+```bash
+PENTESTER_LLM__PROVIDER=gemini
+PENTESTER_LLM__MODEL=gemini-flash        # target model
+
+PENTESTER_INSPECT__JUDGE_MODEL=openai/gpt-4o  # explicit judge override
 ```
