@@ -72,3 +72,11 @@ def test_is_error_false_when_no_error_in_metadata() -> None:
 def test_is_error_false_when_error_is_none() -> None:
     r = _make_result(metadata={"error": None})
     assert r.is_error is False
+
+
+def test_duration_defaults_to_none() -> None:
+    assert _make_result().duration is None
+
+
+def test_duration_can_be_set() -> None:
+    assert _make_result(duration=1.23).duration == 1.23

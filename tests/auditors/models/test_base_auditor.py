@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from pentester.auditors.models.audit_result import AuditResult
 from pentester.auditors.models.base_auditor import BaseAuditor
 from pentester.auditors.models.probe_result import ProbeResult
 from pentester.scanners.scanner import Scanner
@@ -66,3 +67,29 @@ def test_scanner_is_stored_when_provided() -> None:
     scanner = MagicMock(spec=Scanner)
     auditor = ConcreteAuditor([], scanner=scanner)
     assert auditor._scanner is scanner
+
+
+# ── BaseAuditor.audit_n_track ─────────────────────────────────────────────────
+
+
+def test_audit_n_track_returns_audit_result() -> None:
+    auditor = ConcreteAuditor([])
+    assert isinstance(auditor.audit_n_track(), AuditResult)
+
+
+def test_audit_n_track_calls_audit() -> None:
+    auditor = ConcreteAuditor([])
+    auditor.audit = MagicMock(return_value=[])  # type: ignore[method-assign]
+    auditor.audit_n_track()
+    auditor.audit.assert_called_once()
+
+
+def test_audit_n_track_duration_is_non_negative() -> None:
+    auditor = ConcreteAuditor([])
+    assert auditor.audit_n_track().duration >= 0
+
+
+def test_audit_n_track_results_match_audit_output() -> None:
+    results = [_make_result()]
+    auditor = ConcreteAuditor(results)
+    assert auditor.audit_n_track().results == results

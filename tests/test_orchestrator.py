@@ -107,25 +107,25 @@ class TestExecute:
 
 
 class TestRunAndReport:
-    def test_calls_audit_on_each_auditor(self) -> None:
+    def test_calls_audit_n_track_on_each_auditor(self) -> None:
         orch = Orchestrator(_make_settings())
         auditor_a = MagicMock()
-        auditor_a.audit.return_value = []
+        auditor_a.audit_n_track.return_value = MagicMock(results=[])
         auditor_b = MagicMock()
-        auditor_b.audit.return_value = []
+        auditor_b.audit_n_track.return_value = MagicMock(results=[])
         with patch.object(orch._reporting, "generate"):
             orch._run_and_report([auditor_a, auditor_b])
-            auditor_a.audit.assert_called_once()
-            auditor_b.audit.assert_called_once()
+            auditor_a.audit_n_track.assert_called_once()
+            auditor_b.audit_n_track.assert_called_once()
 
     def test_concatenates_probe_results(self) -> None:
         orch = Orchestrator(_make_settings())
         result_a = _make_probe_result()
         result_b = _make_probe_result()
         auditor_a = MagicMock()
-        auditor_a.audit.return_value = [result_a]
+        auditor_a.audit_n_track.return_value = MagicMock(results=[result_a])
         auditor_b = MagicMock()
-        auditor_b.audit.return_value = [result_b]
+        auditor_b.audit_n_track.return_value = MagicMock(results=[result_b])
         with patch.object(orch._reporting, "generate") as mock_generate:
             orch._run_and_report([auditor_a, auditor_b])
             called_data = mock_generate.call_args.kwargs["data"]
