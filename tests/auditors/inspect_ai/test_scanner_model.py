@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import MagicMock, patch
 
 from pentester.auditors.inspect_ai.scanner_model import ScannerModelAPI  # noqa: E402
@@ -23,10 +24,11 @@ class TestScannerModelAPI:
             scanner=scanner or MagicMock(),
         )
 
-    def _make_message(self, content: str) -> MagicMock:
+    def _make_message(self, content: str, role: str = "user") -> MagicMock:
         msg = MagicMock()
         msg.text = content
         msg.content = content
+        msg.role = role
         return msg
 
     def test_model_name_stored_on_instance(self) -> None:
@@ -49,7 +51,8 @@ class TestScannerModelAPI:
             "pentester.auditors.inspect_ai.scanner_model.ModelOutput"
         ) as _m_output:
             asyncio.run(api.generate([msg], [], None, MagicMock()))
-        mock_scanner.scan.assert_called_once_with("attack prompt")
+        expected = json.dumps([{"role": "user", "content": "attack prompt"}], ensure_ascii=False)
+        mock_scanner.scan.assert_called_once_with(expected)
 
     def test_generate_returns_model_output_with_response_text(self) -> None:
         mock_scanner = MagicMock()
@@ -73,24 +76,35 @@ class TestScannerModelAPI:
         msg2 = self._make_message("user attack")
         with patch("pentester.auditors.inspect_ai.scanner_model.ModelOutput"):
             asyncio.run(api.generate([msg1, msg2], [], None, MagicMock()))
-        mock_scanner.scan.assert_called_once_with("user attack")
+        expected = json.dumps(
+            [
+                {"role": "user", "content": "system message"},
+                {"role": "user", "content": "user attack"},
+            ],
+            ensure_ascii=False,
+        )
+        mock_scanner.scan.assert_called_once_with(expected)
 
     def test_extract_prompt_from_messages_uses_text_property(self) -> None:
         api = self._make_api()
         msg = MagicMock()
+        msg.role = "user"
         msg.text = "text from property"
         msg.content = "content field"
         result = api._extract_prompt_from_messages([msg])
-        assert result == "text from property"
+        expected = json.dumps([{"role": "user", "content": "text from property"}], ensure_ascii=False)
+        assert result == expected
 
     def test_extract_prompt_from_messages_falls_back_to_content(self) -> None:
         api = self._make_api()
         msg = MagicMock()
+        msg.role = "user"
         msg.text = ""
         msg.content = "content only"
         result = api._extract_prompt_from_messages([msg])
-        assert result == "content only"
+        expected = json.dumps([{"role": "user", "content": "content only"}], ensure_ascii=False)
+        assert result == expected
 
     def test_extract_prompt_from_messages_empty_list_returns_empty(self) -> None:
         api = self._make_api()
-        assert api._extract_prompt_from_messages([]) == ""
+        assert api._extract_prompt_from_messages([]) == "[]"

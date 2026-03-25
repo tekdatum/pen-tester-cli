@@ -120,3 +120,14 @@ class TestDetailsTemplate:
         md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
         assert "Results by Attack Category" not in md
         assert "Results by Attack Type" not in md
+
+    def test_unicode_char_in_prompt_is_escaped(self) -> None:
+        probe = _probe(bypassed=True, prompt="caf\u00e9")
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "\\xe9" in md
+
+    def test_newline_in_prompt_is_escaped(self) -> None:
+        probe = _probe(bypassed=True, prompt="line1\nline2")
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "\\n" in md
+        assert "line1\nline2" not in md

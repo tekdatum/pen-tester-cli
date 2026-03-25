@@ -126,3 +126,12 @@ class TestDetailsTemplate:
         html = HtmlGenerator().generate_detail_report([probe], {}, {}).decode()
         assert "Results by Attack Category" not in html
         assert "Results by Attack Type" not in html
+
+    def test_unicode_char_in_prompt_is_escaped(self) -> None:
+        html = HtmlGenerator().generate_detail_report([_probe(prompt="caf\u00e9")], {}, {}).decode()
+        assert "\\xe9" in html
+
+    def test_newline_in_prompt_is_escaped(self) -> None:
+        html = HtmlGenerator().generate_detail_report([_probe(prompt="line1\nline2")], {}, {}).decode()
+        assert "\\n" in html
+        assert "line1\nline2" not in html
