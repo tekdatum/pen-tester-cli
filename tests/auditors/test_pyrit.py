@@ -25,6 +25,8 @@ import pytest
 _pyrit_mod = MagicMock(name="pyrit")
 _pyrit_datasets_mod = MagicMock(name="pyrit.datasets")
 _pyrit_setup_mod = MagicMock(name="pyrit.setup")
+
+
 class _FakePromptChatTarget:
     def __init__(self, *args: object, **kwargs: object) -> None:
         pass
@@ -55,7 +57,10 @@ for _name, _stub in [
     ("pyrit.executor", MagicMock(name="pyrit.executor")),
     ("pyrit.executor.attack", MagicMock(name="pyrit.executor.attack")),
     ("pyrit.executor.attack.core", MagicMock(name="pyrit.executor.attack.core")),
-    ("pyrit.executor.attack.multi_turn", MagicMock(name="pyrit.executor.attack.multi_turn")),
+    (
+        "pyrit.executor.attack.multi_turn",
+        MagicMock(name="pyrit.executor.attack.multi_turn"),
+    ),
     ("pyrit.memory", MagicMock(name="pyrit.memory")),
     ("pyrit.setup", _pyrit_setup_mod),
     ("pyrit.prompt_target", _pyrit_prompt_target_mod),
@@ -669,7 +674,6 @@ class TestAuditMultiturn:
         )
         strategies_used = {c.kwargs["strategy"] for c in calls}
         assert strategies_used == set(MultiTurnStrategy)
-
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 # Stub pyrit modules before importing the module under test.
 # ---------------------------------------------------------------------------
 
+
 def _make_message_piece(role: str, value: str) -> MagicMock:
     piece = MagicMock()
     piece.role = role

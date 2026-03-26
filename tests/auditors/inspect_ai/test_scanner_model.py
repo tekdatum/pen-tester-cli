@@ -51,7 +51,9 @@ class TestScannerModelAPI:
             "pentester.auditors.inspect_ai.scanner_model.ModelOutput"
         ) as _m_output:
             asyncio.run(api.generate([msg], [], None, MagicMock()))
-        expected = json.dumps([{"role": "user", "content": "attack prompt"}], ensure_ascii=False)
+        expected = json.dumps(
+            [{"role": "user", "content": "attack prompt"}], ensure_ascii=False
+        )
         mock_scanner.scan.assert_called_once_with(expected)
 
     def test_generate_returns_model_output_with_response_text(self) -> None:
@@ -92,7 +94,9 @@ class TestScannerModelAPI:
         msg.text = "text from property"
         msg.content = "content field"
         result = api._extract_prompt_from_messages([msg])
-        expected = json.dumps([{"role": "user", "content": "text from property"}], ensure_ascii=False)
+        expected = json.dumps(
+            [{"role": "user", "content": "text from property"}], ensure_ascii=False
+        )
         assert result == expected
 
     def test_extract_prompt_from_messages_falls_back_to_content(self) -> None:
@@ -102,7 +106,9 @@ class TestScannerModelAPI:
         msg.text = ""
         msg.content = "content only"
         result = api._extract_prompt_from_messages([msg])
-        expected = json.dumps([{"role": "user", "content": "content only"}], ensure_ascii=False)
+        expected = json.dumps(
+            [{"role": "user", "content": "content only"}], ensure_ascii=False
+        )
         assert result == expected
 
     def test_extract_prompt_from_messages_empty_list_returns_empty(self) -> None:
