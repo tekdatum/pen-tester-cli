@@ -21,5 +21,8 @@ class TestTargetTypeEnum:
     def test_semantic_fence_member_exists(self) -> None:
         assert TargetType.SEMANTIC_FENCE == "SEMANTIC_FENCE"
 
-    def test_has_exactly_two_members(self) -> None:
-        assert len(list(TargetType)) == 2
+    def test_has_exactly_three_members(self) -> None:
+        assert len(list(TargetType)) == 3
+
+    def test_multiturn_member_exists(self) -> None:
+        assert TargetType.MULTITURN == "MULTITURN"

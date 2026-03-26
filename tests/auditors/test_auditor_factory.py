@@ -40,6 +40,11 @@ for _name, _stub in [
     ("garak.generators.openai", MagicMock(name="garak.generators.openai")),
     ("pyrit", MagicMock(name="pyrit")),
     ("pyrit.datasets", MagicMock(name="pyrit.datasets")),
+    ("pyrit.executor", MagicMock(name="pyrit.executor")),
+    ("pyrit.executor.attack", MagicMock(name="pyrit.executor.attack")),
+    ("pyrit.executor.attack.core", MagicMock(name="pyrit.executor.attack.core")),
+    ("pyrit.executor.attack.multi_turn", MagicMock(name="pyrit.executor.attack.multi_turn")),
+    ("pyrit.memory", MagicMock(name="pyrit.memory")),
     ("pyrit.setup", _pyrit_setup_mod),
     ("pyrit.prompt_target", MagicMock(name="pyrit.prompt_target")),
     ("pyrit.score", MagicMock(name="pyrit.score")),
@@ -49,6 +54,7 @@ for _name, _stub in [
         MagicMock(name="pyrit.score.true_false.self_ask_true_false_scorer"),
     ),
     ("pyrit.models", MagicMock(name="pyrit.models")),
+    ("pyrit.models.attack_result", MagicMock(name="pyrit.models.attack_result")),
     ("tqdm", _tqdm_stub),
 ]:
     sys.modules.setdefault(_name, _stub)
@@ -122,7 +128,8 @@ class TestScannerInjection:
     def test_promptfoo_auditor_receives_none_scanner_when_not_configured(
         self, _patch_promptfoo_auditor
     ) -> None:
-        AuditorFactory(_make_settings())
+        factory = AuditorFactory(_make_settings())
+        factory.get_auditor("promptfoo")
         _patch_promptfoo_auditor.assert_called_once()
         _, kwargs = _patch_promptfoo_auditor.call_args
         assert kwargs["scanner"] is None
@@ -130,7 +137,8 @@ class TestScannerInjection:
     def test_promptfoo_auditor_receives_scanner_when_configured(
         self, _patch_promptfoo_auditor
     ) -> None:
-        AuditorFactory(_make_settings(curl_command="curl http://example.com"))
+        factory = AuditorFactory(_make_settings(curl_command="curl http://example.com"))
+        factory.get_auditor("promptfoo")
         _patch_promptfoo_auditor.assert_called_once()
         _, kwargs = _patch_promptfoo_auditor.call_args
         assert isinstance(kwargs["scanner"], Scanner)

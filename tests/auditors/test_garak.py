@@ -723,9 +723,9 @@ class TestAuditLLM:
             patch("pentester.auditors.garak.logger") as mock_logger,
         ):
             auditor.audit()
-        mock_logger.error.assert_called_once()
+        mock_logger.exception.assert_called_once()
 
-    def test_generator_exception_skips_result(self) -> None:
+    def test_generator_exception_returns_error_result(self) -> None:
         self.mock_generator.generate.side_effect = RuntimeError("model unavailable")
         probe = _make_probe("probes.dan.Dan1", ["p"])
         auditor = _make_llm_auditor()
@@ -737,7 +737,9 @@ class TestAuditLLM:
             patch("pentester.auditors.garak.logger"),
         ):
             results = auditor.audit()
-        assert results == []
+        assert len(results) == 1
+        assert results[0].response == "ERROR"
+        assert results[0].metadata == {"error": True}
 
     def test_empty_prompt_is_skipped(self) -> None:
         probe = _make_probe("probes.dan.Dan1", ["", "real prompt"])
