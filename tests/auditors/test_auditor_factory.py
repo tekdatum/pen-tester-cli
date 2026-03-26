@@ -43,7 +43,10 @@ for _name, _stub in [
     ("pyrit.executor", MagicMock(name="pyrit.executor")),
     ("pyrit.executor.attack", MagicMock(name="pyrit.executor.attack")),
     ("pyrit.executor.attack.core", MagicMock(name="pyrit.executor.attack.core")),
-    ("pyrit.executor.attack.multi_turn", MagicMock(name="pyrit.executor.attack.multi_turn")),
+    (
+        "pyrit.executor.attack.multi_turn",
+        MagicMock(name="pyrit.executor.attack.multi_turn"),
+    ),
     ("pyrit.memory", MagicMock(name="pyrit.memory")),
     ("pyrit.setup", _pyrit_setup_mod),
     ("pyrit.prompt_target", MagicMock(name="pyrit.prompt_target")),

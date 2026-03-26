@@ -13,7 +13,7 @@ def _make_provider(**kwargs: object) -> PromptfooHTTPProvider:
 class TestInitialization:
     def test_initializes_with_defaults(self) -> None:
         provider = _make_provider()
-        
+
         assert provider.method == "POST"
         assert provider.headers == {}
         assert provider.timeout == 5000
@@ -30,7 +30,7 @@ class TestInitialization:
             body_template="{{input}}",
             response_parser="json.data.text",
         )
-        
+
         assert provider.url == "http://my-api.com"
         assert provider.method == "GET"
         assert provider.headers == headers
@@ -50,16 +50,16 @@ class TestTransformConfig:
             body={"text": "custom {{prompt}}"},
             responseParser="json.choices[0].text",
         )
-        
+
         assert provider.body_template == "custom {{prompt}}"
         assert provider.response_parser == "json.choices[0].text"
 
     def test_ignores_invalid_body_structures(self) -> None:
-        # If 'body' isn't a dict with a 'text' key, it should safely fall back to the default
+        # If 'body' isn't a dict with a 'text' key, it should fall back to the default
         p1 = PromptfooHTTPProvider(url="http://example.com", body={"other": "value"})
         p2 = PromptfooHTTPProvider(url="http://example.com", body="raw string")
         p3 = PromptfooHTTPProvider(url="http://example.com", body=123)
-        
+
         assert p1.body_template == "{{prompt}}"
         assert p2.body_template == "{{prompt}}"
         assert p3.body_template == "{{prompt}}"
@@ -70,25 +70,28 @@ class TestTransformConfig:
             body={"text": "from body"},
             body_template="explicit",
         )
-        
-        # Pydantic's pre-validators run before field assignment, meaning 
+
+        # Pydantic's pre-validators run before field assignment, meaning
         # the transformed 'body' takes precedence over 'body_template'
         assert provider.body_template == "from body"
 
 
 class TestStringRepresentation:
     def test_string_contains_all_fields_and_values(self) -> None:
-        provider = _make_provider(
-            url="http://my-api.com", 
-            method="GET", 
-            timeout=9999
-        )
+        provider = _make_provider(url="http://my-api.com", method="GET", timeout=9999)
         output = str(provider)
-        
-        expected_labels = ["URL:", "METHOD:", "HEADERS:", "TIMEOUT:", "BODY_TEMPLATE:", "RESPONSE_PARSER:"]
+
+        expected_labels = [
+            "URL:",
+            "METHOD:",
+            "HEADERS:",
+            "TIMEOUT:",
+            "BODY_TEMPLATE:",
+            "RESPONSE_PARSER:",
+        ]
         for label in expected_labels:
             assert label in output
-            
+
         assert "http://my-api.com" in output
         assert "GET" in output
         assert "9999" in output

@@ -38,16 +38,29 @@ def test_generate_detail_report_accepts_empty_list() -> None:
     result = CsvGenerator().generate_detail_report([], {}, {})
     assert isinstance(result, bytes)
 
+
 class TestDetailsTemplate:
     def test_unicode_char_in_prompt_is_escaped(self) -> None:
-        csv = CsvGenerator().generate_detail_report([_probe(prompt="caf\u00e9")], {}, {}).decode()
+        csv = (
+            CsvGenerator()
+            .generate_detail_report([_probe(prompt="caf\u00e9")], {}, {})
+            .decode()
+        )
         assert "\\xe9" in csv
 
     def test_newline_in_prompt_is_escaped(self) -> None:
-        csv = CsvGenerator().generate_detail_report([_probe(prompt="line1\nline2")], {}, {}).decode()
+        csv = (
+            CsvGenerator()
+            .generate_detail_report([_probe(prompt="line1\nline2")], {}, {})
+            .decode()
+        )
         assert "\\n" in csv
         assert "line1\nline2" not in csv
 
     def test_double_quote_in_prompt_is_csv_escaped(self) -> None:
-        csv = CsvGenerator().generate_detail_report([_probe(prompt='say "hello"')], {}, {}).decode()
+        csv = (
+            CsvGenerator()
+            .generate_detail_report([_probe(prompt='say "hello"')], {}, {})
+            .decode()
+        )
         assert '""' in csv
