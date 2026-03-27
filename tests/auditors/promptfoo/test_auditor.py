@@ -11,7 +11,10 @@ import pytest
 
 from pentester.auditors.models.probe_result import ProbeResult
 from pentester.auditors.promptfoo.auditor import PromptfooAuditor
-from pentester.config.auditors.promptfoo_settings import PromptfooSettings
+from pentester.config.auditors.promptfoo_settings import (
+    KNOWN_MULTITURN_STRATEGIES,
+    PromptfooSettings,
+)
 from pentester.config.settings import TargetType
 
 
@@ -21,6 +24,29 @@ _FAKE_CONFIG: dict[str, Any] = {
         {"id": "http", "config": {"url": "http://example.com", "method": "POST"}}
     ],
     "redteam": {
+        "strategies": [
+            {"id": "basic"},
+            {"id": "jailbreak"},
+            {
+                "id": "crescendo",
+                "config": {
+                    "maxTurns": 5,
+                    "maxBacktracks": 5,
+                    "stateful": False,
+                    "continueAfterSuccess": False,
+                },
+            },
+            {
+                "id": "goat",
+                "config": {
+                    "maxTurns": 5,
+                    "stateful": False,
+                    "continueAfterSuccess": False,
+                },
+            },
+            {"id": "jailbreak:hydra", "config": {"maxTurns": 5}},
+            {"id": "mischievous-user", "config": {"maxTurns": 5, "stateful": False}},
+        ],
         "plugins": ["harmful:hate", "harmful:violent-crime"],
         "defaultAssertions": [{"type": "llm-rubric"}],
     },
@@ -752,6 +778,7 @@ class TestGenerateProbeResults:
             "cached": False,
             "error": None,
             "grading_reason": "All assertions passed",
+            "is_multiturn": False,
         }
 
     def test_attack_category_defaults_to_basic_when_strategy_id_is_none(self) -> None:
@@ -1067,3 +1094,407 @@ class TestAudit:
 
         mock_build.assert_called_once()
         assert result is expected_probes
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn Strategy Tests
+# ---------------------------------------------------------------------------
+
+
+class TestStripMultiturnStrategies:
+    def test_removes_all_multiturn_strategies(self) -> None:
+        result = PromptfooAuditor._strip_multiturn_strategies(
+            copy.deepcopy(_FAKE_CONFIG)
+        )
+        ids = {s["id"] for s in result["redteam"]["strategies"]}
+        assert ids == {"basic", "jailbreak"}
+
+    def test_preserves_single_turn_strategies(self) -> None:
+        result = PromptfooAuditor._strip_multiturn_strategies(
+            copy.deepcopy(_FAKE_CONFIG)
+        )
+        ids = [s["id"] for s in result["redteam"]["strategies"]]
+        assert "basic" in ids
+        assert "jailbreak" in ids
+
+    def test_does_not_mutate_input(self) -> None:
+        original = copy.deepcopy(_FAKE_CONFIG)
+        original_count = len(original["redteam"]["strategies"])
+        PromptfooAuditor._strip_multiturn_strategies(original)
+        assert len(original["redteam"]["strategies"]) == original_count
+
+    def test_handles_empty_strategies_list(self) -> None:
+        config = copy.deepcopy(_FAKE_CONFIG)
+        config["redteam"]["strategies"] = []
+        result = PromptfooAuditor._strip_multiturn_strategies(config)
+        assert result["redteam"]["strategies"] == []
+
+
+class TestApplyMultiturnOverrides:
+    def test_filters_to_allowlist(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_strategies=["crescendo", "goat"],
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        mt_ids = {
+            s["id"]
+            for s in result["redteam"]["strategies"]
+            if s["id"] in KNOWN_MULTITURN_STRATEGIES
+        }
+        assert mt_ids == {"crescendo", "goat"}
+
+    def test_keeps_all_single_turn_strategies(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True, multiturn_strategies=["crescendo"]
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        ids = [s["id"] for s in result["redteam"]["strategies"]]
+        assert "basic" in ids
+        assert "jailbreak" in ids
+
+    def test_patches_max_turns(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_max_turns=10)
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        for s in result["redteam"]["strategies"]:
+            if s["id"] in KNOWN_MULTITURN_STRATEGIES:
+                assert s["config"]["maxTurns"] == 10
+
+    def test_patches_crescendo_specific_fields(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_max_backtracks=3,
+                multiturn_stateful=True,
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        crescendo = next(
+            s for s in result["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        assert crescendo["config"]["maxBacktracks"] == 3
+        assert crescendo["config"]["stateful"] is True
+        assert crescendo["config"]["continueAfterSuccess"] is False
+
+    def test_patches_goat_specific_fields(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_stateful=True)
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        goat = next(
+            s for s in result["redteam"]["strategies"] if s["id"] == "goat"
+        )
+        assert goat["config"]["stateful"] is True
+        assert goat["config"]["continueAfterSuccess"] is False
+
+    def test_hydra_has_only_max_turns(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_stateful=True)
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        hydra = next(
+            s for s in result["redteam"]["strategies"]
+            if s["id"] == "jailbreak:hydra"
+        )
+        assert set(hydra["config"].keys()) == {"maxTurns"}
+
+    def test_mischievous_user_includes_stateful(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_stateful=True)
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        mu = next(
+            s
+            for s in result["redteam"]["strategies"]
+            if s["id"] == "mischievous-user"
+        )
+        assert mu["config"]["stateful"] is True
+        assert "continueAfterSuccess" not in mu["config"]
+
+    def test_does_not_mutate_input(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_max_turns=10)
+        )
+        original = copy.deepcopy(_FAKE_CONFIG)
+        crescendo_before = next(
+            s for s in original["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        original_max = crescendo_before["config"]["maxTurns"]
+        auditor._apply_multiturn_overrides(original)
+        crescendo_after = next(
+            s for s in original["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        assert crescendo_after["config"]["maxTurns"] == original_max
+
+
+class TestWritePluginConfigsMultiturn:
+    def test_generates_multiturn_files_when_enabled(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        # 1 single-turn + 1 multiturn = 2 dumps
+        assert mock_dump.call_count == 2
+        mt_config = mock_dump.call_args_list[1][0][0]
+        strategy_ids = [s["id"] for s in mt_config["redteam"]["strategies"]]
+        assert "crescendo" in strategy_ids
+
+    def test_single_turn_file_has_no_multiturn_strategies(
+        self, tmp_path: Path
+    ) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        st_config = mock_dump.call_args_list[0][0][0]
+        st_ids = {s["id"] for s in st_config["redteam"]["strategies"]}
+        assert st_ids.isdisjoint(KNOWN_MULTITURN_STRATEGIES)
+
+    def test_multiturn_file_has_correct_prefix(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump"):
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        files = list(configs_dir.glob("*.yaml"))
+        names = {f.name for f in files}
+        assert "test_1.yaml" in names
+        assert "multiturn_test_1.yaml" in names
+
+    def test_no_multiturn_files_when_disabled(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=False), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        assert mock_dump.call_count == 1  # single-turn only
+        st_config = mock_dump.call_args_list[0][0][0]
+        st_ids = {s["id"] for s in st_config["redteam"]["strategies"]}
+        assert st_ids.isdisjoint(KNOWN_MULTITURN_STRATEGIES)
+
+
+class TestSplitAuditFiles:
+    def test_splits_by_prefix(self) -> None:
+        files = [
+            Path("/test_1.yaml"),
+            Path("/multiturn_test_1.yaml"),
+            Path("/test_2.yaml"),
+            Path("/multiturn_test_2.yaml"),
+        ]
+        single, multi = PromptfooAuditor._split_audit_files(files)
+        assert len(single) == 2
+        assert len(multi) == 2
+        assert all(not f.name.startswith("multiturn_") for f in single)
+        assert all(f.name.startswith("multiturn_") for f in multi)
+
+    def test_returns_empty_lists_when_no_files(self) -> None:
+        single, multi = PromptfooAuditor._split_audit_files([])
+        assert single == []
+        assert multi == []
+
+    def test_all_single_turn(self) -> None:
+        files = [Path("/test_1.yaml"), Path("/test_2.yaml")]
+        single, multi = PromptfooAuditor._split_audit_files(files)
+        assert len(single) == 2
+        assert multi == []
+
+
+class TestValidatePreconditionsMultiturn:
+    def test_requires_llm_key_for_multiturn_semantic_fence(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            pytest.raises(ValueError, match="Multi-turn strategies require"),
+        ):
+            auditor._validate_preconditions()
+
+    def test_requires_llm_key_for_multiturn_llm_target(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.LLM,
+        )
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            pytest.raises(ValueError, match="Multi-turn strategies require"),
+        ):
+            auditor._validate_preconditions()
+
+    def test_passes_with_key_for_multiturn_semantic_fence(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        with (
+            patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=True),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            auditor._validate_preconditions()  # should not raise
+
+
+class TestAuditTwoPassSemanticFence:
+    def test_two_pass_when_semantic_fence_and_multiturn(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        single_files = [Path("/test_1.yaml")]
+        multi_files = [Path("/multiturn_test_1.yaml")]
+        all_files = single_files + multi_files
+        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+        expected_df = pd.DataFrame({"col": [1]})
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=all_files),
+            patch.object(
+                auditor, "_split_audit_files", return_value=(single_files, multi_files)
+            ) as mock_split,
+            patch.object(auditor, "_unset_llm_api_keys") as mock_unset,
+            patch.object(auditor, "_restore_llm_api_keys") as mock_restore,
+            patch.object(auditor, "_run_eval_pass", return_value=runner_output),
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=expected_df
+            ),
+            patch.object(auditor, "_generate_probe_results", return_value=[]),
+        ):
+            auditor.audit()
+
+        mock_split.assert_called_once_with(all_files)
+        # Pass 1: unset keys, run single-turn, restore
+        mock_unset.assert_called_once()
+        # restore called: once after pass 1 + once in finally
+        assert mock_restore.call_count == 2
+
+    def test_single_pass_when_semantic_fence_without_multiturn(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=False),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        files = [Path("/test_1.yaml")]
+        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=files),
+            patch.object(auditor, "_unset_llm_api_keys") as mock_unset,
+            patch.object(auditor, "_restore_llm_api_keys"),
+            patch.object(auditor, "_run_eval_pass", return_value=runner_output),
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=pd.DataFrame()
+            ),
+            patch.object(auditor, "_generate_probe_results", return_value=[]),
+        ):
+            auditor.audit()
+
+        mock_unset.assert_called_once()
+
+
+class TestAuditSinglePassLLM:
+    def test_single_pass_for_llm_with_multiturn(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.LLM,
+        )
+        files = [Path("/test_1.yaml"), Path("/multiturn_test_1.yaml")]
+        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=files),
+            patch.object(auditor, "_unset_llm_api_keys") as mock_unset,
+            patch.object(auditor, "_restore_llm_api_keys"),
+            patch.object(
+                auditor, "_run_eval_pass", return_value=runner_output
+            ) as mock_eval,
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=pd.DataFrame()
+            ),
+            patch.object(auditor, "_generate_probe_results", return_value=[]),
+        ):
+            auditor.audit()
+
+        mock_unset.assert_not_called()
+        mock_eval.assert_called_once_with(files)
+
+
+class TestGenerateProbeResultsMultiturn:
+    def test_is_multiturn_true_for_multiturn_strategy(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = pd.DataFrame(
+            [
+                {
+                    "strategy_id": "crescendo",
+                    "plugin_id": "harmful:hate",
+                    "prompt": "p",
+                    "api_response": "r",
+                    "success": False,
+                    "error": None,
+                    "grading_score": 1.0,
+                    "accept_score": None,
+                    "http_status": 200,
+                    "duration": 1.0,
+                    "latency_ms": 50,
+                    "cached": False,
+                    "grading_reason": None,
+                }
+            ]
+        )
+        results = auditor._generate_probe_results()
+        assert results[0].metadata["is_multiturn"] is True
+
+    def test_is_multiturn_false_for_single_turn_strategy(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = pd.DataFrame(
+            [
+                {
+                    "strategy_id": "basic",
+                    "plugin_id": "harmful:hate",
+                    "prompt": "p",
+                    "api_response": "r",
+                    "success": True,
+                    "error": None,
+                    "grading_score": 1.0,
+                    "accept_score": None,
+                    "http_status": 200,
+                    "duration": 1.0,
+                    "latency_ms": 50,
+                    "cached": False,
+                    "grading_reason": None,
+                }
+            ]
+        )
+        results = auditor._generate_probe_results()
+        assert results[0].metadata["is_multiturn"] is False
