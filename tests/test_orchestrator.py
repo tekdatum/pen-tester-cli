@@ -15,7 +15,25 @@ import pytest
 # Stub our auditor module so garak internals never load.
 # ---------------------------------------------------------------------------
 
-sys.modules.setdefault("pentester.auditors.garak", MagicMock())
+for _mod in (
+    "pentester.auditors.garak",
+    "pyrit",
+    "pyrit.datasets",
+    "pyrit.executor",
+    "pyrit.executor.attack",
+    "pyrit.executor.attack.core",
+    "pyrit.executor.attack.multi_turn",
+    "pyrit.memory",
+    "pyrit.models",
+    "pyrit.models.attack_result",
+    "pyrit.prompt_target",
+    "pyrit.score",
+    "pyrit.score.true_false",
+    "pyrit.score.true_false.self_ask_true_false_scorer",
+    "pyrit.setup",
+    "tqdm",
+):
+    sys.modules.setdefault(_mod, MagicMock())
 
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402

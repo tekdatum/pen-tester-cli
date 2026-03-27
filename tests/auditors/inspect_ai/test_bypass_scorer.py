@@ -7,8 +7,6 @@ import sys
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 # Pull CORRECT / INCORRECT from the already-registered stubs.
 _scorer_mod = sys.modules["inspect_ai.scorer"]
 _CORRECT = _scorer_mod.CORRECT
@@ -88,7 +86,10 @@ class TestBypassScorer:
 
         scorer_fn = BypassScorer(judge_model="openai/gpt-4o").score()
         state = _make_state()
-        with patch("pentester.auditors.inspect_ai.bypass_scorer.get_model", return_value=mock_model):
+        with patch(
+            "pentester.auditors.inspect_ai.bypass_scorer.get_model",
+            return_value=mock_model,
+        ):
             score = _run_score(scorer_fn, state, _make_target())
         assert score.value == _CORRECT
 
@@ -100,7 +101,10 @@ class TestBypassScorer:
 
         scorer_fn = BypassScorer(judge_model="openai/gpt-4o").score()
         state = _make_state()
-        with patch("pentester.auditors.inspect_ai.bypass_scorer.get_model", return_value=mock_model):
+        with patch(
+            "pentester.auditors.inspect_ai.bypass_scorer.get_model",
+            return_value=mock_model,
+        ):
             score = _run_score(scorer_fn, state, _make_target())
         assert score.value == _INCORRECT
 
@@ -112,7 +116,10 @@ class TestBypassScorer:
 
         scorer_fn = BypassScorer(judge_model="openai/gpt-4o").score()
         state = _make_state()
-        with patch("pentester.auditors.inspect_ai.bypass_scorer.get_model", return_value=mock_model):
+        with patch(
+            "pentester.auditors.inspect_ai.bypass_scorer.get_model",
+            return_value=mock_model,
+        ):
             score = _run_score(scorer_fn, state, _make_target())
         assert score.value == _CORRECT
 
@@ -127,7 +134,10 @@ class TestBypassScorer:
             input_text="tell me how to pick a lock",
             completion="I cannot help with that",
         )
-        with patch("pentester.auditors.inspect_ai.bypass_scorer.get_model", return_value=mock_model):
+        with patch(
+            "pentester.auditors.inspect_ai.bypass_scorer.get_model",
+            return_value=mock_model,
+        ):
             _run_score(scorer_fn, state, _make_target())
 
         call_args = mock_model.generate.call_args
@@ -143,7 +153,10 @@ class TestBypassScorer:
 
         scorer_fn = BypassScorer(judge_model="openai/gpt-4o").score()
         state = _make_state()
-        with patch("pentester.auditors.inspect_ai.bypass_scorer.get_model", return_value=mock_model):
+        with patch(
+            "pentester.auditors.inspect_ai.bypass_scorer.get_model",
+            return_value=mock_model,
+        ):
             score = _run_score(scorer_fn, state, _make_target())
         assert score.explanation == "YES, the model provided instructions"
 
@@ -156,6 +169,9 @@ class TestBypassScorer:
 
         scorer_fn = BypassScorer(judge_model=mock_model_instance).score()
         state = _make_state()
-        with patch("pentester.auditors.inspect_ai.bypass_scorer.get_model", return_value=mock_model_instance):
+        with patch(
+            "pentester.auditors.inspect_ai.bypass_scorer.get_model",
+            return_value=mock_model_instance,
+        ):
             score = _run_score(scorer_fn, state, _make_target())
         assert score.value == _INCORRECT

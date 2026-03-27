@@ -8,19 +8,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pentester.auditors.inspect_ai.auditor import (
+    InspectAIAuditor,
+    _inspect_model_string,
+)  # noqa: E402
+from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
+from pentester.config.auditors.inspect_settings import InspectSettings  # noqa: E402
+from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
+from pentester.config.settings import TargetType  # noqa: E402
+from pentester.enums.auditor_key import AuditorKey  # noqa: E402
+
 # Re-read stubs registered by conftest.pytest_configure so helpers reference
 # the same CORRECT/INCORRECT strings used by the module under test.
 _inspect_ai_scorer_mod = sys.modules["inspect_ai.scorer"]
 _inspect_ai_mod = sys.modules["inspect_ai"]
 _CORRECT = _inspect_ai_scorer_mod.CORRECT
 _INCORRECT = _inspect_ai_scorer_mod.INCORRECT
-
-from pentester.auditors.inspect_ai.auditor import InspectAIAuditor, _inspect_model_string  # noqa: E402
-from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
-from pentester.config.auditors.inspect_settings import InspectSettings  # noqa: E402
-from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
-from pentester.config.settings import TargetType  # noqa: E402
-from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +55,11 @@ def _make_sample(
     sample = MagicMock()
     sample.input = input_text
     sample.output.completion = completion
-    sample.scores = {"security_scorer": _make_score(score_value if score_value is not None else _CORRECT)}
+    sample.scores = {
+        "security_scorer": _make_score(
+            score_value if score_value is not None else _CORRECT
+        )
+    }
     sample.metadata = metadata if metadata is not None else {}
     sample.id = sample_id
     if messages is not None:
@@ -78,19 +85,30 @@ def _make_log(samples: list[MagicMock] | None = None) -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-def _make_llm(provider: LLMProvider = LLMProvider.OPENAI, model: str = "") -> LLMSettings:
+def _make_llm(
+    provider: LLMProvider = LLMProvider.OPENAI, model: str = ""
+) -> LLMSettings:
     return LLMSettings(provider=provider, model=model)
 
 
 class TestInspectModelString:
     def test_openai_model_builds_correct_string(self) -> None:
-        assert _inspect_model_string(_make_llm(LLMProvider.OPENAI, "gpt-4o-mini")) == "openai/gpt-4o-mini"
+        assert (
+            _inspect_model_string(_make_llm(LLMProvider.OPENAI, "gpt-4o-mini"))
+            == "openai/gpt-4o-mini"
+        )
 
     def test_anthropic_model_builds_correct_string(self) -> None:
-        assert _inspect_model_string(_make_llm(LLMProvider.ANTHROPIC, "claude-opus-4-6")) == "anthropic/claude-opus-4-6"
+        assert (
+            _inspect_model_string(_make_llm(LLMProvider.ANTHROPIC, "claude-opus-4-6"))
+            == "anthropic/claude-opus-4-6"
+        )
 
     def test_gemini_maps_to_google(self) -> None:
-        assert _inspect_model_string(_make_llm(LLMProvider.GEMINI, "gemini-flash")) == "google/gemini-flash"
+        assert (
+            _inspect_model_string(_make_llm(LLMProvider.GEMINI, "gemini-flash"))
+            == "google/gemini-flash"
+        )
 
     def test_empty_model_returns_none(self) -> None:
         assert _inspect_model_string(_make_llm(LLMProvider.OPENAI, "")) is None
@@ -102,7 +120,9 @@ class TestInspectModelString:
 
 
 class TestInterpretScore:
-    def _run(self, score: MagicMock | None, score_max: float = 1.0) -> tuple[bool, float]:
+    def _run(
+        self, score: MagicMock | None, score_max: float = 1.0
+    ) -> tuple[bool, float]:
         return _make_auditor()._interpret_score(score, score_max=score_max)
 
     def test_correct_returns_bypassed_true_score_one(self) -> None:
@@ -170,11 +190,15 @@ class TestExtractAttackFields:
         return _make_auditor()._extract_attack_fields(sample, eval_name)
 
     def test_uses_category_from_metadata(self) -> None:
-        category, _ = self._run({"category": "prompt_injection", "attack_type": "ignore_prev"})
+        category, _ = self._run(
+            {"category": "prompt_injection", "attack_type": "ignore_prev"}
+        )
         assert category == "prompt_injection"
 
     def test_uses_attack_type_from_metadata(self) -> None:
-        _, attack_type = self._run({"category": "prompt_injection", "attack_type": "ignore_prev"})
+        _, attack_type = self._run(
+            {"category": "prompt_injection", "attack_type": "ignore_prev"}
+        )
         assert attack_type == "ignore_prev"
 
     def test_falls_back_to_eval_name_when_category_missing(self) -> None:
@@ -191,7 +215,9 @@ class TestExtractAttackFields:
         assert attack_type == "b3"
 
     def test_strips_whitespace_from_metadata_values(self) -> None:
-        category, attack_type = self._run({"category": "  pi  ", "attack_type": "  t  "})
+        category, attack_type = self._run(
+            {"category": "  pi  ", "attack_type": "  t  "}
+        )
         assert category == "pi"
         assert attack_type == "t"
 
@@ -242,7 +268,13 @@ class TestExtractPrompt:
         ]
         sample = _make_sample(input_text="Hi!", messages=messages)
         result = _make_auditor()._extract_prompt(sample)
-        assert result == "user: Hi!\nassistant: Hey there!\nuser: How are you?\nassistant: Great, thanks!"
+        assert (
+            result
+            == "user: Hi!\n"
+            + "assistant: Hey there!\n"
+            + "user: How are you?\n"
+            + "assistant: Great, thanks!"
+        )
 
     def test_multi_turn_skips_system_messages(self) -> None:
         messages = [
@@ -294,7 +326,10 @@ class TestGetTask:
     def test_strong_reject_passes_judge_llm_when_explicitly_set(self) -> None:
         factory = MagicMock()
         auditor = _make_auditor(judge_model="openai/gpt-4o-mini")
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"strong_reject": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
             auditor._get_task("strong_reject")
         factory.assert_called_once_with(judge_llm="openai/gpt-4o-mini")
 
@@ -303,14 +338,20 @@ class TestGetTask:
         llm = _make_llm(LLMProvider.OPENAI, "gpt-4o")
         auditor = InspectAIAuditor(settings=InspectSettings(judge_model=None), llm=llm)
         auditor.target_type = TargetType.LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"strong_reject": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
             auditor._get_task("strong_reject")
         factory.assert_called_once_with(judge_llm="openai/gpt-4o")
 
     def test_strong_reject_passes_none_when_both_absent(self) -> None:
         factory = MagicMock()
         auditor = _make_auditor(judge_model=None)  # no llm model either
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"strong_reject": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
             auditor._get_task("strong_reject")
         factory.assert_called_once_with(judge_llm=None)
 
@@ -319,7 +360,9 @@ class TestGetTask:
         llm = _make_llm(LLMProvider.GEMINI, "gemini-flash")
         auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm)
         auditor.target_type = TargetType.LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             auditor._get_task("b3")
         factory.assert_called_once_with(model="google/gemini-flash")
 
@@ -328,14 +371,22 @@ class TestGetTask:
         llm = _make_llm(LLMProvider.ANTHROPIC, "claude-opus-4-6")
         auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm)
         auditor.target_type = TargetType.LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"fortress_adversarial": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"fortress_adversarial": factory},
+        ):
             auditor._get_task("fortress_adversarial")
         factory.assert_called_once_with(grader_models=["anthropic/claude-opus-4-6"])
 
-    def test_fortress_adversarial_passes_no_grader_models_when_judge_absent(self) -> None:
+    def test_fortress_adversarial_passes_no_grader_models_when_judge_absent(
+        self,
+    ) -> None:
         factory = MagicMock()
         auditor = _make_auditor()  # no llm model, no judge_model
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"fortress_adversarial": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"fortress_adversarial": factory},
+        ):
             auditor._get_task("fortress_adversarial")
         factory.assert_called_once_with()
 
@@ -344,21 +395,31 @@ class TestGetTask:
         llm = _make_llm(LLMProvider.OPENAI, "gpt-4o")
         auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm)
         auditor.target_type = TargetType.LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"agentharm": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"agentharm": factory},
+        ):
             auditor._get_task("agentharm")
-        factory.assert_called_once_with(refusal_judge="openai/gpt-4o", semantic_judge="openai/gpt-4o")
+        factory.assert_called_once_with(
+            refusal_judge="openai/gpt-4o", semantic_judge="openai/gpt-4o"
+        )
 
     def test_agentharm_passes_no_judges_when_judge_absent(self) -> None:
         factory = MagicMock()
         auditor = _make_auditor()  # no llm model, no judge_model
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"agentharm": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"agentharm": factory},
+        ):
             auditor._get_task("agentharm")
         factory.assert_called_once_with()
 
     def test_b3_llm_target_called_with_model_none_when_no_judge(self) -> None:
         factory = MagicMock()
         auditor = _make_auditor()  # target_type = LLM, no llm model, no judge_model
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             auditor._get_task("b3")
         factory.assert_called_once_with(model=None)
 
@@ -366,7 +427,9 @@ class TestGetTask:
         factory = MagicMock()
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             auditor._get_task("b3")
         factory.assert_called_once_with(task_types=["DIO", "IIO"], model=None)
 
@@ -483,7 +546,9 @@ class TestMapResults:
 
 class TestAudit:
     def test_returns_empty_when_scanner_and_llm_model_both_absent(self) -> None:
-        auditor = InspectAIAuditor(settings=InspectSettings(), llm=_make_llm(model=""), scanner=None)
+        auditor = InspectAIAuditor(
+            settings=InspectSettings(), llm=_make_llm(model=""), scanner=None
+        )
         assert auditor.audit() == []
 
     def test_native_model_used_when_scanner_none_and_llm_model_set(self) -> None:
@@ -516,7 +581,9 @@ class TestAudit:
             patch.object(auditor, "_get_task", return_value=MagicMock()),
             patch.object(auditor, "_map_results", return_value=[]),
             patch("pentester.auditors.inspect_ai.auditor.inspect_eval") as m_eval,
-            patch("inspect_ai.model.get_model", return_value=MagicMock()) as m_get_model,
+            patch(
+                "inspect_ai.model.get_model", return_value=MagicMock()
+            ) as m_get_model,
             patch("inspect_ai.model.modelapi"),
         ):
             m_eval.return_value = [_make_log(samples=[])]
@@ -561,7 +628,9 @@ class TestAudit:
         with (
             patch.object(auditor, "_get_task", return_value=MagicMock()),
             patch.object(
-                auditor, "_map_results", side_effect=[[_make_result()], [_make_result()]]
+                auditor,
+                "_map_results",
+                side_effect=[[_make_result()], [_make_result()]],
             ),
             patch("pentester.auditors.inspect_ai.auditor.inspect_eval") as m_eval,
         ):
@@ -639,7 +708,14 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial", "agentharm", "AgentDojo", "make_me_pay"]
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "fortress_adversarial",
+            "agentharm",
+            "AgentDojo",
+            "make_me_pay",
+        ]
 
     def test_settings_evals_override_takes_precedence(self) -> None:
         auditor = InspectAIAuditor(
@@ -649,13 +725,22 @@ class TestDefaultEvalsForTarget:
         assert auditor._settings.evals == ["b3"]
 
     def test_empty_settings_evals_uses_fence_defaults(self) -> None:
-        auditor = InspectAIAuditor(settings=InspectSettings(evals=[]), scanner=MagicMock())
+        auditor = InspectAIAuditor(
+            settings=InspectSettings(evals=[]), scanner=MagicMock()
+        )
         auditor.target_type = TargetType.SEMANTIC_FENCE
         effective = auditor._settings.evals or auditor._default_evals_for_target()
-        assert effective == ["strong_reject", "b3", "fortress_adversarial", "make_me_pay"]
+        assert effective == [
+            "strong_reject",
+            "b3",
+            "fortress_adversarial",
+            "make_me_pay",
+        ]
 
     def test_empty_settings_evals_uses_llm_defaults(self) -> None:
-        auditor = InspectAIAuditor(settings=InspectSettings(evals=[]), scanner=MagicMock())
+        auditor = InspectAIAuditor(
+            settings=InspectSettings(evals=[]), scanner=MagicMock()
+        )
         auditor.target_type = TargetType.LLM
         effective = auditor._settings.evals or auditor._default_evals_for_target()
         assert "agentharm" in effective
@@ -675,7 +760,9 @@ class TestGetTaskFenceScorer:
         original_scorer = mock_task.scorer
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=mock_scanner)
         auditor.target_type = TargetType.LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             task = auditor._get_task("b3")
         assert task.scorer is original_scorer
 
@@ -685,8 +772,12 @@ class TestGetTaskFenceScorer:
         factory = MagicMock(return_value=mock_task)
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=mock_scanner)
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
-            with patch.object(auditor, "_make_fence_scorer", return_value="fence") as m_make:
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
+            with patch.object(
+                auditor, "_make_fence_scorer", return_value="fence"
+            ) as m_make:
                 auditor._get_task("b3")
         m_make.assert_called_once()
         assert mock_task.scorer == ["fence"]
@@ -699,7 +790,10 @@ class TestGetTaskFenceScorer:
             settings=InspectSettings(judge_model=None), scanner=mock_scanner
         )
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"strong_reject": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
             with patch.object(auditor, "_make_fence_scorer", return_value="fence"):
                 auditor._get_task("strong_reject")
         assert mock_task.scorer == ["fence"]
@@ -711,7 +805,9 @@ class TestGetTaskFenceScorer:
         original_scorer = mock_task.scorer
         auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm, scanner=None)
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             task = auditor._get_task("b3")
         assert task.scorer is original_scorer
 
@@ -777,7 +873,9 @@ class TestInterpretDictScore:
         assert score == pytest.approx(1.0)
 
     def test_strong_reject_defaults_refusal_to_one_when_missing(self) -> None:
-        bypassed, _ = self._run("strong_reject", {"convincingness": 5, "specificity": 5})
+        bypassed, _ = self._run(
+            "strong_reject", {"convincingness": 5, "specificity": 5}
+        )
         assert bypassed is False
 
     # --- agentharm ---
@@ -847,7 +945,9 @@ class TestCustomScorers:
             custom_scorers={"b3": mock_custom},
         )
         auditor.target_type = TargetType.LLM
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             auditor._get_task("b3")
         assert mock_task.scorer == [mock_custom]
 
@@ -861,8 +961,12 @@ class TestCustomScorers:
             custom_scorers={"b3": mock_custom},
         )
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
-            with patch.object(auditor, "_make_fence_scorer", return_value="fence") as m_fence:
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
+            with patch.object(
+                auditor, "_make_fence_scorer", return_value="fence"
+            ) as m_fence:
                 auditor._get_task("b3")
         m_fence.assert_not_called()
         assert mock_task.scorer == [mock_custom]
@@ -872,7 +976,9 @@ class TestCustomScorers:
         factory = MagicMock(return_value=mock_task)
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
-        with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}
+        ):
             with patch.object(auditor, "_make_fence_scorer", return_value="fence"):
                 auditor._get_task("b3")
         assert mock_task.scorer == ["fence"]
@@ -886,7 +992,8 @@ class TestCustomScorers:
         )
         auditor.target_type = TargetType.LLM
         # A strong_reject dict value — with custom scorer, eval_name is blanked so
-        # _interpret_dict_score is NOT called with "strong_reject"; falls through to False.
+        # _interpret_dict_score is NOT called with "strong_reject"
+        # falls through to False.
         score = _make_score({"refusal": 0, "convincingness": 5, "specificity": 5})
         bypassed, _ = auditor._interpret_score(score, eval_name="")
         assert bypassed is False

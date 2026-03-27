@@ -79,6 +79,7 @@ def reset_cache() -> None:  # type: ignore[return]
     yield
     clear_settings_cache()
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -478,35 +479,69 @@ class TestInitGenerator:
         _garak_generators_litellm_mod.LiteLLMGenerator.return_value = MagicMock()
 
     def test_openai_uses_openai_generator_with_model_name(self) -> None:
-        _make_llm_auditor(llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))._init_generator()
-        _garak_generators_openai_mod.OpenAIGenerator.assert_called_once_with(name="gpt-4o")
+        _make_llm_auditor(
+            llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI)
+        )._init_generator()
+        _garak_generators_openai_mod.OpenAIGenerator.assert_called_once_with(
+            name="gpt-4o"
+        )
 
     def test_openai_reasoning_uses_reasoning_generator(self) -> None:
-        _make_llm_auditor(llm_settings=LLMSettings(model="o3-mini", provider=LLMProvider.OPENAI))._init_generator()
-        _garak_generators_openai_mod.OpenAIReasoningGenerator.assert_called_once_with(name="o3-mini")
+        _make_llm_auditor(
+            llm_settings=LLMSettings(model="o3-mini", provider=LLMProvider.OPENAI)
+        )._init_generator()
+        _garak_generators_openai_mod.OpenAIReasoningGenerator.assert_called_once_with(
+            name="o3-mini"
+        )
 
     def test_anthropic_uses_litellm_with_provider_prefix(self) -> None:
-        _make_llm_auditor(llm_settings=LLMSettings(model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC))._init_generator()
-        _garak_generators_litellm_mod.LiteLLMGenerator.assert_called_once_with(name="anthropic/claude-3-5-sonnet")
+        _make_llm_auditor(
+            llm_settings=LLMSettings(
+                model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC
+            )
+        )._init_generator()
+        _garak_generators_litellm_mod.LiteLLMGenerator.assert_called_once_with(
+            name="anthropic/claude-3-5-sonnet"
+        )
 
     def test_gemini_uses_litellm_with_provider_prefix(self) -> None:
-        _make_llm_auditor(llm_settings=LLMSettings(model="gemini-1.5-pro", provider=LLMProvider.GEMINI))._init_generator()
-        _garak_generators_litellm_mod.LiteLLMGenerator.assert_called_once_with(name="gemini/gemini-1.5-pro")
+        _make_llm_auditor(
+            llm_settings=LLMSettings(
+                model="gemini-1.5-pro", provider=LLMProvider.GEMINI
+            )
+        )._init_generator()
+        _garak_generators_litellm_mod.LiteLLMGenerator.assert_called_once_with(
+            name="gemini/gemini-1.5-pro"
+        )
 
     def test_openai_returns_generator_instance(self) -> None:
-        result = _make_llm_auditor(llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))._init_generator()
+        result = _make_llm_auditor(
+            llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI)
+        )._init_generator()
         assert result is _garak_generators_openai_mod.OpenAIGenerator.return_value
 
     def test_anthropic_returns_litellm_instance(self) -> None:
-        result = _make_llm_auditor(llm_settings=LLMSettings(model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC))._init_generator()
+        result = _make_llm_auditor(
+            llm_settings=LLMSettings(
+                model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC
+            )
+        )._init_generator()
         assert result is _garak_generators_litellm_mod.LiteLLMGenerator.return_value
 
     def test_anthropic_sets_top_p_to_none(self) -> None:
-        generator = _make_llm_auditor(llm_settings=LLMSettings(model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC))._init_generator()
+        generator = _make_llm_auditor(
+            llm_settings=LLMSettings(
+                model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC
+            )
+        )._init_generator()
         assert generator.top_p is None
 
     def test_gemini_does_not_set_top_p_to_none(self) -> None:
-        generator = _make_llm_auditor(llm_settings=LLMSettings(model="gemini-1.5-pro", provider=LLMProvider.GEMINI))._init_generator()
+        generator = _make_llm_auditor(
+            llm_settings=LLMSettings(
+                model="gemini-1.5-pro", provider=LLMProvider.GEMINI
+            )
+        )._init_generator()
         assert generator.top_p is not None
 
 
@@ -537,7 +572,9 @@ class TestEvaluate:
         detector = MagicMock()
         detector.detect.return_value = [0.5]
         _garak_plugins_mod.load_plugin.return_value = detector
-        probe = self._probe_with_detectors(["detectors.always.Fail", "detectors.always.Pass"])
+        probe = self._probe_with_detectors(
+            ["detectors.always.Fail", "detectors.always.Pass"]
+        )
         _make_llm_auditor()._evaluate(probe, "prompt", [])
         assert _garak_plugins_mod.load_plugin.call_count == 2
 
@@ -687,9 +724,9 @@ class TestAuditLLM:
             patch("pentester.auditors.garak.logger") as mock_logger,
         ):
             auditor.audit()
-        mock_logger.error.assert_called_once()
+        mock_logger.exception.assert_called_once()
 
-    def test_generator_exception_skips_result(self) -> None:
+    def test_generator_exception_returns_error_result(self) -> None:
         self.mock_generator.generate.side_effect = RuntimeError("model unavailable")
         probe = _make_probe("probes.dan.Dan1", ["p"])
         auditor = _make_llm_auditor()
@@ -701,16 +738,18 @@ class TestAuditLLM:
             patch("pentester.auditors.garak.logger"),
         ):
             results = auditor.audit()
-        assert results == []
+        assert len(results) == 1
+        assert results[0].response == "ERROR"
+        assert results[0].metadata == {"error": True}
 
     def test_empty_prompt_is_skipped(self) -> None:
         probe = _make_probe("probes.dan.Dan1", ["", "real prompt"])
-        results = self._audit_with([probe])
+        self._audit_with([probe])
         assert self.mock_generator.generate.call_count == 1
 
     def test_whitespace_only_prompt_is_skipped(self) -> None:
         probe = _make_probe("probes.dan.Dan1", ["   ", "real prompt"])
-        results = self._audit_with([probe])
+        self._audit_with([probe])
         assert self.mock_generator.generate.call_count == 1
 
     def test_empty_prompt_yields_no_result(self) -> None:

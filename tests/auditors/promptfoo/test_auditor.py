@@ -382,7 +382,7 @@ class TestRunRedteamGenerateForConfigs:
         auditor = _make_auditor(_make_settings(replace_existing_file=False))
         auditor.runner = MagicMock()
 
-        # If replace is false and output exists, it should skip. Let's make test_1 exist.
+        # If replace is false and output exists, it should skip.
         (llm_dir / "test_1.yaml").write_text("existing output")
 
         auditor._run_redteam_generate_for_configs(configs_dir, llm_dir)
@@ -622,7 +622,7 @@ class TestCleanConfig:
         output.mkdir()
         (output / "test.yaml").write_text("old")
 
-        # For SEMANTIC_FENCE, clean_config always rewrites regardless of replace_existing_file
+        # For SEMANTIC_FENCE, clean_config rewrites regardless of replace_existing_file
         auditor_no_replace = _make_auditor(_make_settings(replace_existing_file=False))
         with (
             patch("builtins.open", mock_open(read_data="")),
