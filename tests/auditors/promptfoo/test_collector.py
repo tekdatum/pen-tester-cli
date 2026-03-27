@@ -181,7 +181,7 @@ class TestExtractRows:
             "duration", "accept_score", "reject_score", "latency_ms",
             "http_status", "cached", "api_response", "source_file",
             "strategy_id", "plugin_id", "error",
-            "success", "grading_score", "grading_reason",
+            "success", "grading_score", "grading_reason", "conversation",
         }
         assert set(result.columns) == expected_cols
 
@@ -391,3 +391,43 @@ class TestBuildDataframe:
         assert len(result) == 2
         assert result["error"].iloc[0] is None
         assert result["error"].iloc[1] == "Error running Python script: FileNotFoundError"
+
+
+class TestExtractConversation:
+    def test_returns_none_when_no_conversation_in_vars(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        df = pd.DataFrame([_make_jsonl_row()])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] is None
+
+    def test_extracts_conversation_from_vars(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        conversation = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there"},
+        ]
+        row = _make_jsonl_row()
+        row["vars"]["conversation"] = conversation
+        df = pd.DataFrame([row])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] == conversation
+
+    def test_extracts_messages_from_vars(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        messages = [
+            {"role": "user", "content": "Turn 1"},
+            {"role": "assistant", "content": "Response 1"},
+        ]
+        row = _make_jsonl_row()
+        row["vars"]["messages"] = messages
+        df = pd.DataFrame([row])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] == messages
+
+    def test_returns_none_when_vars_has_no_conversation_keys(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        row = _make_jsonl_row()
+        # vars has "input" but no "conversation" or "messages"
+        df = pd.DataFrame([row])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] is None
