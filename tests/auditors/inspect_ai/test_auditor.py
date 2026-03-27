@@ -549,7 +549,8 @@ class TestAudit:
         auditor = InspectAIAuditor(
             settings=InspectSettings(), llm=_make_llm(model=""), scanner=None
         )
-        assert auditor.audit() == []
+        results, _ = auditor.audit()
+        assert results == []
 
     def test_native_model_used_when_scanner_none_and_llm_model_set(self) -> None:
         llm = _make_llm(LLMProvider.OPENAI, "gpt-4o")
@@ -635,7 +636,7 @@ class TestAudit:
             patch("pentester.auditors.inspect_ai.auditor.inspect_eval") as m_eval,
         ):
             m_eval.return_value = [_make_log(samples=[])]
-            results = auditor.audit()
+            results, _ = auditor.audit()
         assert len(results) == 2
 
     def test_isolates_exception_per_eval(self) -> None:
@@ -658,7 +659,7 @@ class TestAudit:
             patch.object(auditor, "_map_results", return_value=[]),
         ):
             _inspect_ai_mod.eval.return_value = [_make_log(samples=[])]
-            results = auditor.audit()
+            results, _ = auditor.audit()
         assert results == []
 
     def test_returns_empty_list_when_all_evals_fail(self) -> None:
@@ -668,7 +669,7 @@ class TestAudit:
             scanner=mock_scanner,
         )
         with patch.object(auditor, "_get_task", side_effect=RuntimeError("fail")):
-            results = auditor.audit()
+            results, _ = auditor.audit()
         assert results == []
 
     def test_passes_scanner_model_to_inspect_eval(self) -> None:

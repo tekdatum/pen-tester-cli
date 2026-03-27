@@ -354,7 +354,8 @@ class TestAudit:
                 auditor, "_init_scanner", return_value=scanner or self.mock_scanner
             ),
         ):
-            return auditor.audit()
+            results, _ = auditor.audit()
+            return results
 
     # orchestration ----------------------------------------------------------
 
@@ -630,7 +631,8 @@ class TestAuditLLM:
             patch.object(auditor, "_init_generator", return_value=self.mock_generator),
             patch.object(auditor, "_evaluate", return_value=score),
         ):
-            return auditor.audit()
+            results, _ = auditor.audit()
+            return results
 
     def test_calls_init_generator(self) -> None:
         auditor = _make_llm_auditor()
@@ -737,7 +739,7 @@ class TestAuditLLM:
             patch.object(auditor, "_evaluate", return_value=0.0),
             patch("pentester.auditors.garak.logger"),
         ):
-            results = auditor.audit()
+            results, _ = auditor.audit()
         assert len(results) == 1
         assert results[0].response == "ERROR"
         assert results[0].metadata == {"error": True}

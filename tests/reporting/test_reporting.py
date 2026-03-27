@@ -281,3 +281,41 @@ def test_generate_all_generators_use_same_timestamp(
     mock_path_cls.assert_any_call("/out", "20260101_000000", "pdf")
     mock_path_cls.assert_any_call("/out", "20260101_000000", "csv")
     mock_dt.datetime.now.assert_called_once()
+
+
+# ── track_time coverage ───────────────────────────────────────────────────────
+
+
+class TestGenerateTimer:
+    @patch("pentester.reporting.reporting.Path")
+    def test_generate_returns_tuple(self, mock_path_cls: MagicMock, mocker) -> None:
+        mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
+        mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
+
+        output = Reporting().generate([], "/out", [])
+
+        assert isinstance(output, tuple)
+        assert len(output) == 2
+
+    @patch("pentester.reporting.reporting.Path")
+    def test_generate_first_element_is_none(
+        self, mock_path_cls: MagicMock, mocker
+    ) -> None:
+        mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
+        mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
+
+        result, _ = Reporting().generate([], "/out", [])
+
+        assert result is None
+
+    @patch("pentester.reporting.reporting.Path")
+    def test_generate_duration_is_non_negative(
+        self, mock_path_cls: MagicMock, mocker
+    ) -> None:
+        mocker.patch.object(GeneratorFactory, "get_all", return_value=[])
+        mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
+
+        _, duration = Reporting().generate([], "/out", [])
+
+        assert isinstance(duration, float)
+        assert duration >= 0

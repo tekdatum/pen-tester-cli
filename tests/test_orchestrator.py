@@ -163,3 +163,43 @@ class TestRunAndReport:
         with patch.object(orch._reporting, "generate") as mock_generate:
             orch._run_and_report([])
             assert mock_generate.call_args.kwargs["auditor_results"] == []
+
+
+# ── track_time coverage ───────────────────────────────────────────────────────
+
+
+class TestExecuteTimer:
+    def test_execute_returns_tuple(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(
+                orch._auditor_factory, "get_available_auditors", return_value=[]
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            output = orch.execute()
+            assert isinstance(output, tuple)
+            assert len(output) == 2
+
+    def test_execute_first_element_is_none(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(
+                orch._auditor_factory, "get_available_auditors", return_value=[]
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            result, _ = orch.execute()
+            assert result is None
+
+    def test_execute_duration_is_non_negative(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(
+                orch._auditor_factory, "get_available_auditors", return_value=[]
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            _, duration = orch.execute()
+            assert isinstance(duration, float)
+            assert duration >= 0
