@@ -30,8 +30,12 @@ def _probe(auditor: str = "injector") -> ProbeResult:
     )
 
 
-def _audit(auditor_key: AuditorKey = AuditorKey.GARAK, duration: float = 0.0) -> AuditResult:
-    return AuditResult(auditor_key=auditor_key, duration=duration, results=[_probe(auditor_key.value)])
+def _audit(
+    auditor_key: AuditorKey = AuditorKey.GARAK, duration: float = 0.0
+) -> AuditResult:
+    return AuditResult(
+        auditor_key=auditor_key, duration=duration, results=[_probe(auditor_key.value)]
+    )
 
 
 def _mock_generator(
@@ -126,7 +130,9 @@ def test_generate_calls_generate_detail_report_per_auditor(
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.summarize_by_auditor",
-        return_value=SummaryResult(total_probes=1, total_bypassed=0, success_rate=100.0),
+        return_value=SummaryResult(
+            total_probes=1, total_bypassed=0, success_rate=100.0
+        ),
     )
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.summarize_by_attack_category",
@@ -137,7 +143,9 @@ def test_generate_calls_generate_detail_report_per_auditor(
         return_value={},
     )
 
-    Reporting().generate([_audit(AuditorKey.GARAK), _audit(AuditorKey.PYRIT)], "/out", ["csv"])
+    Reporting().generate(
+        [_audit(AuditorKey.GARAK), _audit(AuditorKey.PYRIT)], "/out", ["csv"]
+    )
 
     assert mock_gen.generate_detail_report.call_count == 2
 
@@ -151,7 +159,9 @@ def test_generate_writes_detail_file_per_auditor(
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.summarize_by_auditor",
-        return_value=SummaryResult(total_probes=1, total_bypassed=0, success_rate=100.0),
+        return_value=SummaryResult(
+            total_probes=1, total_bypassed=0, success_rate=100.0
+        ),
     )
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.summarize_by_attack_category",
@@ -230,7 +240,9 @@ def test_generate_passes_attack_breakdowns_to_detail_report(
     mocker.patch("pentester.reporting.reporting.Summarizer.summarize")
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.summarize_by_auditor",
-        return_value=SummaryResult(total_probes=1, total_bypassed=0, success_rate=100.0),
+        return_value=SummaryResult(
+            total_probes=1, total_bypassed=0, success_rate=100.0
+        ),
     )
     mocker.patch(
         "pentester.reporting.reporting.Summarizer.summarize_by_attack_category",
@@ -242,7 +254,11 @@ def test_generate_passes_attack_breakdowns_to_detail_report(
     )
 
     probe = _probe("garak")
-    Reporting().generate([AuditResult(auditor_key=AuditorKey.GARAK, duration=0.0, results=[probe])], "/out", ["csv"])
+    Reporting().generate(
+        [AuditResult(auditor_key=AuditorKey.GARAK, duration=0.0, results=[probe])],
+        "/out",
+        ["csv"],
+    )
 
     mock_gen.generate_detail_report.assert_called_once_with(
         [probe], category_results, type_results

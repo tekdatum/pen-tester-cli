@@ -19,13 +19,21 @@ def _make_result() -> ProbeResult:
 
 
 def test_auditor_key_is_stored() -> None:
-    assert AuditResult(auditor_key=AuditorKey.GARAK, duration=0.0, results=[]).auditor_key == AuditorKey.GARAK
+    assert (
+        AuditResult(auditor_key=AuditorKey.GARAK, duration=0.0, results=[]).auditor_key
+        == AuditorKey.GARAK
+    )
 
 
 def test_duration_is_stored() -> None:
-    assert AuditResult(auditor_key=AuditorKey.GARAK, duration=1.5, results=[]).duration == 1.5
+    assert (
+        AuditResult(auditor_key=AuditorKey.GARAK, duration=1.5, results=[]).duration
+        == 1.5
+    )
 
 
 def test_results_is_stored() -> None:
     result = _make_result()
-    assert AuditResult(auditor_key=AuditorKey.GARAK, duration=0.0, results=[result]).results == [result]
+    assert AuditResult(
+        auditor_key=AuditorKey.GARAK, duration=0.0, results=[result]
+    ).results == [result]

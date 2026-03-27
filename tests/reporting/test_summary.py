@@ -27,10 +27,10 @@ def _probe(
     )
 
 
-def _audit(
-    *probes: ProbeResult, duration: float = 0.0
-) -> AuditResult:
-    return AuditResult(auditor_key=AuditorKey.GARAK, duration=duration, results=list(probes))
+def _audit(*probes: ProbeResult, duration: float = 0.0) -> AuditResult:
+    return AuditResult(
+        auditor_key=AuditorKey.GARAK, duration=duration, results=list(probes)
+    )
 
 
 # --- summarize ---
