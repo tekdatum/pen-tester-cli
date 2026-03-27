@@ -52,6 +52,38 @@ Unknown variables are silently ignored, so it is safe to share `.env` files acro
 
 ---
 
+### Multi-turn jailbreak strategies (Promptfoo)
+
+Multi-turn strategies use an attacker LLM to drive adversarial conversations across multiple turns. They are opt-in because they are slower and more expensive than single-turn strategies.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `PENTESTER_PROMPTFOO__ENABLE_MULTITURN` | `bool` | `False` | Enable multi-turn strategies |
+| `PENTESTER_PROMPTFOO__MULTITURN_MAX_TURNS` | `int` | `5` | Max conversation turns (1–20) |
+| `PENTESTER_PROMPTFOO__MULTITURN_MAX_BACKTRACKS` | `int` | `5` | Max backtracks for crescendo (1–20) |
+| `PENTESTER_PROMPTFOO__MULTITURN_STATEFUL` | `bool` | `False` | Whether the target maintains session state. When `False`, the full conversation history is sent with each turn. |
+| `PENTESTER_PROMPTFOO__MULTITURN_STRATEGIES` | `list[str]` | `crescendo,goat,jailbreak:hydra,mischievous-user` | Which multi-turn strategies to include (JSON array in env) |
+
+**Supported strategies:** `crescendo`, `goat`, `jailbreak:hydra`, `mischievous-user`
+
+**Important:** Multi-turn strategies always require an LLM API key (`OPENAI_API_KEY`, etc.), even when the target type is `SEMANTIC_FENCE`.
+
+For `SEMANTIC_FENCE` targets with multi-turn enabled, the auditor runs two evaluation passes:
+1. **Single-turn pass** — LLM keys unset (preserves promptfoo remote generation)
+2. **Multi-turn pass** — LLM keys set (attacker LLM drives the conversation)
+
+Example `.env`:
+
+```bash
+PENTESTER_PROMPTFOO__ENABLE_MULTITURN=true
+PENTESTER_PROMPTFOO__MULTITURN_MAX_TURNS=5
+PENTESTER_PROMPTFOO__MULTITURN_STATEFUL=false
+PENTESTER_PROMPTFOO__MULTITURN_STRATEGIES=["crescendo","goat"]
+OPENAI_API_KEY=sk-...
+```
+
+---
+
 ### Usage
 
 **Reading settings anywhere in the package:**

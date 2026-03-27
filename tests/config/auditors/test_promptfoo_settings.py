@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from pentester.config.auditors.promptfoo_settings import PromptfooSettings
+from pentester.config.auditors.promptfoo_settings import (
+    KNOWN_MULTITURN_STRATEGIES,
+    PromptfooSettings,
+)
 
 
 class TestDefaults:
@@ -224,3 +227,113 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("OUTPUT_PATH", "/env/output")
         settings = PromptfooSettings()
         assert settings.output_path == "/env/output"
+
+
+class TestMultiturnDefaults:
+    def test_enable_multiturn_default(self) -> None:
+        assert PromptfooSettings().enable_multiturn is False
+
+    def test_multiturn_max_turns_default(self) -> None:
+        assert PromptfooSettings().multiturn_max_turns == 5
+
+    def test_multiturn_max_backtracks_default(self) -> None:
+        assert PromptfooSettings().multiturn_max_backtracks == 5
+
+    def test_multiturn_stateful_default(self) -> None:
+        assert PromptfooSettings().multiturn_stateful is False
+
+    def test_multiturn_strategies_default(self) -> None:
+        assert set(PromptfooSettings().multiturn_strategies) == KNOWN_MULTITURN_STRATEGIES
+
+
+class TestMultiturnDirectInit:
+    def test_set_enable_multiturn(self) -> None:
+        settings = PromptfooSettings(enable_multiturn=True)
+        assert settings.enable_multiturn is True
+
+    def test_set_multiturn_max_turns(self) -> None:
+        settings = PromptfooSettings(multiturn_max_turns=10)
+        assert settings.multiturn_max_turns == 10
+
+    def test_set_multiturn_max_backtracks(self) -> None:
+        settings = PromptfooSettings(multiturn_max_backtracks=3)
+        assert settings.multiturn_max_backtracks == 3
+
+    def test_set_multiturn_stateful(self) -> None:
+        settings = PromptfooSettings(multiturn_stateful=True)
+        assert settings.multiturn_stateful is True
+
+    def test_set_multiturn_strategies_subset(self) -> None:
+        settings = PromptfooSettings(multiturn_strategies=["crescendo", "goat"])
+        assert settings.multiturn_strategies == ["crescendo", "goat"]
+
+
+class TestMultiturnValidation:
+    def test_max_turns_rejects_zero(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(multiturn_max_turns=0)
+
+    def test_max_turns_rejects_twenty_one(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(multiturn_max_turns=21)
+
+    def test_max_turns_rejects_negative(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(multiturn_max_turns=-1)
+
+    def test_max_turns_accepts_boundary_one(self) -> None:
+        assert PromptfooSettings(multiturn_max_turns=1).multiturn_max_turns == 1
+
+    def test_max_turns_accepts_boundary_twenty(self) -> None:
+        assert PromptfooSettings(multiturn_max_turns=20).multiturn_max_turns == 20
+
+    def test_max_backtracks_rejects_zero(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(multiturn_max_backtracks=0)
+
+    def test_max_backtracks_rejects_twenty_one(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(multiturn_max_backtracks=21)
+
+    def test_max_backtracks_accepts_boundary_one(self) -> None:
+        assert PromptfooSettings(multiturn_max_backtracks=1).multiturn_max_backtracks == 1
+
+    def test_max_backtracks_accepts_boundary_twenty(self) -> None:
+        assert PromptfooSettings(multiturn_max_backtracks=20).multiturn_max_backtracks == 20
+
+    def test_strategies_rejects_unknown_id(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(multiturn_strategies=["crescendo", "unknown-strategy"])
+
+    def test_strategies_accepts_all_known(self) -> None:
+        settings = PromptfooSettings(
+            multiturn_strategies=list(KNOWN_MULTITURN_STRATEGIES)
+        )
+        assert set(settings.multiturn_strategies) == KNOWN_MULTITURN_STRATEGIES
+
+    def test_strategies_accepts_empty_list(self) -> None:
+        settings = PromptfooSettings(multiturn_strategies=[])
+        assert settings.multiturn_strategies == []
+
+
+class TestMultiturnEnvVars:
+    def test_enable_multiturn_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ENABLE_MULTITURN", "true")
+        assert PromptfooSettings().enable_multiturn is True
+
+    def test_multiturn_max_turns_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MULTITURN_MAX_TURNS", "10")
+        assert PromptfooSettings().multiturn_max_turns == 10
+
+    def test_multiturn_max_backtracks_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MULTITURN_MAX_BACKTRACKS", "8")
+        assert PromptfooSettings().multiturn_max_backtracks == 8
+
+    def test_multiturn_stateful_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MULTITURN_STATEFUL", "true")
+        assert PromptfooSettings().multiturn_stateful is True
+
+    def test_multiturn_strategies_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MULTITURN_STRATEGIES", '["crescendo","goat"]')
+        settings = PromptfooSettings()
+        assert settings.multiturn_strategies == ["crescendo", "goat"]
