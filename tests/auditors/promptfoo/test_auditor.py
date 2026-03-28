@@ -1182,6 +1182,19 @@ class TestApplyMultiturnOverrides:
         assert crescendo["config"]["stateful"] is True
         assert crescendo["config"]["continueAfterSuccess"] is False
 
+    def test_patches_crescendo_continue_after_success_true(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_continue_after_success=True,
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        crescendo = next(
+            s for s in result["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        assert crescendo["config"]["continueAfterSuccess"] is True
+
     def test_patches_goat_specific_fields(self) -> None:
         auditor = _make_auditor(
             _make_settings(enable_multiturn=True, multiturn_stateful=True)
@@ -1192,6 +1205,19 @@ class TestApplyMultiturnOverrides:
         )
         assert goat["config"]["stateful"] is True
         assert goat["config"]["continueAfterSuccess"] is False
+
+    def test_patches_goat_continue_after_success_true(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_continue_after_success=True,
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        goat = next(
+            s for s in result["redteam"]["strategies"] if s["id"] == "goat"
+        )
+        assert goat["config"]["continueAfterSuccess"] is True
 
     def test_hydra_has_only_max_turns(self) -> None:
         auditor = _make_auditor(

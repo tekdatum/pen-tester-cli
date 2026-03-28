@@ -242,6 +242,9 @@ class TestMultiturnDefaults:
     def test_multiturn_stateful_default(self) -> None:
         assert PromptfooSettings().multiturn_stateful is False
 
+    def test_multiturn_continue_after_success_default(self) -> None:
+        assert PromptfooSettings().multiturn_continue_after_success is False
+
     def test_multiturn_strategies_default(self) -> None:
         assert set(PromptfooSettings().multiturn_strategies) == KNOWN_MULTITURN_STRATEGIES
 
@@ -262,6 +265,10 @@ class TestMultiturnDirectInit:
     def test_set_multiturn_stateful(self) -> None:
         settings = PromptfooSettings(multiturn_stateful=True)
         assert settings.multiturn_stateful is True
+
+    def test_set_multiturn_continue_after_success(self) -> None:
+        settings = PromptfooSettings(multiturn_continue_after_success=True)
+        assert settings.multiturn_continue_after_success is True
 
     def test_set_multiturn_strategies_subset(self) -> None:
         settings = PromptfooSettings(multiturn_strategies=["crescendo", "goat"])
@@ -332,6 +339,10 @@ class TestMultiturnEnvVars:
     def test_multiturn_stateful_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MULTITURN_STATEFUL", "true")
         assert PromptfooSettings().multiturn_stateful is True
+
+    def test_multiturn_continue_after_success_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MULTITURN_CONTINUE_AFTER_SUCCESS", "true")
+        assert PromptfooSettings().multiturn_continue_after_success is True
 
     def test_multiturn_strategies_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MULTITURN_STRATEGIES", '["crescendo","goat"]')
