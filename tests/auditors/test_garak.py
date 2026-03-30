@@ -68,6 +68,7 @@ from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import clear_settings_cache  # noqa: E402
+from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 from pentester.enums.target_type import TargetType  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
@@ -353,7 +354,8 @@ class TestAudit:
                 auditor, "_init_scanner", return_value=scanner or self.mock_scanner
             ),
         ):
-            return auditor.audit()
+            results, _ = auditor.audit()
+            return results
 
     # orchestration ----------------------------------------------------------
 
@@ -629,7 +631,8 @@ class TestAuditLLM:
             patch.object(auditor, "_init_generator", return_value=self.mock_generator),
             patch.object(auditor, "_evaluate", return_value=score),
         ):
-            return auditor.audit()
+            results, _ = auditor.audit()
+            return results
 
     def test_calls_init_generator(self) -> None:
         auditor = _make_llm_auditor()
@@ -736,7 +739,7 @@ class TestAuditLLM:
             patch.object(auditor, "_evaluate", return_value=0.0),
             patch("pentester.auditors.garak.logger"),
         ):
-            results = auditor.audit()
+            results, _ = auditor.audit()
         assert len(results) == 1
         assert results[0].response == "ERROR"
         assert results[0].metadata == {"error": True}
@@ -755,3 +758,7 @@ class TestAuditLLM:
         probe = _make_probe("probes.dan.Dan1", [""])
         results = self._audit_with([probe])
         assert results == []
+
+
+def test_auditor_key_is_garak() -> None:
+    assert _make_auditor().auditor_key == AuditorKey.GARAK

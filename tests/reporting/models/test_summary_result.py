@@ -6,6 +6,16 @@ class TestSummaryResultDefaults:
         result = SummaryResult(total_probes=1, total_bypassed=0, success_rate=100.0)
         assert result.total_errors == 0
 
+    def test_average_duration_defaults_to_zero(self) -> None:
+        result = SummaryResult(total_probes=1, total_bypassed=0, success_rate=100.0)
+        assert result.average_duration == 0.0
+
+    def test_average_duration_can_be_set(self) -> None:
+        result = SummaryResult(
+            total_probes=1, total_bypassed=0, success_rate=100.0, average_duration=1.5
+        )
+        assert result.average_duration == 1.5
+
 
 class TestSummaryResultInstantiation:
     def test_all_fields_set_correctly(self) -> None:

@@ -1,6 +1,8 @@
 import pytest
 
+from pentester.auditors.models.audit_result import AuditResult
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.enums.auditor_key import AuditorKey
 from pentester.reporting.models.summary_result import SummaryResult
 from pentester.reporting.utils.summary import Summarizer
 
@@ -25,6 +27,12 @@ def _probe(
     )
 
 
+def _audit(*probes: ProbeResult, duration: float = 0.0) -> AuditResult:
+    return AuditResult(
+        auditor_key=AuditorKey.GARAK, duration=duration, results=list(probes)
+    )
+
+
 # --- summarize ---
 
 
@@ -34,52 +42,80 @@ def test_summarize_empty_returns_zero_result() -> None:
 
 
 def test_summarize_all_blocked() -> None:
-    data = [_probe(bypassed=False), _probe(bypassed=False)]
-    result = Summarizer.summarize(data)
+    ar = _audit(_probe(bypassed=False), _probe(bypassed=False))
+    result = Summarizer.summarize([ar])
     assert result.total_probes == 2
     assert result.total_bypassed == 0
     assert result.success_rate == 100.0
 
 
 def test_summarize_all_bypassed() -> None:
-    data = [_probe(bypassed=True), _probe(bypassed=True)]
-    result = Summarizer.summarize(data)
+    ar = _audit(_probe(bypassed=True), _probe(bypassed=True))
+    result = Summarizer.summarize([ar])
     assert result.total_probes == 2
     assert result.total_bypassed == 2
     assert result.success_rate == 0.0
 
 
 def test_summarize_mixed() -> None:
-    data = [_probe(bypassed=True), _probe(bypassed=False), _probe(bypassed=False)]
-    result = Summarizer.summarize(data)
+    ar = _audit(_probe(bypassed=True), _probe(bypassed=False), _probe(bypassed=False))
+    result = Summarizer.summarize([ar])
     assert result.total_probes == 3
     assert result.total_bypassed == 1
     assert result.success_rate == pytest.approx(66.67, abs=0.01)
 
 
 def test_summarize_returns_summary_result_instance() -> None:
-    assert isinstance(Summarizer.summarize([_probe()]), SummaryResult)
+    assert isinstance(Summarizer.summarize([_audit(_probe())]), SummaryResult)
+
+
+def test_summarize_average_duration_is_total_duration_over_total_probes() -> None:
+    ar_a = _audit(_probe(), _probe(), duration=4.0)
+    ar_b = _audit(_probe(), duration=2.0)
+    result = Summarizer.summarize([ar_a, ar_b])
+    # total_duration=6.0, total_probes=3 → average=2.0
+    assert result.average_duration == pytest.approx(2.0)
+
+
+def test_summarize_average_duration_is_zero_when_empty() -> None:
+    assert Summarizer.summarize([]).average_duration == 0.0
 
 
 # --- summarize_by_auditor ---
 
 
-def test_summarize_by_auditor_empty_returns_empty_dict() -> None:
-    assert Summarizer.summarize_by_auditor([]) == {}
+def test_summarize_by_auditor_empty_results_returns_zero_result() -> None:
+    ar = AuditResult(auditor_key=AuditorKey.GARAK, duration=0.0, results=[])
+    result = Summarizer.summarize_by_auditor(ar)
+    assert result == SummaryResult(total_probes=0, total_bypassed=0, success_rate=0.0)
 
 
-def test_summarize_by_auditor_groups_correctly() -> None:
-    data = [
-        _probe(auditor="garak", bypassed=True),
+def test_summarize_by_auditor_counts_probes() -> None:
+    ar = _audit(_probe(bypassed=True), _probe(bypassed=False), duration=0.0)
+    result = Summarizer.summarize_by_auditor(ar)
+    assert result.total_probes == 2
+    assert result.total_bypassed == 1
+
+
+def test_summarize_by_auditor_returns_summary_result() -> None:
+    ar = _audit(_probe(), duration=0.0)
+    assert isinstance(Summarizer.summarize_by_auditor(ar), SummaryResult)
+
+
+def test_summarize_by_auditor_average_duration_is_duration_over_probe_count() -> None:
+    ar = _audit(_probe(), _probe(), duration=6.0)
+    result = Summarizer.summarize_by_auditor(ar)
+    assert result.average_duration == pytest.approx(3.0)
+
+
+def test_summarize_by_auditor_counts_errors() -> None:
+    ar = _audit(
+        _probe(auditor="garak", metadata={"error": "HTTP 422"}),
         _probe(auditor="garak", bypassed=False),
-        _probe(auditor="pyrit", bypassed=False),
-    ]
-    result = Summarizer.summarize_by_auditor(data)
-    assert set(result.keys()) == {"garak", "pyrit"}
-    assert result["garak"].total_probes == 2
-    assert result["garak"].total_bypassed == 1
-    assert result["pyrit"].total_probes == 1
-    assert result["pyrit"].total_bypassed == 0
+        duration=0.0,
+    )
+    result = Summarizer.summarize_by_auditor(ar)
+    assert result.total_errors == 1
 
 
 # --- summarize_by_attack_category ---
@@ -164,45 +200,34 @@ def test_unique_auditors_single_auditor() -> None:
 
 
 def test_summary_counts_errors() -> None:
-    data = [
+    ar = _audit(
         _probe(bypassed=False),
         _probe(bypassed=True),
         _probe(metadata={"error": "HTTP 422"}),
         _probe(metadata={"error": "script not found"}),
-    ]
-    result = Summarizer.summarize(data)
+    )
+    result = Summarizer.summarize([ar])
     assert result.total_errors == 2
 
 
 def test_success_rate_excludes_errors_from_denominator() -> None:
-    data = [
+    ar = _audit(
         _probe(bypassed=False),
         _probe(bypassed=True),
         _probe(bypassed=True),
         _probe(metadata={"error": "HTTP 422"}),
         _probe(metadata={"error": "script not found"}),
-    ]
-    result = Summarizer.summarize(data)
+    )
+    result = Summarizer.summarize([ar])
     # valid=3 (5 total - 2 errors), bypassed=2 → success_rate = (3-2)/3 * 100 ≈ 33.33
     assert result.success_rate == pytest.approx(33.33, abs=0.01)
 
 
 def test_success_rate_is_zero_when_all_probes_errored() -> None:
-    data = [
+    ar = _audit(
         _probe(metadata={"error": "HTTP 422"}),
         _probe(metadata={"error": "HTTP 422"}),
         _probe(metadata={"error": "script not found"}),
-    ]
-    result = Summarizer.summarize(data)
+    )
+    result = Summarizer.summarize([ar])
     assert result.success_rate == 0.0
-
-
-def test_group_by_counts_errors_per_group() -> None:
-    data = [
-        _probe(auditor="garak", metadata={"error": "HTTP 422"}),
-        _probe(auditor="garak", bypassed=False),
-        _probe(auditor="pyrit", bypassed=False),
-    ]
-    result = Summarizer.summarize_by_auditor(data)
-    assert result["garak"].total_errors == 1
-    assert result["pyrit"].total_errors == 0

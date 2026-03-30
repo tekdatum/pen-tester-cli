@@ -89,6 +89,7 @@ from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
+from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
 
@@ -325,7 +326,8 @@ class TestLoadDatasets:
         with (
             patch.object(auditor, "_init_scanner", return_value=MagicMock()),
         ):
-            return auditor.audit()
+            results, _ = auditor.audit()
+            return results
 
     def test_uses_settings_dataset_names_when_set(self) -> None:
         self._run(PyritSettings(dataset_names=["xstest"]))
@@ -368,7 +370,7 @@ class TestLoadDatasets:
         scanner.scan.return_value = _make_scan_result()
         auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=2))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
-            results = auditor.audit()
+            results, _ = auditor.audit()
         assert len(results) == 2
 
     def test_no_limit_when_max_seeds_none(self) -> None:
@@ -381,7 +383,7 @@ class TestLoadDatasets:
         scanner.scan.return_value = _make_scan_result()
         auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=None))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
-            results = auditor.audit()
+            results, _ = auditor.audit()
         assert len(results) == 4
 
 
@@ -408,7 +410,8 @@ class TestAuditSemanticFence:
         with patch.object(
             auditor, "_init_scanner", return_value=scanner or self.mock_scanner
         ):
-            return auditor.audit()
+            results, _ = auditor.audit()
+            return results
 
     def test_returns_one_result_per_seed(self) -> None:
         assert len(self._audit_with([_make_seed(), _make_seed()])) == 2
@@ -496,7 +499,8 @@ class TestAuditLLM:
             patch.object(auditor, "_init_target", return_value=self.mock_target),
             patch.object(auditor, "_init_scorer", return_value=self.mock_scorer),
         ):
-            return auditor.audit()
+            results, _ = auditor.audit()
+            return results
 
     def test_returns_one_result_per_seed(self) -> None:
         assert len(self._audit_with([_make_seed(), _make_seed()])) == 2
@@ -702,3 +706,7 @@ class TestInitObjectiveTarget:
         with patch.object(auditor, "_init_target", return_value=mock_llm_target):
             result = auditor._init_objective_target()
         assert result is mock_llm_target
+
+
+def test_auditor_key_is_pyrit() -> None:
+    assert _make_auditor().auditor_key == AuditorKey.PYRIT

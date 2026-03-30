@@ -90,3 +90,19 @@ class TestFormattedPrompt:
     def test_double_quote_is_not_csv_escaped(self) -> None:
         r = _make_result(prompt='say "hello"')
         assert r.formatted_prompt == 'say "hello"'
+
+
+def test_duration_defaults_to_none() -> None:
+    assert _make_result().duration is None
+
+
+def test_duration_can_be_set() -> None:
+    assert _make_result(duration=1.23).duration == 1.23
+
+
+def test_formatted_duration_when_set() -> None:
+    assert _make_result(duration=1.234567).formatted_duration == "1.235s"
+
+
+def test_formatted_duration_when_none() -> None:
+    assert _make_result(duration=None).formatted_duration == "—"
