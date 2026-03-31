@@ -15,7 +15,25 @@ import pytest
 # Stub our auditor module so garak internals never load.
 # ---------------------------------------------------------------------------
 
-sys.modules.setdefault("pentester.auditors.garak", MagicMock())
+for _mod in (
+    "pentester.auditors.garak",
+    "pyrit",
+    "pyrit.datasets",
+    "pyrit.executor",
+    "pyrit.executor.attack",
+    "pyrit.executor.attack.core",
+    "pyrit.executor.attack.multi_turn",
+    "pyrit.memory",
+    "pyrit.models",
+    "pyrit.models.attack_result",
+    "pyrit.prompt_target",
+    "pyrit.score",
+    "pyrit.score.true_false",
+    "pyrit.score.true_false.self_ask_true_false_scorer",
+    "pyrit.setup",
+    "tqdm",
+):
+    sys.modules.setdefault(_mod, MagicMock())
 
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
@@ -107,30 +125,26 @@ class TestExecute:
 
 
 class TestRunAndReport:
-    def test_calls_audit_on_each_auditor(self) -> None:
+    def test_calls_audit_n_track_on_each_auditor(self) -> None:
         orch = Orchestrator(_make_settings())
         auditor_a = MagicMock()
-        auditor_a.audit.return_value = []
+        auditor_a.audit_n_track.return_value = MagicMock(results=[])
         auditor_b = MagicMock()
-        auditor_b.audit.return_value = []
+        auditor_b.audit_n_track.return_value = MagicMock(results=[])
         with patch.object(orch._reporting, "generate"):
             orch._run_and_report([auditor_a, auditor_b])
-            auditor_a.audit.assert_called_once()
-            auditor_b.audit.assert_called_once()
+            auditor_a.audit_n_track.assert_called_once()
+            auditor_b.audit_n_track.assert_called_once()
 
-    def test_concatenates_probe_results(self) -> None:
+    def test_passes_audit_results_to_generate(self) -> None:
         orch = Orchestrator(_make_settings())
-        result_a = _make_probe_result()
-        result_b = _make_probe_result()
         auditor_a = MagicMock()
-        auditor_a.audit.return_value = [result_a]
         auditor_b = MagicMock()
-        auditor_b.audit.return_value = [result_b]
         with patch.object(orch._reporting, "generate") as mock_generate:
             orch._run_and_report([auditor_a, auditor_b])
-            called_data = mock_generate.call_args.kwargs["data"]
-            assert result_a in called_data
-            assert result_b in called_data
+            called = mock_generate.call_args.kwargs["auditor_results"]
+            assert auditor_a.audit_n_track.return_value in called
+            assert auditor_b.audit_n_track.return_value in called
 
     def test_passes_output_dir_path_to_generate(self) -> None:
         orch = Orchestrator(_make_settings(output_dir_path="/tmp/out/"))
@@ -148,4 +162,44 @@ class TestRunAndReport:
         orch = Orchestrator(_make_settings())
         with patch.object(orch._reporting, "generate") as mock_generate:
             orch._run_and_report([])
-            assert mock_generate.call_args.kwargs["data"] == []
+            assert mock_generate.call_args.kwargs["auditor_results"] == []
+
+
+# ── track_time coverage ───────────────────────────────────────────────────────
+
+
+class TestExecuteTimer:
+    def test_execute_returns_tuple(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(
+                orch._auditor_factory, "get_available_auditors", return_value=[]
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            output = orch.execute()
+            assert isinstance(output, tuple)
+            assert len(output) == 2
+
+    def test_execute_first_element_is_none(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(
+                orch._auditor_factory, "get_available_auditors", return_value=[]
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            result, _ = orch.execute()
+            assert result is None
+
+    def test_execute_duration_is_non_negative(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(
+                orch._auditor_factory, "get_available_auditors", return_value=[]
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            _, duration = orch.execute()
+            assert isinstance(duration, float)
+            assert duration >= 0

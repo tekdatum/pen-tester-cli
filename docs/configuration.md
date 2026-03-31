@@ -16,6 +16,10 @@ All variables are prefixed with `PENTESTER_`.
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract value from response |
 | `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written |
 | `PENTESTER_REPORTING__GENERATOR_KEYS` | `str` | `pdf,csv,html,markdown` | Comma-separated list of report formats to generate |
+| `PENTESTER_GARAK__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Garak auditor. `None` means no limit. |
+| `PENTESTER_PYRIT__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Pyrit auditor. `None` means no limit. |
+| `PENTESTER_INSPECT__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Inspect AI auditor. `None` means no limit. |
+| `PENTESTER_PROMPTFOO__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Promptfoo auditor. `None` means no limit. |
 
 **`TargetType` values:**
 

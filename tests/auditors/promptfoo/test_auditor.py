@@ -16,6 +16,7 @@ from pentester.config.auditors.promptfoo_settings import (
     PromptfooSettings,
 )
 from pentester.config.settings import TargetType
+from pentester.enums.auditor_key import AuditorKey
 
 
 _FAKE_CONFIG: dict[str, Any] = {
@@ -407,7 +408,7 @@ class TestRunRedteamGenerateForConfigs:
         auditor = _make_auditor(_make_settings(replace_existing_file=False))
         auditor.runner = MagicMock()
 
-        # If replace is false and output exists, it should skip. Let's make test_1 exist.
+        # If replace is false and output exists, it should skip.
         (llm_dir / "test_1.yaml").write_text("existing output")
 
         auditor._run_redteam_generate_for_configs(configs_dir, llm_dir)
@@ -647,7 +648,7 @@ class TestCleanConfig:
         output.mkdir()
         (output / "test.yaml").write_text("old")
 
-        # For SEMANTIC_FENCE, clean_config always rewrites regardless of replace_existing_file
+        # For SEMANTIC_FENCE, clean_config rewrites regardless of replace_existing_file
         auditor_no_replace = _make_auditor(_make_settings(replace_existing_file=False))
         with (
             patch("builtins.open", mock_open(read_data="")),
@@ -764,7 +765,7 @@ class TestGenerateProbeResults:
         assert len(results) == 1
         res = results[0]
         assert isinstance(res, ProbeResult)
-        assert res.auditor == "PromptfooAuditor"
+        assert res.auditor == "promptfoo"
         assert res.attack_category == "jailbreak-templates"
         assert res.attack_type == "competitors"
         assert res.prompt == "my_prompt"
@@ -959,7 +960,7 @@ class TestAudit:
                 auditor, "_generate_probe_results", return_value=expected_probes
             ) as mock_gen_probes,
         ):
-            result = auditor.audit()
+            result, _ = auditor.audit()
 
         mock_gen.assert_called_once()
         mock_clean.assert_called_once()
@@ -986,7 +987,8 @@ class TestAudit:
             ),
             patch.object(auditor, "_generate_probe_results", return_value=[]),
         ):
-            assert auditor.audit() == []
+            result, _ = auditor.audit()
+            assert result == []
 
     def test_builds_dataframe_and_logs_errors_when_all_evals_failed(self) -> None:
         auditor = _make_auditor()
@@ -1020,7 +1022,7 @@ class TestAudit:
             ) as mock_gen_probes,
             patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
         ):
-            result = auditor.audit()
+            result, _ = auditor.audit()
 
         assert mock_build.call_count == 2
         assert mock_gen_probes.call_count == 2
@@ -1058,7 +1060,7 @@ class TestAudit:
             ),
             patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger,
         ):
-            result = auditor.audit()
+            result, _ = auditor.audit()
 
         mock_logger.error.assert_not_called()
         assert result == [non_error_probe]
@@ -1090,7 +1092,7 @@ class TestAudit:
                 auditor, "_generate_probe_results", return_value=expected_probes
             ),
         ):
-            result = auditor.audit()
+            result, _ = auditor.audit()
 
         mock_build.assert_called_once()
         assert result is expected_probes
@@ -1805,3 +1807,5 @@ class TestGenerateProbeResultsMixed:
 
         conv_ids = {r.metadata["conversation_id"] for r in results}
         assert len(conv_ids) == 2  # two distinct conversation IDs
+def test_auditor_key_is_promptfoo() -> None:
+    assert _make_auditor().auditor_key == AuditorKey.PROMPTFOO

@@ -56,6 +56,18 @@ def test_scan_propagates_bypassed_false() -> None:
     assert Scanner(handler).scan(PROMPT).bypassed is False
 
 
+def test_scan_duration_is_set() -> None:
+    handler = MagicMock(spec=RequestHandler)
+    handler.request.return_value = TargetResponse(response="ok", bypassed=None)
+    assert Scanner(handler).scan(PROMPT).duration is not None
+
+
+def test_scan_duration_is_non_negative() -> None:
+    handler = MagicMock(spec=RequestHandler)
+    handler.request.return_value = TargetResponse(response="ok", bypassed=None)
+    assert Scanner(handler).scan(PROMPT).duration >= 0
+
+
 # ── Scanner.from_curl ─────────────────────────────────────────────────────────
 
 

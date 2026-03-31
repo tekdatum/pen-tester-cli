@@ -79,13 +79,17 @@ class TestDetailsTemplate:
     def test_blocked_prompt_appears_in_blocked_section(self) -> None:
         blocked = _probe(bypassed=False, prompt="block me")
         html = HtmlGenerator().generate_detail_report([blocked], {}, {}).decode()
-        blocked_section = html.split("<h2>Blocked Prompts</h2>")[1].split("<h2>Error Prompts</h2>")[0]
+        blocked_section = html.split("<h2>Blocked Prompts</h2>")[1].split(
+            "<h2>Error Prompts</h2>"
+        )[0]
         assert "block me" in blocked_section
 
     def test_bypassed_prompt_not_in_blocked_section(self) -> None:
         bypassed = _probe(bypassed=True, prompt="bypass only")
         html = HtmlGenerator().generate_detail_report([bypassed], {}, {}).decode()
-        blocked_section = html.split("<h2>Blocked Prompts</h2>")[1].split("<h2>Error Prompts</h2>")[0]
+        blocked_section = html.split("<h2>Blocked Prompts</h2>")[1].split(
+            "<h2>Error Prompts</h2>"
+        )[0]
         assert "bypass only" not in blocked_section
 
     def test_blocked_prompt_not_in_bypassed_section(self) -> None:
@@ -104,13 +108,17 @@ class TestDetailsTemplate:
     def test_error_prompt_not_in_bypassed_section(self) -> None:
         error = _error_probe(prompt="error only")
         html = HtmlGenerator().generate_detail_report([error], {}, {}).decode()
-        bypassed_section = html.split("<h2>Bypassed Prompts</h2>")[1].split("<h2>Blocked Prompts</h2>")[0]
+        bypassed_section = html.split("<h2>Bypassed Prompts</h2>")[1].split(
+            "<h2>Blocked Prompts</h2>"
+        )[0]
         assert "error only" not in bypassed_section
 
     def test_error_prompt_not_in_blocked_section(self) -> None:
         error = _error_probe(prompt="error only")
         html = HtmlGenerator().generate_detail_report([error], {}, {}).decode()
-        blocked_section = html.split("<h2>Blocked Prompts</h2>")[1].split("<h2>Error Prompts</h2>")[0]
+        blocked_section = html.split("<h2>Blocked Prompts</h2>")[1].split(
+            "<h2>Error Prompts</h2>"
+        )[0]
         assert "error only" not in blocked_section
 
     def test_no_full_results_section(self) -> None:
@@ -120,10 +128,18 @@ class TestDetailsTemplate:
         assert "Results by Attack Type" not in html
 
     def test_unicode_char_in_prompt_is_escaped(self) -> None:
-        html = HtmlGenerator().generate_detail_report([_probe(prompt="caf\u00e9")], {}, {}).decode()
+        html = (
+            HtmlGenerator()
+            .generate_detail_report([_probe(prompt="caf\u00e9")], {}, {})
+            .decode()
+        )
         assert "\\xe9" in html
 
     def test_newline_in_prompt_is_escaped(self) -> None:
-        html = HtmlGenerator().generate_detail_report([_probe(prompt="line1\nline2")], {}, {}).decode()
+        html = (
+            HtmlGenerator()
+            .generate_detail_report([_probe(prompt="line1\nline2")], {}, {})
+            .decode()
+        )
         assert "\\n" in html
         assert "line1\nline2" not in html
