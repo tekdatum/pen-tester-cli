@@ -7,8 +7,6 @@ import sys
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 # Pull CORRECT / INCORRECT from the already-registered stubs.
 _scorer_mod = sys.modules["inspect_ai.scorer"]
 _CORRECT = _scorer_mod.CORRECT

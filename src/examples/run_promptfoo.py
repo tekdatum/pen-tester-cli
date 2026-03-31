@@ -59,16 +59,16 @@ auditor = PromptfooAuditor(
     settings=settings.promptfoo, scanner=scanner, target_type=settings.target_type
 )
 
-results = auditor.audit()
+audit_result = auditor.audit_n_track()
 # auditor.results_df = auditor.collector.build_dataframe()
 # results = auditor._generate_probe_results()
 
 reporting = Reporting()
 generator_keys = [k.strip() for k in settings.reporting.generator_keys.split(",")]
 reporting.generate(
-    data=results,
+    auditor_results=[audit_result],
     output_dir_path=settings.reporting.output_dir_path,
     generator_keys=generator_keys,
 )
 
-print(f"Audit complete with {len(results)} results")
+print(f"Audit complete with {len(audit_result.results)} results")

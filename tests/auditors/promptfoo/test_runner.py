@@ -161,7 +161,8 @@ class TestRunAll:
         runner = _make_runner()
         files = [Path("/test/a.yaml"), Path("/test/b.yaml")]
 
-        # Mocking side_effect allows us to return different results per file to ensure data maps correctly
+        # Mocking side_effect allows us to return different results per file
+        # This is done to ensure data maps correctly
         mock_returns = [(True, "a.yaml", "ok"), (False, "b.yaml", "error")]
         with patch.object(runner, "run_eval", side_effect=mock_returns) as mock_eval:
             results = runner.run_all(files)

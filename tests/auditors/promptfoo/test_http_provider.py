@@ -55,7 +55,7 @@ class TestTransformConfig:
         assert provider.response_parser == "json.choices[0].text"
 
     def test_ignores_invalid_body_structures(self) -> None:
-        # If 'body' isn't a dict with a 'text' key, it should safely fall back to the default
+        # If 'body' isn't a dict with a 'text' key, it should fall back to the default
         p1 = PromptfooHTTPProvider(url="http://example.com", body={"other": "value"})
         p2 = PromptfooHTTPProvider(url="http://example.com", body="raw string")
         p3 = PromptfooHTTPProvider(url="http://example.com", body=123)

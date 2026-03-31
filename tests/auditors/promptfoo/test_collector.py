@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from pentester.auditors.promptfoo.collector import PromptfooResultCollector
 
@@ -221,19 +220,19 @@ class TestExtractRows:
         assert row["provider_url"] == "http://my-api.com"
         assert row["prompt"] == "my prompt"
         assert row["input"] == "user input"
-        assert row["valid"] == True
+        assert row["valid"]
         assert row["reason_code"] == "xss"
         assert row["duration"] == 3.14
         assert row["accept_score"] == 0.85
         assert row["reject_score"] == 0.15
         assert row["latency_ms"] == 500
         assert row["http_status"] == 201
-        assert row["cached"] == True
+        assert row["cached"]
         assert isinstance(row["api_response"], dict)
         assert row["source_file"] == "test.jsonl"
         assert row["strategy_id"] == "jailbreak-templates"
         assert row["plugin_id"] == "competitors"
-        assert row["success"] == True
+        assert row["success"]
         assert row["grading_score"] == 1.0
         assert row["grading_reason"] == "All assertions passed"
 

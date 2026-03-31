@@ -198,6 +198,17 @@ class TestMaxTestFiles:
             PromptfooSettings(max_test_files=-1)
 
 
+class TestMaxAttacks:
+    def test_default_is_none(self) -> None:
+        assert PromptfooSettings().max_attacks is None
+
+    def test_accepts_positive_value(self) -> None:
+        assert PromptfooSettings(max_attacks=100).max_attacks == 100
+
+    def test_accepts_none_explicitly(self) -> None:
+        assert PromptfooSettings(max_attacks=None).max_attacks is None
+
+
 class TestEnvVarOverrides:
     def test_config_path_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CONFIG_PATH", "/env/path")
@@ -239,3 +250,8 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("OUTPUT_PATH", "/env/output")
         settings = PromptfooSettings()
         assert settings.output_path == "/env/output"
+
+    def test_max_attacks_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MAX_ATTACKS", "300")
+        settings = PromptfooSettings()
+        assert settings.max_attacks == 300
