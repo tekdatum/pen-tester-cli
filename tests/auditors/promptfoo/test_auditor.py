@@ -1148,9 +1148,7 @@ class TestApplyMultiturnOverrides:
 
     def test_keeps_all_single_turn_strategies(self) -> None:
         auditor = _make_auditor(
-            _make_settings(
-                enable_multiturn=True, multiturn_strategies=["crescendo"]
-            )
+            _make_settings(enable_multiturn=True, multiturn_strategies=["crescendo"])
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         ids = [s["id"] for s in result["redteam"]["strategies"]]
@@ -1200,9 +1198,7 @@ class TestApplyMultiturnOverrides:
             _make_settings(enable_multiturn=True, multiturn_stateful=True)
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
-        goat = next(
-            s for s in result["redteam"]["strategies"] if s["id"] == "goat"
-        )
+        goat = next(s for s in result["redteam"]["strategies"] if s["id"] == "goat")
         assert goat["config"]["stateful"] is True
         assert goat["config"]["continueAfterSuccess"] is False
 
@@ -1214,9 +1210,7 @@ class TestApplyMultiturnOverrides:
             )
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
-        goat = next(
-            s for s in result["redteam"]["strategies"] if s["id"] == "goat"
-        )
+        goat = next(s for s in result["redteam"]["strategies"] if s["id"] == "goat")
         assert goat["config"]["continueAfterSuccess"] is True
 
     def test_hydra_has_only_max_turns(self) -> None:
@@ -1225,8 +1219,7 @@ class TestApplyMultiturnOverrides:
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         hydra = next(
-            s for s in result["redteam"]["strategies"]
-            if s["id"] == "jailbreak:hydra"
+            s for s in result["redteam"]["strategies"] if s["id"] == "jailbreak:hydra"
         )
         assert set(hydra["config"].keys()) == {"maxTurns"}
 
@@ -1236,9 +1229,7 @@ class TestApplyMultiturnOverrides:
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         mu = next(
-            s
-            for s in result["redteam"]["strategies"]
-            if s["id"] == "mischievous-user"
+            s for s in result["redteam"]["strategies"] if s["id"] == "mischievous-user"
         )
         assert mu["config"]["stateful"] is True
         assert "continueAfterSuccess" not in mu["config"]
@@ -1276,9 +1267,7 @@ class TestWritePluginConfigsMultiturn:
         strategy_ids = [s["id"] for s in mt_config["redteam"]["strategies"]]
         assert "crescendo" in strategy_ids
 
-    def test_single_turn_file_has_no_multiturn_strategies(
-        self, tmp_path: Path
-    ) -> None:
+    def test_single_turn_file_has_no_multiturn_strategies(self, tmp_path: Path) -> None:
         auditor = _make_auditor(
             _make_settings(enable_multiturn=True), target_type=TargetType.LLM
         )
@@ -1524,3 +1513,295 @@ class TestGenerateProbeResultsMultiturn:
         )
         results = auditor._generate_probe_results()
         assert results[0].metadata["is_multiturn"] is False
+
+
+# ---------------------------------------------------------------------------
+# Multiturn Explosion Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_multiturn_messages(num_turns: int = 3) -> list[dict[str, str]]:
+    """Create alternating user/assistant message pairs."""
+    messages = []
+    for i in range(1, num_turns + 1):
+        messages.append({"role": "user", "content": f"user_msg_{i}"})
+        messages.append({"role": "assistant", "content": f"assistant_resp_{i}"})
+    return messages
+
+
+def _make_multiturn_row(
+    num_turns: int = 3,
+    successful_turns: list[int] | None = None,
+    grader_score: float = 0.0,
+    grader_reason: str = "attack succeeded",
+    grader_pass: bool = False,
+    **overrides: object,
+) -> dict[str, Any]:
+    """Build a dict representing a multiturn DataFrame row."""
+    attacks = [
+        {"turn": t, "prompt": f"user_msg_{t}", "response": f"assistant_resp_{t}"}
+        for t in (successful_turns or [])
+    ]
+    row: dict[str, Any] = {
+        "strategy_id": "crescendo",
+        "plugin_id": "competitors",
+        "prompt": f"user_msg_{num_turns}",
+        "api_response": f"assistant_resp_{num_turns}",
+        "success": False,
+        "error": None,
+        "grading_score": 1.0,
+        "accept_score": None,
+        "http_status": 201,
+        "duration": 1.5,
+        "latency_ms": 100,
+        "cached": False,
+        "grading_reason": None,
+        "multiturn_messages": _make_multiturn_messages(num_turns),
+        "successful_attacks": attacks,
+        "stored_grader_result": {
+            "score": grader_score,
+            "reason": grader_reason,
+            "pass": grader_pass,
+        },
+    }
+    row.update(overrides)
+    return row
+
+
+class TestIsMultiturnRow:
+    def test_returns_true_when_multiturn_messages_is_nonempty_list(self) -> None:
+        row = pd.Series(
+            {"multiturn_messages": [{"role": "user"}, {"role": "assistant"}]}
+        )
+        assert PromptfooAuditor._is_multiturn_row(row) is True
+
+    def test_returns_false_when_multiturn_messages_is_none(self) -> None:
+        row = pd.Series({"multiturn_messages": None})
+        assert PromptfooAuditor._is_multiturn_row(row) is False
+
+    def test_returns_false_when_multiturn_messages_is_empty_list(self) -> None:
+        row = pd.Series({"multiturn_messages": []})
+        assert PromptfooAuditor._is_multiturn_row(row) is False
+
+    def test_returns_false_when_column_missing(self) -> None:
+        row = pd.Series({"other": "value"})
+        assert PromptfooAuditor._is_multiturn_row(row) is False
+
+    def test_returns_false_when_only_one_message(self) -> None:
+        row = pd.Series({"multiturn_messages": [{"role": "user"}]})
+        assert PromptfooAuditor._is_multiturn_row(row) is False
+
+
+class TestBuildSuccessfulTurnsSet:
+    def test_returns_set_of_turn_numbers(self) -> None:
+        attacks = [{"turn": 2, "prompt": "p"}, {"turn": 5, "prompt": "p"}]
+        assert PromptfooAuditor._build_successful_turns_set(attacks) == {2, 5}
+
+    def test_returns_empty_set_for_none(self) -> None:
+        assert PromptfooAuditor._build_successful_turns_set(None) == set()
+
+    def test_returns_empty_set_for_empty_list(self) -> None:
+        assert PromptfooAuditor._build_successful_turns_set([]) == set()
+
+    def test_skips_entries_without_turn_key(self) -> None:
+        attacks = [{"turn": 3}, {"prompt": "no turn key"}]
+        assert PromptfooAuditor._build_successful_turns_set(attacks) == {3}
+
+
+class TestExplodeMultiturnRow:
+    def test_explodes_into_correct_number_of_probes(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert len(results) == 3
+
+    def test_prompt_and_response_per_turn(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=2))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].prompt == "user_msg_1"
+        assert results[0].response == "assistant_resp_1"
+        assert results[1].prompt == "user_msg_2"
+        assert results[1].response == "assistant_resp_2"
+
+    def test_bypassed_only_for_successful_attack_turns(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[2]))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].bypassed is False
+        assert results[1].bypassed is True
+        assert results[2].bypassed is False
+
+    def test_bypassed_turn_score_is_zero(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[2]))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].score == 1.0
+        assert results[1].score == 0.0  # bypassed
+        assert results[2].score == 1.0
+
+    def test_blocked_turn_score_is_one(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=2, successful_turns=[1]))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].score == 0.0  # bypassed
+        assert results[1].score == 1.0  # blocked
+
+    def test_grading_reason_for_bypassed_turns_only(self) -> None:
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=2, successful_turns=[2], grader_reason="defense failed"
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].metadata["grading_reason"] is None
+        assert results[1].metadata["grading_reason"] == "defense failed"
+
+    def test_conversation_id_shared_across_turns(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-abc")
+        for r in results:
+            assert r.metadata["conversation_id"] == "conv-abc"
+
+    def test_turn_number_is_one_indexed(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert [r.metadata["turn_number"] for r in results] == [1, 2, 3]
+
+    def test_is_multiturn_true_for_all_turns(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=2))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        for r in results:
+            assert r.metadata["is_multiturn"] is True
+
+    def test_attack_category_from_strategy_id(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=1, strategy_id="goat"))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].attack_category == "goat"
+
+    def test_attack_type_from_plugin_id(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=1, plugin_id="harmful:hate"))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].attack_type == "harmful:hate"
+
+    def test_odd_message_count_ignores_trailing_user_message(self) -> None:
+        messages = _make_multiturn_messages(2)
+        messages.append({"role": "user", "content": "trailing"})
+        row_data = _make_multiturn_row(num_turns=2)
+        row_data["multiturn_messages"] = messages
+        row = pd.Series(row_data)
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert len(results) == 2
+
+    def test_empty_successful_attacks_means_no_bypasses(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[]))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert all(r.bypassed is False for r in results)
+        assert all(r.score == 1.0 for r in results)
+
+    def test_metadata_includes_row_level_fields(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=1))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        m = results[0].metadata
+        assert m["http_status"] == 201
+        assert m["duration"] == 1.5
+        assert m["latency_ms"] == 100
+        assert m["cached"] is False
+        assert m["error"] is None
+
+    def test_stored_grader_result_none_handled(self) -> None:
+        row_data = _make_multiturn_row(num_turns=1, successful_turns=[1])
+        row_data["stored_grader_result"] = None
+        row = pd.Series(row_data)
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].bypassed is True
+        assert results[0].score == 0.0
+        assert results[0].metadata["grading_reason"] is None
+
+    def test_conversation_bypassed_true_when_grader_fails(self) -> None:
+        """conversation_bypassed is True when storedGraderResult.pass is
+        false, meaning the overall conversation was compromised."""
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=2,
+                successful_turns=[1],
+                grader_pass=False,
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert all(r.metadata["conversation_bypassed"] is True for r in results)
+
+    def test_conversation_bypassed_false_when_grader_passes(self) -> None:
+        """conversation_bypassed is False when storedGraderResult.pass is
+        true, even if there are intermediate successful attacks."""
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=3,
+                successful_turns=[2],
+                grader_pass=True,
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert all(r.metadata["conversation_bypassed"] is False for r in results)
+
+    def test_bypassed_turns_independent_of_grader_pass(self) -> None:
+        """Turns in successfulAttacks are bypassed regardless of the
+        conversation-level grader outcome."""
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=3,
+                successful_turns=[2],
+                grader_pass=True,
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        assert results[0].bypassed is False
+        assert results[1].bypassed is True
+        assert results[2].bypassed is False
+        assert results[0].score == 1.0
+        assert results[1].score == 0.0
+        assert results[2].score == 1.0
+
+
+class TestGenerateProbeResultsMixed:
+    def _make_single_turn_row(self) -> dict[str, Any]:
+        return {
+            "strategy_id": "basic",
+            "plugin_id": "harmful:hate",
+            "prompt": "single prompt",
+            "api_response": {"data": "resp"},
+            "success": True,
+            "error": None,
+            "grading_score": 1.0,
+            "accept_score": 0.9,
+            "http_status": 200,
+            "duration": 0.5,
+            "latency_ms": 50,
+            "cached": False,
+            "grading_reason": "passed",
+            "multiturn_messages": None,
+            "successful_attacks": None,
+            "stored_grader_result": None,
+        }
+
+    def test_mixed_single_and_multiturn_rows(self) -> None:
+        auditor = _make_auditor()
+        single = self._make_single_turn_row()
+        multi = _make_multiturn_row(num_turns=3, successful_turns=[2])
+        auditor.results_df = pd.DataFrame([single, multi])
+
+        results = auditor._generate_probe_results()
+
+        # 1 single-turn + 3 exploded turns = 4
+        assert len(results) == 4
+        assert results[0].metadata.get("conversation_id") is None
+        assert results[0].metadata["is_multiturn"] is False
+        assert results[1].metadata["is_multiturn"] is True
+        assert results[1].metadata["turn_number"] == 1
+        assert results[3].metadata["turn_number"] == 3
+
+    def test_multiturn_conversation_ids_are_unique_per_row(self) -> None:
+        auditor = _make_auditor()
+        multi1 = _make_multiturn_row(num_turns=2)
+        multi2 = _make_multiturn_row(num_turns=2)
+        auditor.results_df = pd.DataFrame([multi1, multi2])
+
+        results = auditor._generate_probe_results()
+
+        conv_ids = {r.metadata["conversation_id"] for r in results}
+        assert len(conv_ids) == 2  # two distinct conversation IDs
