@@ -85,16 +85,17 @@ def main() -> None:
     settings.promptfoo.replace_existing_file = False
     settings.promptfoo.files_parallel = 5
     settings.promptfoo.internal_concurrency = 4
-    settings.promptfoo.max_tests = 500
+    settings.promptfoo.max_tests = 200
     settings.promptfoo.plugins_per_file = 1
     settings.promptfoo.max_test_files = 1
     settings.promptfoo.output_path = "./output/promptfoo"
     # multiturn
     settings.promptfoo.enable_multiturn = True
-    settings.promptfoo.multiturn_max_turns = 5
+    settings.promptfoo.multiturn_max_turns = 10
     settings.promptfoo.multiturn_stateful = True
+    settings.promptfoo.multiturn_continue_after_success = True
     # settings.promptfoo.multiturn_strategies = ["crescendo", "goat"]
-    settings.target_type = TargetType.SEMANTIC_FENCE
+    settings.target_type = TargetType.LLM
 
     orchestrator = Orchestrator(settings)
     orchestrator.execute_auditors(settings.auditors)
