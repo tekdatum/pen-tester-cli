@@ -25,6 +25,8 @@ import pytest
 _pyrit_mod = MagicMock(name="pyrit")
 _pyrit_datasets_mod = MagicMock(name="pyrit.datasets")
 _pyrit_setup_mod = MagicMock(name="pyrit.setup")
+
+
 class _FakePromptChatTarget:
     def __init__(self, *args: object, **kwargs: object) -> None:
         pass
@@ -38,7 +40,9 @@ _pyrit_prompt_target_mod.OpenAIChatTarget = MagicMock(name="OpenAIChatTarget")
 _pyrit_prompt_target_mod.PromptChatTarget = _FakePromptChatTarget
 _pyrit_score_mod = MagicMock(name="pyrit.score")
 _pyrit_score_tf_mod = MagicMock(name="pyrit.score.true_false")
-_pyrit_score_tf_scorer_mod = MagicMock(name="pyrit.score.true_false.self_ask_true_false_scorer")
+_pyrit_score_tf_scorer_mod = MagicMock(
+    name="pyrit.score.true_false.self_ask_true_false_scorer"
+)
 _pyrit_models_mod = MagicMock(name="pyrit.models")
 _tqdm_mod = MagicMock(name="tqdm")
 _tqdm_mod.tqdm = lambda iterable, **_kwargs: iterable
@@ -53,7 +57,10 @@ for _name, _stub in [
     ("pyrit.executor", MagicMock(name="pyrit.executor")),
     ("pyrit.executor.attack", MagicMock(name="pyrit.executor.attack")),
     ("pyrit.executor.attack.core", MagicMock(name="pyrit.executor.attack.core")),
-    ("pyrit.executor.attack.multi_turn", MagicMock(name="pyrit.executor.attack.multi_turn")),
+    (
+        "pyrit.executor.attack.multi_turn",
+        MagicMock(name="pyrit.executor.attack.multi_turn"),
+    ),
     ("pyrit.memory", MagicMock(name="pyrit.memory")),
     ("pyrit.setup", _pyrit_setup_mod),
     ("pyrit.prompt_target", _pyrit_prompt_target_mod),
@@ -71,7 +78,9 @@ _pyrit_datasets_mod = sys.modules["pyrit.datasets"]
 _pyrit_setup_mod = sys.modules["pyrit.setup"]
 _pyrit_prompt_target_mod = sys.modules["pyrit.prompt_target"]
 _pyrit_score_mod = sys.modules["pyrit.score"]
-_pyrit_score_tf_scorer_mod = sys.modules["pyrit.score.true_false.self_ask_true_false_scorer"]
+_pyrit_score_tf_scorer_mod = sys.modules[
+    "pyrit.score.true_false.self_ask_true_false_scorer"
+]
 _pyrit_models_mod = sys.modules["pyrit.models"]
 
 from pentester.auditors.pyrit.auditor import PyritAuditor as PyritProbe  # noqa: E402
@@ -88,6 +97,7 @@ def reset_cache() -> None:  # type: ignore[return]
     clear_settings_cache()
     yield
     clear_settings_cache()
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -113,7 +123,9 @@ def _make_llm_auditor(
     return auditor
 
 
-def _make_seed(value: str = "inject prompt", harm_categories: list[str] | None = None) -> MagicMock:
+def _make_seed(
+    value: str = "inject prompt", harm_categories: list[str] | None = None
+) -> MagicMock:
     seed = MagicMock()
     seed.value = value
     seed.harm_categories = harm_categories or ["violence"]
@@ -162,17 +174,27 @@ class TestInitTarget:
         _pyrit_prompt_target_mod.OpenAIChatTarget.reset_mock()
 
     def test_openai_passes_openai_endpoint(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))._init_target()
+        _make_auditor(
+            llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI)
+        )._init_target()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
-            model_name="gpt-4o", endpoint="https://api.openai.com/v1", is_json_supported=True
+            model_name="gpt-4o",
+            endpoint="https://api.openai.com/v1",
+            is_json_supported=True,
         )
 
     def test_openai_passes_endpoint(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))._init_target()
+        _make_auditor(
+            llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI)
+        )._init_target()
         assert "endpoint" in _pyrit_prompt_target_mod.OpenAIChatTarget.call_args.kwargs
 
     def test_anthropic_passes_anthropic_endpoint(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC))._init_target()
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="claude-3-5-sonnet", provider=LLMProvider.ANTHROPIC
+            )
+        )._init_target()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
             model_name="claude-3-5-sonnet",
             endpoint="https://api.anthropic.com/v1",
@@ -180,7 +202,11 @@ class TestInitTarget:
         )
 
     def test_gemini_passes_gemini_endpoint(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="gemini-1.5-pro", provider=LLMProvider.GEMINI))._init_target()
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="gemini-1.5-pro", provider=LLMProvider.GEMINI
+            )
+        )._init_target()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
             model_name="gemini-1.5-pro",
             endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -206,11 +232,17 @@ class TestInitScorer:
     def test_creates_scorer_target_with_llm_model(self) -> None:
         _make_auditor(llm_settings=LLMSettings(model="gpt-4o"))._init_scorer()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
-            model_name="gpt-4o", endpoint="https://api.openai.com/v1", is_json_supported=True
+            model_name="gpt-4o",
+            endpoint="https://api.openai.com/v1",
+            is_json_supported=True,
         )
 
     def test_scorer_passes_anthropic_endpoint_when_provider_anthropic(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="claude-3-5-haiku", provider=LLMProvider.ANTHROPIC))._init_scorer()
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="claude-3-5-haiku", provider=LLMProvider.ANTHROPIC
+            )
+        )._init_scorer()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
             model_name="claude-3-5-haiku",
             endpoint="https://api.anthropic.com/v1",
@@ -218,7 +250,11 @@ class TestInitScorer:
         )
 
     def test_scorer_passes_gemini_endpoint_when_provider_gemini(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="gemini-1.5-flash", provider=LLMProvider.GEMINI))._init_scorer()
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="gemini-1.5-flash", provider=LLMProvider.GEMINI
+            )
+        )._init_scorer()
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
             model_name="gemini-1.5-flash",
             endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -226,12 +262,18 @@ class TestInitScorer:
         )
 
     def test_anthropic_scorer_disables_json_response(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="claude-3-5-haiku", provider=LLMProvider.ANTHROPIC))._init_scorer()
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="claude-3-5-haiku", provider=LLMProvider.ANTHROPIC
+            )
+        )._init_scorer()
         call_kwargs = _pyrit_prompt_target_mod.OpenAIChatTarget.call_args.kwargs
         assert call_kwargs["is_json_supported"] is False
 
     def test_non_anthropic_scorer_keeps_json_response_enabled(self) -> None:
-        _make_auditor(llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))._init_scorer()
+        _make_auditor(
+            llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI)
+        )._init_scorer()
         call_kwargs = _pyrit_prompt_target_mod.OpenAIChatTarget.call_args.kwargs
         assert call_kwargs["is_json_supported"] is True
 
@@ -273,7 +315,9 @@ class TestLoadDatasets:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
         _pyrit_setup_mod.initialize_pyrit_async.reset_mock()
-        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(return_value=[])
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = []
 
     def _run(self, settings: PyritSettings) -> list[ProbeResult]:
@@ -290,13 +334,23 @@ class TestLoadDatasets:
         )
 
     def test_uses_all_dataset_names_when_settings_empty(self) -> None:
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = ["a", "b"]
-        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(return_value=[])
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = [
+            "a",
+            "b",
+        ]
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[]
+        )
         self._run(PyritSettings(dataset_names=[]))
-        assert _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async.call_count == 2
+        assert (
+            _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async.call_count == 2
+        )
 
     def test_skips_failed_dataset_and_logs_warning(self) -> None:
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = ["bad", "good"]
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = [
+            "bad",
+            "good",
+        ]
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             side_effect=[RuntimeError("gated"), []]
         )
@@ -343,13 +397,17 @@ class TestAuditSemanticFence:
         self.mock_scanner = MagicMock()
         self.mock_scanner.scan.return_value = _make_scan_result()
 
-    def _audit_with(self, seeds: list, scanner: MagicMock | None = None) -> list[ProbeResult]:
+    def _audit_with(
+        self, seeds: list, scanner: MagicMock | None = None
+    ) -> list[ProbeResult]:
         dataset = _make_dataset(seeds=seeds)
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[dataset]
         )
         auditor = _make_auditor(PyritSettings(dataset_names=["x"]))
-        with patch.object(auditor, "_init_scanner", return_value=scanner or self.mock_scanner):
+        with patch.object(
+            auditor, "_init_scanner", return_value=scanner or self.mock_scanner
+        ):
             return auditor.audit()
 
     def test_returns_one_result_per_seed(self) -> None:
@@ -418,7 +476,9 @@ class TestAuditLLM:
         self.mock_scorer = MagicMock()
 
         self.mock_response = _make_llm_response("LLM output")
-        self.mock_target.send_prompt_async = AsyncMock(return_value=[self.mock_response])
+        self.mock_target.send_prompt_async = AsyncMock(
+            return_value=[self.mock_response]
+        )
 
         self.mock_score = _make_score(True)
         self.mock_scorer.score_async = AsyncMock(return_value=[self.mock_score])
@@ -517,7 +577,9 @@ class TestAuditLLM:
             llm_settings=LLMSettings(model="gpt-4o"),
         )
         with (
-            patch.object(auditor, "_init_target", return_value=self.mock_target) as m_target,
+            patch.object(
+                auditor, "_init_target", return_value=self.mock_target
+            ) as m_target,
             patch.object(auditor, "_init_scorer", return_value=self.mock_scorer),
         ):
             auditor.audit()
@@ -534,7 +596,9 @@ class TestAuditLLM:
         )
         with (
             patch.object(auditor, "_init_target", return_value=self.mock_target),
-            patch.object(auditor, "_init_scorer", return_value=self.mock_scorer) as m_scorer,
+            patch.object(
+                auditor, "_init_scorer", return_value=self.mock_scorer
+            ) as m_scorer,
         ):
             auditor.audit()
         m_scorer.assert_called_once()
@@ -610,7 +674,6 @@ class TestAuditMultiturn:
         )
         strategies_used = {c.kwargs["strategy"] for c in calls}
         assert strategies_used == set(MultiTurnStrategy)
-
 
 
 # ---------------------------------------------------------------------------

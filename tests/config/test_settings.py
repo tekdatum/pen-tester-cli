@@ -59,11 +59,13 @@ class TestDefaults:
 
     def test_default_llm_is_llm_settings(self) -> None:
         from pentester.config.llm import LLMSettings
+
         settings = PentesterSettings()
         assert isinstance(settings.llm, LLMSettings)
 
     def test_default_llm_provider_is_openai(self) -> None:
         from pentester.config.llm import LLMProvider
+
         settings = PentesterSettings()
         assert settings.llm.provider == LLMProvider.OPENAI
 
@@ -163,6 +165,7 @@ class TestSettingsSingleton:
 class TestLLMEnvVarOverrides:
     def test_llm_provider_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from pentester.config.llm import LLMProvider
+
         monkeypatch.setenv("PENTESTER_LLM__PROVIDER", "anthropic")
         settings = PentesterSettings()
         assert settings.llm.provider == LLMProvider.ANTHROPIC

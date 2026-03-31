@@ -59,11 +59,16 @@ class TestComputedFields:
 
     def test_tests_path_configurations_is_subdir_of_tests_path(self) -> None:
         settings = PromptfooSettings()
-        assert settings.tests_path_configurations == settings.tests_path / "configurations"
+        assert (
+            settings.tests_path_configurations == settings.tests_path / "configurations"
+        )
 
     def test_tests_path_llm_assert_is_subdir_of_tests_path(self) -> None:
         settings = PromptfooSettings()
-        assert settings.tests_path_llm_assert == settings.tests_path / "llm_as_judge_assert"
+        assert (
+            settings.tests_path_llm_assert
+            == settings.tests_path / "llm_as_judge_assert"
+        )
 
     def test_config_file_returns_str_instance(self) -> None:
         settings = PromptfooSettings()
@@ -93,11 +98,15 @@ class TestComputedFieldsWithCustomPath:
 
     def test_tests_path_configurations_reflects_custom_output_path(self) -> None:
         settings = PromptfooSettings(output_path="/custom/output")
-        assert settings.tests_path_configurations == Path("/custom/output/tests/configurations")
+        assert settings.tests_path_configurations == Path(
+            "/custom/output/tests/configurations"
+        )
 
     def test_tests_path_llm_assert_reflects_custom_output_path(self) -> None:
         settings = PromptfooSettings(output_path="/custom/output")
-        assert settings.tests_path_llm_assert == Path("/custom/output/tests/llm_as_judge_assert")
+        assert settings.tests_path_llm_assert == Path(
+            "/custom/output/tests/llm_as_judge_assert"
+        )
 
 
 class TestDirectInit:
@@ -195,12 +204,16 @@ class TestEnvVarOverrides:
         settings = PromptfooSettings()
         assert settings.config_path == "/env/path"
 
-    def test_assertion_wrapper_path_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_assertion_wrapper_path_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("ASSERTION_WRAPPER_PATH", "/env/assert.py")
         settings = PromptfooSettings()
         assert settings.assertion_wrapper_path == "/env/assert.py"
 
-    def test_replace_existing_file_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_replace_existing_file_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("REPLACE_EXISTING_FILE", "true")
         settings = PromptfooSettings()
         assert settings.replace_existing_file is True
@@ -210,7 +223,9 @@ class TestEnvVarOverrides:
         settings = PromptfooSettings()
         assert settings.files_parallel == 20
 
-    def test_internal_concurrency_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_internal_concurrency_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("INTERNAL_CONCURRENCY", "16")
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 16

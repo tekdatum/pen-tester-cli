@@ -163,9 +163,7 @@ class TestAuditorsCLI:
     def test_auditors_calls_execute_auditors(self) -> None:
         mock_orchestrator = MagicMock()
         runner = click.testing.CliRunner()
-        with patch(
-            "pentester.main.Orchestrator", return_value=mock_orchestrator
-        ):
+        with patch("pentester.main.Orchestrator", return_value=mock_orchestrator):
             result = runner.invoke(main, ["--auditors", "promptfoo"])
         assert result.exit_code == 0
         mock_orchestrator.execute_auditors.assert_called_once_with(["promptfoo"])
@@ -174,9 +172,7 @@ class TestAuditorsCLI:
     def test_auditors_multiple_calls_execute_auditors(self) -> None:
         mock_orchestrator = MagicMock()
         runner = click.testing.CliRunner()
-        with patch(
-            "pentester.main.Orchestrator", return_value=mock_orchestrator
-        ):
+        with patch("pentester.main.Orchestrator", return_value=mock_orchestrator):
             result = runner.invoke(main, ["--auditors", "promptfoo,garak"])
         assert result.exit_code == 0
         mock_orchestrator.execute_auditors.assert_called_once_with(
@@ -186,9 +182,7 @@ class TestAuditorsCLI:
     def test_no_auditors_calls_execute(self) -> None:
         mock_orchestrator = MagicMock()
         runner = click.testing.CliRunner()
-        with patch(
-            "pentester.main.Orchestrator", return_value=mock_orchestrator
-        ):
+        with patch("pentester.main.Orchestrator", return_value=mock_orchestrator):
             result = runner.invoke(main, [])
         assert result.exit_code == 0
         mock_orchestrator.execute.assert_called_once()

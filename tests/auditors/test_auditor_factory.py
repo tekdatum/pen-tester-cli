@@ -43,7 +43,10 @@ for _name, _stub in [
     ("pyrit.executor", MagicMock(name="pyrit.executor")),
     ("pyrit.executor.attack", MagicMock(name="pyrit.executor.attack")),
     ("pyrit.executor.attack.core", MagicMock(name="pyrit.executor.attack.core")),
-    ("pyrit.executor.attack.multi_turn", MagicMock(name="pyrit.executor.attack.multi_turn")),
+    (
+        "pyrit.executor.attack.multi_turn",
+        MagicMock(name="pyrit.executor.attack.multi_turn"),
+    ),
     ("pyrit.memory", MagicMock(name="pyrit.memory")),
     ("pyrit.setup", _pyrit_setup_mod),
     ("pyrit.prompt_target", MagicMock(name="pyrit.prompt_target")),
@@ -60,7 +63,7 @@ for _name, _stub in [
     sys.modules.setdefault(_name, _stub)
 
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
-from pentester.auditors.garak import GarakAuditor  # noqa: E402
+from pentester.auditors.garak.auditor import GarakAuditor  # noqa: E402
 from pentester.auditors.models.base_auditor import BaseAuditor  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402

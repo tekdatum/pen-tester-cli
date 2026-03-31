@@ -29,7 +29,10 @@ class TestEnvVarOverrides:
 
 class TestDirectInit:
     def test_set_provider(self) -> None:
-        assert LLMSettings(provider=LLMProvider.ANTHROPIC).provider == LLMProvider.ANTHROPIC
+        assert (
+            LLMSettings(provider=LLMProvider.ANTHROPIC).provider
+            == LLMProvider.ANTHROPIC
+        )
 
     def test_set_model(self) -> None:
         assert LLMSettings(model="claude-3-5-sonnet").model == "claude-3-5-sonnet"
