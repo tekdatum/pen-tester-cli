@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from pentester.auditors.promptfoo.collector import PromptfooResultCollector
 
@@ -532,13 +533,13 @@ class TestExtractMultiturnMetadata:
         assert result["successful_attacks"].iloc[0] is None
         assert result["stored_grader_result"].iloc[0] is None
 
-    def test_returns_none_when_response_is_not_dict(self) -> None:
-        resp = pd.Series(["not a dict"])
-        result = PromptfooResultCollector._extract_multiturn_metadata(resp)
-        assert result["multiturn_messages"].iloc[0] is None
-
-    def test_returns_none_when_metadata_is_missing(self) -> None:
-        resp = pd.Series([{"raw": {}}])
+    @pytest.mark.parametrize(
+        "response",
+        ["not a dict", {"raw": {}}],
+        ids=["not_dict", "no_metadata"],
+    )
+    def test_returns_none_for_unrecognised_response(self, response: object) -> None:
+        resp = pd.Series([response])
         result = PromptfooResultCollector._extract_multiturn_metadata(resp)
         assert result["multiturn_messages"].iloc[0] is None
 

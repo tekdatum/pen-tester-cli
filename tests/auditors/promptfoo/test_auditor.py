@@ -1104,20 +1104,12 @@ class TestAudit:
 
 
 class TestStripMultiturnStrategies:
-    def test_removes_all_multiturn_strategies(self) -> None:
+    def test_strips_multiturn_keeps_single_turn(self) -> None:
         result = PromptfooAuditor._strip_multiturn_strategies(
             copy.deepcopy(_FAKE_CONFIG)
         )
         ids = {s["id"] for s in result["redteam"]["strategies"]}
         assert ids == {"basic", "jailbreak"}
-
-    def test_preserves_single_turn_strategies(self) -> None:
-        result = PromptfooAuditor._strip_multiturn_strategies(
-            copy.deepcopy(_FAKE_CONFIG)
-        )
-        ids = [s["id"] for s in result["redteam"]["strategies"]]
-        assert "basic" in ids
-        assert "jailbreak" in ids
 
     def test_does_not_mutate_input(self) -> None:
         original = copy.deepcopy(_FAKE_CONFIG)
@@ -1154,7 +1146,6 @@ class TestApplyMultiturnOverrides:
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         ids = [s["id"] for s in result["redteam"]["strategies"]]
-        # assert "basic" in ids
         assert "goat" in ids
         assert "crescendo" in ids
 
@@ -1584,20 +1575,23 @@ class TestIsMultiturnRow:
         )
         assert PromptfooAuditor._is_multiturn_row(row) is True
 
-    def test_returns_false_when_multiturn_messages_is_none(self) -> None:
-        row = pd.Series({"multiturn_messages": None})
-        assert PromptfooAuditor._is_multiturn_row(row) is False
-
-    def test_returns_false_when_multiturn_messages_is_empty_list(self) -> None:
-        row = pd.Series({"multiturn_messages": []})
+    @pytest.mark.parametrize(
+        "messages",
+        [
+            None,
+            [],
+            [{"role": "user"}],
+        ],
+        ids=["none", "empty_list", "single_message"],
+    )
+    def test_returns_false_for_non_multiturn_messages(
+        self, messages: object
+    ) -> None:
+        row = pd.Series({"multiturn_messages": messages})
         assert PromptfooAuditor._is_multiturn_row(row) is False
 
     def test_returns_false_when_column_missing(self) -> None:
         row = pd.Series({"other": "value"})
-        assert PromptfooAuditor._is_multiturn_row(row) is False
-
-    def test_returns_false_when_only_one_message(self) -> None:
-        row = pd.Series({"multiturn_messages": [{"role": "user"}]})
         assert PromptfooAuditor._is_multiturn_row(row) is False
 
 
@@ -1606,11 +1600,11 @@ class TestBuildSuccessfulTurnsSet:
         attacks = [{"turn": 2, "prompt": "p"}, {"turn": 5, "prompt": "p"}]
         assert PromptfooAuditor._build_successful_turns_set(attacks) == {2, 5}
 
-    def test_returns_empty_set_for_none(self) -> None:
-        assert PromptfooAuditor._build_successful_turns_set(None) == set()
-
-    def test_returns_empty_set_for_empty_list(self) -> None:
-        assert PromptfooAuditor._build_successful_turns_set([]) == set()
+    @pytest.mark.parametrize("attacks", [None, []], ids=["none", "empty_list"])
+    def test_returns_empty_set_for_empty_input(
+        self, attacks: list | None
+    ) -> None:
+        assert PromptfooAuditor._build_successful_turns_set(attacks) == set()
 
     def test_skips_entries_without_turn_key(self) -> None:
         attacks = [{"turn": 3}, {"prompt": "no turn key"}]
@@ -1631,18 +1625,14 @@ class TestExplodeMultiturnRow:
         assert results[1].prompt == "user_msg_2"
         assert results[1].response == "assistant_resp_2"
 
-    def test_bypassed_only_for_successful_attack_turns(self) -> None:
+    def test_bypassed_and_score_per_turn(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[2]))
         results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
         assert results[0].bypassed is False
         assert results[1].bypassed is True
         assert results[2].bypassed is False
-
-    def test_bypassed_turn_score_is_zero(self) -> None:
-        row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[2]))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
         assert results[0].score == 1.0
-        assert results[1].score == 0.0  # bypassed
+        assert results[1].score == 0.0
         assert results[2].score == 1.0
 
     def test_blocked_turn_score_is_one(self) -> None:
@@ -1767,30 +1757,31 @@ class TestExplodeMultiturnRow:
         assert results[2].score == 1.0
 
 
-class TestGenerateProbeResultsMixed:
-    def _make_single_turn_row(self) -> dict[str, Any]:
-        return {
-            "strategy_id": "basic",
-            "plugin_id": "harmful:hate",
-            "prompt": "single prompt",
-            "api_response": {"data": "resp"},
-            "success": True,
-            "error": None,
-            "grading_score": 1.0,
-            "accept_score": 0.9,
-            "http_status": 200,
-            "duration": 0.5,
-            "latency_ms": 50,
-            "cached": False,
-            "grading_reason": "passed",
-            "multiturn_messages": None,
-            "successful_attacks": None,
-            "stored_grader_result": None,
-        }
+def _make_single_turn_row() -> dict[str, Any]:
+    return {
+        "strategy_id": "basic",
+        "plugin_id": "harmful:hate",
+        "prompt": "single prompt",
+        "api_response": {"data": "resp"},
+        "success": True,
+        "error": None,
+        "grading_score": 1.0,
+        "accept_score": 0.9,
+        "http_status": 200,
+        "duration": 0.5,
+        "latency_ms": 50,
+        "cached": False,
+        "grading_reason": "passed",
+        "multiturn_messages": None,
+        "successful_attacks": None,
+        "stored_grader_result": None,
+    }
 
+
+class TestGenerateProbeResultsMixed:
     def test_mixed_single_and_multiturn_rows(self) -> None:
         auditor = _make_auditor()
-        single = self._make_single_turn_row()
+        single = _make_single_turn_row()
         multi = _make_multiturn_row(num_turns=3, successful_turns=[2])
         auditor.results_df = pd.DataFrame([single, multi])
 
