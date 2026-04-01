@@ -81,8 +81,12 @@ def main() -> None:
         " -H 'Content-Type: application/json'"
         ' --data-raw \'{"text": "$PROMPT"}\''
     )
-<<<<<<< HEAD:src/main.example.py
-    # semantic fence example:
+    # promptfoo example:
+    CURL_COMMAND = (
+        "curl -X POST 'http://localhost:8090/api/v1/fence/validate/2'"
+        " -H 'Content-Type: application/json'"
+        ' --data-raw \'{"text": "{{prompt}}"}\''
+    )
     settings.scanner.curl_command = CURL_COMMAND
     settings.promptfoo.config_path = "pentester/config/auditor_files/promptfoo"
     settings.promptfoo.assertion_wrapper_path = "assert.py"
@@ -100,19 +104,12 @@ def main() -> None:
     settings.promptfoo.multiturn_continue_after_success = True
     # settings.promptfoo.multiturn_strategies = ["crescendo", "goat"]
     settings.target_type = TargetType.LLM
-=======
     settings.target_type = TargetType.MULTITURN
->>>>>>> main:src/examples/main.py
 
     # --- Alternative: Promptfoo + semantic fence example ---
     # settings.llm.provider = LLMProvider.ANTHROPIC
     # settings.llm.model = "claude-sonnet-4-6"
     # settings.auditors = ["promptfoo"]
-    # CURL_COMMAND = (
-    #     "curl -X POST 'http://localhost:8090/api/v1/fence/validate/2'"
-    #     " -H 'Content-Type: application/json'"
-    #     ' --data-raw \'{"text": "{{prompt}}"}\''
-    # )
     # settings.scanner.curl_command = CURL_COMMAND
     # settings.promptfoo.config_path = "pentester/config/auditor_files/promptfoo"
     # settings.promptfoo.assertion_wrapper_path = "assert.py"
