@@ -102,14 +102,13 @@ def main() -> None:
     settings.promptfoo.multiturn_max_turns = 10
     settings.promptfoo.multiturn_stateful = True
     settings.promptfoo.multiturn_continue_after_success = True
-    # settings.promptfoo.multiturn_strategies = ["crescendo", "goat"]
     settings.target_type = TargetType.LLM
-    settings.target_type = TargetType.MULTITURN
+    # settings.target_type = TargetType.MULTITURN
 
     # --- Alternative: Promptfoo + semantic fence example ---
     # settings.llm.provider = LLMProvider.ANTHROPIC
     # settings.llm.model = "claude-sonnet-4-6"
-    # settings.auditors = ["promptfoo"]
+    settings.auditors = ["promptfoo"]
     # settings.scanner.curl_command = CURL_COMMAND
     # settings.promptfoo.config_path = "pentester/config/auditor_files/promptfoo"
     # settings.promptfoo.assertion_wrapper_path = "assert.py"
