@@ -47,7 +47,7 @@ _FAKE_CONFIG: dict[str, Any] = {
                     "continueAfterSuccess": False,
                 },
             },
-            {"id": "jailbreak:hydra", "config": {"maxTurns": 5}},
+            {"id": "crescendo", "config": {"maxTurns": 5}},
             {"id": "mischievous-user", "config": {"maxTurns": 5, "stateful": False}},
         ],
         "plugins": ["harmful:hate", "harmful:violent-crime"],
@@ -1213,16 +1213,6 @@ class TestApplyMultiturnOverrides:
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         goat = next(s for s in result["redteam"]["strategies"] if s["id"] == "goat")
         assert goat["config"]["continueAfterSuccess"] is True
-
-    def test_hydra_has_only_max_turns(self) -> None:
-        auditor = _make_auditor(
-            _make_settings(enable_multiturn=True, multiturn_stateful=True)
-        )
-        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
-        hydra = next(
-            s for s in result["redteam"]["strategies"] if s["id"] == "jailbreak:hydra"
-        )
-        assert set(hydra["config"].keys()) == {"maxTurns"}
 
     def test_mischievous_user_includes_stateful(self) -> None:
         auditor = _make_auditor(
