@@ -1626,12 +1626,12 @@ class TestBuildSuccessfulTurnsSet:
 class TestExplodeMultiturnRow:
     def test_explodes_into_correct_number_of_probes(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=3))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert len(results) == 3
 
     def test_prompt_and_response_per_turn(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=2))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].prompt == "user_msg_1"
         assert results[0].response == "assistant_resp_1"
         assert results[1].prompt == "user_msg_2"
@@ -1639,7 +1639,7 @@ class TestExplodeMultiturnRow:
 
     def test_bypassed_and_score_per_turn(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[2]))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].bypassed is False
         assert results[1].bypassed is True
         assert results[2].bypassed is False
@@ -1649,7 +1649,7 @@ class TestExplodeMultiturnRow:
 
     def test_blocked_turn_score_is_one(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=2, successful_turns=[1]))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].score == 0.0  # bypassed
         assert results[1].score == 1.0  # blocked
 
@@ -1659,35 +1659,35 @@ class TestExplodeMultiturnRow:
                 num_turns=2, successful_turns=[2], grader_reason="defense failed"
             )
         )
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].metadata["grading_reason"] is None
         assert results[1].metadata["grading_reason"] == "defense failed"
 
     def test_conversation_id_shared_across_turns(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=3))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-abc")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-abc", "promptfoo")
         for r in results:
             assert r.metadata["conversation_id"] == "conv-abc"
 
     def test_turn_number_is_one_indexed(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=3))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert [r.metadata["turn_number"] for r in results] == [1, 2, 3]
 
     def test_is_multiturn_true_for_all_turns(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=2))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         for r in results:
             assert r.metadata["is_multiturn"] is True
 
     def test_attack_category_from_strategy_id(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=1, strategy_id="goat"))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].attack_category == "goat"
 
     def test_attack_type_from_plugin_id(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=1, plugin_id="harmful:hate"))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].attack_type == "harmful:hate"
 
     def test_odd_message_count_ignores_trailing_user_message(self) -> None:
@@ -1696,18 +1696,18 @@ class TestExplodeMultiturnRow:
         row_data = _make_multiturn_row(num_turns=2)
         row_data["multiturn_messages"] = messages
         row = pd.Series(row_data)
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert len(results) == 2
 
     def test_empty_successful_attacks_means_no_bypasses(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[]))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert all(r.bypassed is False for r in results)
         assert all(r.score == 1.0 for r in results)
 
     def test_metadata_includes_row_level_fields(self) -> None:
         row = pd.Series(_make_multiturn_row(num_turns=1))
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         m = results[0].metadata
         assert m["http_status"] == 201
         assert m["duration"] == 1.5
@@ -1719,7 +1719,7 @@ class TestExplodeMultiturnRow:
         row_data = _make_multiturn_row(num_turns=1, successful_turns=[1])
         row_data["stored_grader_result"] = None
         row = pd.Series(row_data)
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].bypassed is True
         assert results[0].score == 0.0
         assert results[0].metadata["grading_reason"] is None
@@ -1734,7 +1734,7 @@ class TestExplodeMultiturnRow:
                 grader_pass=False,
             )
         )
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert all(r.metadata["conversation_bypassed"] is True for r in results)
 
     def test_conversation_bypassed_false_when_grader_passes(self) -> None:
@@ -1747,7 +1747,7 @@ class TestExplodeMultiturnRow:
                 grader_pass=True,
             )
         )
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert all(r.metadata["conversation_bypassed"] is False for r in results)
 
     def test_bypassed_turns_independent_of_grader_pass(self) -> None:
@@ -1760,7 +1760,7 @@ class TestExplodeMultiturnRow:
                 grader_pass=True,
             )
         )
-        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123")
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
         assert results[0].bypassed is False
         assert results[1].bypassed is True
         assert results[2].bypassed is False
