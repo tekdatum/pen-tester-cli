@@ -7,6 +7,7 @@ from pentester.config.auditors.promptfoo_settings import (
     KNOWN_MULTITURN_STRATEGIES,
     PromptfooSettings,
 )
+from pentester.enums.promptfoo_strategy import PromptfooMultiturnStrategy
 
 
 class TestDefaults:
@@ -272,7 +273,7 @@ class TestMultiturnDefaults:
         assert PromptfooSettings().multiturn_continue_after_success is False
 
     def test_multiturn_strategies_default(self) -> None:
-        assert set(PromptfooSettings().multiturn_strategies) == KNOWN_MULTITURN_STRATEGIES
+        assert set(PromptfooSettings().multiturn_strategies) == set(PromptfooMultiturnStrategy)
 
 
 class TestMultiturnDirectInit:
@@ -298,7 +299,10 @@ class TestMultiturnDirectInit:
 
     def test_set_multiturn_strategies_subset(self) -> None:
         settings = PromptfooSettings(multiturn_strategies=["crescendo", "goat"])
-        assert settings.multiturn_strategies == ["crescendo", "goat"]
+        assert settings.multiturn_strategies == [
+            PromptfooMultiturnStrategy.CRESCENDO,
+            PromptfooMultiturnStrategy.GOAT,
+        ]
 
 
 class TestMultiturnValidation:
@@ -342,7 +346,7 @@ class TestMultiturnValidation:
         settings = PromptfooSettings(
             multiturn_strategies=list(KNOWN_MULTITURN_STRATEGIES)
         )
-        assert set(settings.multiturn_strategies) == KNOWN_MULTITURN_STRATEGIES
+        assert set(settings.multiturn_strategies) == set(PromptfooMultiturnStrategy)
 
     def test_strategies_accepts_empty_list(self) -> None:
         settings = PromptfooSettings(multiturn_strategies=[])
@@ -373,7 +377,10 @@ class TestMultiturnEnvVars:
     def test_multiturn_strategies_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MULTITURN_STRATEGIES", '["crescendo","goat"]')
         settings = PromptfooSettings()
-        assert settings.multiturn_strategies == ["crescendo", "goat"]
+        assert settings.multiturn_strategies == [
+            PromptfooMultiturnStrategy.CRESCENDO,
+            PromptfooMultiturnStrategy.GOAT,
+        ]
     
     def test_max_attacks_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MAX_ATTACKS", "300")
