@@ -182,3 +182,37 @@ class TestRunAll:
 
         mock_eval.assert_not_called()
         assert results == []
+
+
+class TestEnsureEmailConfigured:
+    @pytest.fixture(autouse=True)
+    def _patch_subprocess(self) -> Generator[None]:
+        self.mock_result = MagicMock()
+        self.mock_result.stdout = ""
+        self.mock_result.returncode = 0
+        with patch(
+            "pentester.auditors.promptfoo.runner.subprocess.run",
+            return_value=self.mock_result,
+        ) as self.mock_run:
+            yield
+
+    def test_does_not_set_email_when_already_configured(self) -> None:
+        self.mock_result.stdout = "tools@tekdatum.com\n"
+        _make_runner().ensure_email_configured()
+
+        assert self.mock_run.call_count == 1
+        assert self.mock_run.call_args[0][0] == ["promptfoo", "config", "get", "email"]
+
+    def test_sets_email_when_no_email_set_message_returned(self) -> None:
+        self.mock_result.stdout = "No email set.\n"
+        _make_runner().ensure_email_configured()
+
+        assert self.mock_run.call_count == 2
+        set_call = self.mock_run.call_args_list[1]
+        assert set_call[0][0] == [
+            "promptfoo",
+            "config",
+            "set",
+            "email",
+            "tools@tekdatum.com",
+        ]

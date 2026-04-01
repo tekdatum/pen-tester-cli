@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import os
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, call, mock_open, patch
@@ -11,6 +12,7 @@ import pytest
 
 from pentester.auditors.models.probe_result import ProbeResult
 from pentester.auditors.promptfoo.auditor import PromptfooAuditor
+from pentester.auditors.promptfoo.runner import PromptfooRunner
 from pentester.config.auditors.promptfoo_settings import (
     KNOWN_MULTITURN_STRATEGIES,
     PromptfooSettings,
@@ -855,6 +857,11 @@ class TestGenerateProbeResults:
 
 
 class TestValidatePreconditions:
+    @pytest.fixture(autouse=True)
+    def _patch_ensure_email(self) -> Generator[None, None, None]:
+        with patch.object(PromptfooRunner, "ensure_email_configured"):
+            yield
+
     def test_semantic_fence_passes_when_assert_file_exists(self) -> None:
         auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
         with patch("pathlib.Path.exists", return_value=True):
@@ -1333,6 +1340,11 @@ class TestSplitAuditFiles:
 
 
 class TestValidatePreconditionsMultiturn:
+    @pytest.fixture(autouse=True)
+    def _patch_ensure_email(self) -> Generator[None, None, None]:
+        with patch.object(PromptfooRunner, "ensure_email_configured"):
+            yield
+
     def test_requires_llm_key_for_multiturn_semantic_fence(self) -> None:
         auditor = _make_auditor(
             _make_settings(enable_multiturn=True),
