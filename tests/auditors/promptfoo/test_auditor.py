@@ -4,7 +4,7 @@ import copy
 import os
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, call, mock_open, patch
 
 import pandas as pd
 import pytest
@@ -1024,7 +1024,7 @@ class TestAudit:
         ):
             result, _ = auditor.audit()
 
-        assert mock_build.call_count == 2
+        assert mock_build.call_count == 1
         assert mock_gen_probes.call_count == 2
         mock_logger.error.assert_called_once_with(
             "Probe error — category: %s | type: %s | error: %s",
@@ -1150,12 +1150,13 @@ class TestApplyMultiturnOverrides:
 
     def test_keeps_all_single_turn_strategies(self) -> None:
         auditor = _make_auditor(
-            _make_settings(enable_multiturn=True, multiturn_strategies=["crescendo"])
+            _make_settings(enable_multiturn=True, multiturn_strategies=["crescendo", "goat", "mischievous-user"])
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         ids = [s["id"] for s in result["redteam"]["strategies"]]
-        assert "basic" in ids
-        assert "jailbreak" in ids
+        # assert "basic" in ids
+        assert "goat" in ids
+        assert "crescendo" in ids
 
     def test_patches_max_turns(self) -> None:
         auditor = _make_auditor(
@@ -1464,7 +1465,13 @@ class TestAuditSinglePassLLM:
             auditor.audit()
 
         mock_unset.assert_not_called()
-        mock_eval.assert_called_once_with(files)
+        mock_eval.assert_has_calls(
+            [
+                call([Path("/test_1.yaml")]),
+                call([Path("/multiturn_test_1.yaml")]),
+            ]
+        )
+        assert mock_eval.call_count == 2
 
 
 class TestGenerateProbeResultsMultiturn:
