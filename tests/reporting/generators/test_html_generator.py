@@ -143,3 +143,17 @@ class TestDetailsTemplate:
         )
         assert "\\n" in html
         assert "line1\nline2" not in html
+
+    def test_judge_reason_appears_in_bypassed_section(self) -> None:
+        bypassed = _probe(bypassed=True, metadata={"judge_reason": "response is harmful"})
+        html = HtmlGenerator().generate_detail_report([bypassed], {}, {}).decode()
+        bypassed_section = html.split("<h2>Blocked Prompts</h2>")[0]
+        assert "response is harmful" in bypassed_section
+
+    def test_judge_reason_appears_in_blocked_section(self) -> None:
+        blocked = _probe(bypassed=False, metadata={"judge_reason": "safe response detected"})
+        html = HtmlGenerator().generate_detail_report([blocked], {}, {}).decode()
+        blocked_section = html.split("<h2>Blocked Prompts</h2>")[1].split(
+            "<h2>Error Prompts</h2>"
+        )[0]
+        assert "safe response detected" in blocked_section
