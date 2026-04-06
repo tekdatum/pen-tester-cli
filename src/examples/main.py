@@ -91,18 +91,34 @@ def main() -> None:
         ' "max_tokens": 1024,'
         ' "messages": [{"role": "user", "content": $PROMPT}]}\''
     )
-    settings.scanner.response_text_target = "content.0.text"
+    # promptfoo example:
+    CURL_COMMAND = (
+        "curl -X POST 'http://localhost:8090/api/v1/fence/validate/2'"
+        " -H 'Content-Type: application/json'"
+        ' --data-raw \'{"text": "{{prompt}}"}\''
+    )
+    settings.scanner.curl_command = CURL_COMMAND
+    settings.promptfoo.config_path = "pentester/config/auditor_files/promptfoo"
+    settings.promptfoo.assertion_wrapper_path = "assert.py"
+    settings.promptfoo.replace_existing_file = False
+    settings.promptfoo.files_parallel = 5
+    settings.promptfoo.internal_concurrency = 4
+    settings.promptfoo.max_tests = 200
+    settings.promptfoo.plugins_per_file = 1
+    settings.promptfoo.max_test_files = 1
+    settings.promptfoo.output_path = "./output/promptfoo"
+    # multiturn
+    settings.promptfoo.enable_multiturn = True
+    settings.promptfoo.multiturn_max_turns = 10
+    settings.promptfoo.multiturn_stateful = True
+    settings.promptfoo.multiturn_continue_after_success = True
     settings.target_type = TargetType.LLM
+    # settings.target_type = TargetType.MULTITURN
 
     # --- Alternative: Promptfoo + semantic fence example ---
     # settings.llm.provider = LLMProvider.ANTHROPIC
     # settings.llm.model = "claude-sonnet-4-6"
-    # settings.auditors = ["promptfoo"]
-    # CURL_COMMAND = (
-    #     "curl -X POST 'http://localhost:8090/api/v1/fence/validate/2'"
-    #     " -H 'Content-Type: application/json'"
-    #     ' --data-raw \'{"text": "{{prompt}}"}\''
-    # )
+    settings.auditors = ["promptfoo"]
     # settings.scanner.curl_command = CURL_COMMAND
     # settings.promptfoo.config_path = "pentester/config/auditor_files/promptfoo"
     # settings.promptfoo.assertion_wrapper_path = "assert.py"
