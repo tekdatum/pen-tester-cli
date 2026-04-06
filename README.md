@@ -86,7 +86,30 @@ Use `--auditors` with a comma-separated list of auditor names to run only a subs
 pentester --auditors garak,pyrit --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
 ```
 
-### 5. Use the Orchestrator in your own code
+### 5. Limit the number of attacks
+
+Use `PENTESTER_MAX_ATTACKS` to cap the number of attack prompts each auditor will run. This is useful for quick smoke tests or when you want to control cost/time without configuring every auditor individually.
+
+```
+PENTESTER_MAX_ATTACKS=50 pentester --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+```
+
+Or in a `.env` file:
+
+```
+PENTESTER_MAX_ATTACKS=50
+```
+
+Advanced users can override the limit per auditor — the per-auditor setting always takes priority:
+
+```
+PENTESTER_MAX_ATTACKS=50
+PENTESTER_GARAK__MAX_ATTACKS=200
+```
+
+In this example Garak runs up to 200 attacks while every other auditor is capped at 50.
+
+### 6. Use the Orchestrator in your own code
 
 You can drive scans programmatically by constructing a `PentesterSettings` object and passing it to `Orchestrator`:
 
