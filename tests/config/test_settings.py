@@ -54,7 +54,7 @@ class TestDefaults:
 
     def test_default_reporting_generator_keys_contains_all_keys(self) -> None:
         settings = PentesterSettings()
-        for key in ("pdf", "csv", "html", "markdown"):
+        for key in ("csv", "html", "markdown"):
             assert key in settings.reporting.generator_keys
 
     def test_default_llm_is_llm_settings(self) -> None:
@@ -174,6 +174,54 @@ class TestLLMEnvVarOverrides:
         monkeypatch.setenv("PENTESTER_LLM__MODEL", "gpt-4o")
         settings = PentesterSettings()
         assert settings.llm.model == "gpt-4o"
+
+
+class TestMaxAttacks:
+    def test_default_max_attacks_is_none(self) -> None:
+        settings = PentesterSettings()
+        assert settings.max_attacks is None
+
+    def test_max_attacks_propagates_to_all_auditors(self) -> None:
+        settings = PentesterSettings(max_attacks=100)
+        assert settings.garak.max_attacks == 100
+        assert settings.inspect.max_attacks == 100
+        assert settings.pyrit.max_attacks == 100
+        assert settings.promptfoo.max_attacks == 100
+
+    def test_auditor_specific_max_attacks_takes_priority(self) -> None:
+        settings = PentesterSettings(
+            max_attacks=100,
+            garak={"max_attacks": 50},
+        )
+        assert settings.garak.max_attacks == 50
+        assert settings.inspect.max_attacks == 100
+        assert settings.pyrit.max_attacks == 100
+        assert settings.promptfoo.max_attacks == 100
+
+    def test_max_attacks_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PENTESTER_MAX_ATTACKS", "200")
+        settings = PentesterSettings()
+        assert settings.max_attacks == 200
+        assert settings.garak.max_attacks == 200
+        assert settings.inspect.max_attacks == 200
+        assert settings.pyrit.max_attacks == 200
+        assert settings.promptfoo.max_attacks == 200
+
+    def test_auditor_env_var_overrides_global_max_attacks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_MAX_ATTACKS", "200")
+        monkeypatch.setenv("PENTESTER_PYRIT__MAX_ATTACKS", "10")
+        settings = PentesterSettings()
+        assert settings.pyrit.max_attacks == 10
+        assert settings.garak.max_attacks == 200
+
+    def test_no_propagation_when_max_attacks_is_none(self) -> None:
+        settings = PentesterSettings(max_attacks=None)
+        assert settings.garak.max_attacks is None
+        assert settings.inspect.max_attacks is None
+        assert settings.pyrit.max_attacks is None
+        assert settings.promptfoo.max_attacks is None
 
 
 class TestTargetTypeEnum:

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from pentester.auditors.promptfoo.collector import PromptfooResultCollector
 
@@ -193,25 +194,12 @@ class TestExtractRows:
 
         # Verify schema structure
         expected_cols = {
-            "provider_url",
-            "prompt",
-            "input",
-            "valid",
-            "reason_code",
-            "duration",
-            "accept_score",
-            "reject_score",
-            "latency_ms",
-            "http_status",
-            "cached",
-            "api_response",
-            "source_file",
-            "strategy_id",
-            "plugin_id",
-            "error",
-            "success",
-            "grading_score",
-            "grading_reason",
+            "provider_url", "prompt", "input", "valid", "reason_code",
+            "duration", "accept_score", "reject_score", "latency_ms",
+            "http_status", "cached", "api_response", "source_file",
+            "strategy_id", "plugin_id", "error",
+            "success", "grading_score", "grading_reason", "conversation",
+            "multiturn_messages", "successful_attacks", "stored_grader_result",
         }
         assert set(result.columns) == expected_cols
 
@@ -446,6 +434,141 @@ class TestBuildDataframe:
 
         assert len(result) == 2
         assert result["error"].iloc[0] is None
-        assert (
-            result["error"].iloc[1] == "Error running Python script: FileNotFoundError"
+        assert result["error"].iloc[1] == "Error running Python script: FileNotFoundError"
+
+
+class TestExtractConversation:
+    def test_returns_none_when_no_conversation_in_vars(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        df = pd.DataFrame([_make_jsonl_row()])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] is None
+
+    def test_extracts_conversation_from_vars(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        conversation = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there"},
+        ]
+        row = _make_jsonl_row()
+        row["vars"]["conversation"] = conversation
+        df = pd.DataFrame([row])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] == conversation
+
+    def test_extracts_messages_from_vars(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        messages = [
+            {"role": "user", "content": "Turn 1"},
+            {"role": "assistant", "content": "Response 1"},
+        ]
+        row = _make_jsonl_row()
+        row["vars"]["messages"] = messages
+        df = pd.DataFrame([row])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] == messages
+
+    def test_returns_none_when_vars_has_no_conversation_keys(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        row = _make_jsonl_row()
+        # vars has "input" but no "conversation" or "messages"
+        df = pd.DataFrame([row])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert result["conversation"].iloc[0] is None
+
+
+def _make_multiturn_response(
+    messages: list[dict[str, str]] | None = None,
+    successful_attacks: list[dict] | None = None,
+    stored_grader_result: dict | None = None,
+) -> dict:
+    """Build a response dict with multiturn metadata."""
+    meta: dict = {}
+    if messages is not None:
+        meta["messages"] = messages
+    if successful_attacks is not None:
+        meta["successfulAttacks"] = successful_attacks
+    if stored_grader_result is not None:
+        meta["storedGraderResult"] = stored_grader_result
+    return {
+        "raw": {"data": {"valid": False, "reason_code": "test", "duration": 1.0,
+                         "extra": {"accept_score": 0.5, "reject_score": 0.5}}},
+        "latencyMs": 100,
+        "cached": False,
+        "metadata": {**meta, "http": {"status": 201}},
+    }
+
+
+class TestExtractMultiturnMetadata:
+    def test_extracts_messages_from_response_metadata(self) -> None:
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+        resp = pd.Series([_make_multiturn_response(messages=messages)])
+        result = PromptfooResultCollector._extract_multiturn_metadata(resp)
+        assert result["multiturn_messages"].iloc[0] == messages
+
+    def test_extracts_successful_attacks(self) -> None:
+        attacks = [{"turn": 2, "prompt": "p", "response": "r"}]
+        resp = pd.Series([_make_multiturn_response(successful_attacks=attacks)])
+        result = PromptfooResultCollector._extract_multiturn_metadata(resp)
+        assert result["successful_attacks"].iloc[0] == attacks
+
+    def test_extracts_stored_grader_result(self) -> None:
+        grader = {"score": 0, "reason": "bypassed", "pass": False}
+        resp = pd.Series([_make_multiturn_response(stored_grader_result=grader)])
+        result = PromptfooResultCollector._extract_multiturn_metadata(resp)
+        assert result["stored_grader_result"].iloc[0] == grader
+
+    def test_returns_none_for_single_turn_rows(self) -> None:
+        resp = pd.Series([{
+            "raw": {"data": {}},
+            "latencyMs": 100,
+            "cached": False,
+            "metadata": {"http": {"status": 200}},
+        }])
+        result = PromptfooResultCollector._extract_multiturn_metadata(resp)
+        assert result["multiturn_messages"].iloc[0] is None
+        assert result["successful_attacks"].iloc[0] is None
+        assert result["stored_grader_result"].iloc[0] is None
+
+    @pytest.mark.parametrize(
+        "response",
+        ["not a dict", {"raw": {}}],
+        ids=["not_dict", "no_metadata"],
+    )
+    def test_returns_none_for_unrecognised_response(self, response: object) -> None:
+        resp = pd.Series([response])
+        result = PromptfooResultCollector._extract_multiturn_metadata(resp)
+        assert result["multiturn_messages"].iloc[0] is None
+
+    def test_extract_rows_includes_multiturn_columns(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        df = pd.DataFrame([_make_jsonl_row()])
+        result = collector._extract_rows(df, "test.jsonl")
+        assert "multiturn_messages" in result.columns
+        assert "successful_attacks" in result.columns
+        assert "stored_grader_result" in result.columns
+
+    def test_extract_rows_populates_multiturn_columns_for_multiturn_row(self) -> None:
+        collector = PromptfooResultCollector(results_path=Path("/tmp"))
+        messages = [
+            {"role": "user", "content": "u1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        attacks = [{"turn": 1, "prompt": "u1", "response": "a1"}]
+        grader = {"score": 0, "reason": "bypassed", "pass": False}
+
+        row = _make_jsonl_row()
+        row["response"] = _make_multiturn_response(
+            messages=messages,
+            successful_attacks=attacks,
+            stored_grader_result=grader,
         )
+        df = pd.DataFrame([row])
+        result = collector._extract_rows(df, "test.jsonl")
+
+        assert result["multiturn_messages"].iloc[0] == messages
+        assert result["successful_attacks"].iloc[0] == attacks
+        assert result["stored_grader_result"].iloc[0] == grader
