@@ -31,6 +31,11 @@ class TestInit:
         assert runner.files_parallel == 5
         assert runner.concurrency == 4
         assert runner.max_tests == 20000
+        assert runner.default_email == "tools@tekdatum.com"
+
+    def test_initializes_with_custom_default_email(self) -> None:
+        runner = _make_runner(default_email="custom@example.com")
+        assert runner.default_email == "custom@example.com"
 
     def test_initializes_with_max_tests(self) -> None:
         runner = _make_runner(max_tests=500)
@@ -196,23 +201,20 @@ class TestEnsureEmailConfigured:
         ) as self.mock_run:
             yield
 
-    def test_does_not_set_email_when_already_configured(self) -> None:
-        self.mock_result.stdout = "tools@tekdatum.com\n"
+    def test_sets_email(self) -> None:
         _make_runner().ensure_email_configured()
 
-        assert self.mock_run.call_count == 1
-        assert self.mock_run.call_args[0][0] == ["promptfoo", "config", "get", "email"]
+        self.mock_run.assert_called_once_with(
+            ["promptfoo", "config", "set", "email", "tools@tekdatum.com"],
+            capture_output=True,
+            text=True,
+        )
 
-    def test_sets_email_when_no_email_set_message_returned(self) -> None:
-        self.mock_result.stdout = "No email set.\n"
-        _make_runner().ensure_email_configured()
+    def test_uses_custom_default_email(self) -> None:
+        _make_runner(default_email="custom@example.com").ensure_email_configured()
 
-        assert self.mock_run.call_count == 2
-        set_call = self.mock_run.call_args_list[1]
-        assert set_call[0][0] == [
-            "promptfoo",
-            "config",
-            "set",
-            "email",
-            "tools@tekdatum.com",
-        ]
+        self.mock_run.assert_called_once_with(
+            ["promptfoo", "config", "set", "email", "custom@example.com"],
+            capture_output=True,
+            text=True,
+        )
