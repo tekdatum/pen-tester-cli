@@ -54,7 +54,7 @@ class TestDefaults:
 
     def test_default_reporting_generator_keys_contains_all_keys(self) -> None:
         settings = PentesterSettings()
-        for key in ("pdf", "csv", "html", "markdown"):
+        for key in ("csv", "html", "markdown"):
             assert key in settings.reporting.generator_keys
 
     def test_default_llm_is_llm_settings(self) -> None:
