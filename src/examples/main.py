@@ -62,7 +62,7 @@ from pentester.orchestrator import Orchestrator  # noqa: E402
 def main() -> None:
     setup_logging(level=logging.DEBUG)
     settings = get_settings()
-    settings.auditors = ["garak"]
+    settings.auditors = ["garak", "pyrit"]
     settings.garak.probes = [
         "probes.test.Test",
     ]
@@ -81,14 +81,17 @@ def main() -> None:
     #    ' --data-raw \'{"text": "$PROMPT"}\''
     # )
     #
-    GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+    ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
     settings.scanner.curl_command = (
-        f"curl https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        f"curl -k https://api.anthropic.com/v1/messages"
         f" -H 'Content-Type: application/json'"
-        f" -H 'Authorization: Bearer {GEMINI_API_KEY}'"
-        f' -d \'{{"model": "{settings.llm.model}",'
+        f" -H 'x-api-key: {ANTHROPIC_API_KEY}'"
+        f" -H 'anthropic-version: 2023-06-01'"
+        f' -d \'{{"model": "claude-sonnet-4-6",'
+        ' "max_tokens": 1024,'
         ' "messages": [{"role": "user", "content": $PROMPT}]}\''
     )
+    settings.scanner.response_text_target = "content.0.text"
     settings.target_type = TargetType.LLM
 
     # --- Alternative: Promptfoo + semantic fence example ---

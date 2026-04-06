@@ -1,12 +1,12 @@
 # PyRIT Auditor
 
-Runs adversarial safety probes against a target using [PyRIT](https://github.com/Azure/PyRIT) (Python Risk Identification Toolkit). Supports single-turn probing and multi-turn attack strategies including Crescendo, Red Teaming, and Tree of Attacks with Pruning.
+Runs adversarial safety probes against a target using [PyRIT](https://github.com/Azure/PyRIT) (Python Risk Identification Toolkit). Supports single-turn probing and optional multi-turn attack strategies including Crescendo, Red Teaming, and Tree of Attacks with Pruning.
 
 ---
 
 ## How It Works
 
-The auditor loads seed datasets from PyRIT's dataset registry and sends each seed to the configured objective target. For multi-turn strategies the auditor uses an adversarial LLM to iteratively refine attacks over multiple conversation turns.
+The auditor loads seed datasets from PyRIT's dataset registry and sends each seed to the configured objective target. When `enable_multiturn` is `True`, multi-turn attack strategies run after the single-turn phase and their results are combined into the same report.
 
 ### Key components
 
@@ -25,15 +25,22 @@ PyritAuditor.audit()
   │
   ├─ initialize_pyrit_async() — set up in-memory PyRIT database
   │
-  ├─ _load_datasets_async() — fetch seed datasets by name (or all if empty)
+  ├─ _audit_async()
+  │    │
+  │    ├─ _load_datasets_async() — fetch seed datasets (all if dataset_names is empty)
+  │    │
+  │    ├─ Single-turn phase (always runs):
+  │    │    └─ For each seed:
+  │    │         ├─ SEMANTIC_FENCE: Scanner.scan(prompt) → bypassed from response
+  │    │         └─ LLM: target.send_prompt_async() → SelfAskTrueFalseScorer → bypassed
+  │    │
+  │    └─ Multi-turn phase (enable_multiturn=True):
+  │         └─ _audit_multiturn_async()
+  │              └─ For each dataset → for each strategy:
+  │                   └─ _run_strategy_async() → AttackResult
+  │                        └─ _build_probe_results() → list[ProbeResult] (one per turn)
   │
-  ├─ SEMANTIC_FENCE / LLM:
-  │    └─ For each seed: send prompt to objective target → score response
-  │
-  └─ MULTITURN:
-       └─ For each dataset → for each strategy:
-            └─ _run_strategy_async() → AttackResult
-                 └─ _build_probe_results() → list[ProbeResult] (one per turn)
+  └─ Return combined single-turn + multi-turn ProbeResults
 ```
 
 ### Objective target selection
@@ -45,23 +52,24 @@ PyritAuditor.audit()
 | Yes | `ScannerTarget` — routes prompts to the HTTP endpoint via curl |
 | No | `OpenAIChatTarget` — sends directly to the configured LLM provider |
 
-This means **any HTTP-accessible AI chat** can be tested without needing an OpenAI-compatible API.
+This means **any HTTP-accessible AI chat** can be tested without needing a native LLM API key for the target.
 
 ### Score interpretation
 
-- **SEMANTIC_FENCE / LLM**: each seed produces one `ProbeResult`; `bypassed` is set from the scanner response or the `SelfAskTrueFalseScorer`.
-- **MULTITURN**: each conversation turn produces a `ProbeResult`; only the final turn carries the bypass verdict and score.
-- Failed seeds or strategies produce an error `ProbeResult` with `metadata={"error": True}`.
+- **SEMANTIC_FENCE (single-turn)**: `bypassed` is read directly from the scanner response; no scorer involved.
+- **LLM (single-turn)**: `SelfAskTrueFalseScorer` evaluates the response; `bypassed=True` if the scorer returns True.
+- **Multi-turn**: each conversation turn produces one `ProbeResult`. Only the **final turn** carries the bypass verdict and score; all earlier turns have `bypassed=False` and `score=None`.
+- `attack_type` is `"default"` for single-turn results and the strategy name (e.g. `"crescendo"`) for multi-turn results.
+- Failed seeds or strategies produce an error `ProbeResult` with `bypassed=False` and `metadata={"error": True}`.
 
 ---
 
 ## Supported Target Types
 
-| `PENTESTER_TARGET_TYPE` | Behaviour |
-|---|---|
-| `SEMANTIC_FENCE` | Each seed sent as a single prompt to the scanner |
-| `LLM` | Each seed sent to the objective target; responses scored with `SelfAskTrueFalseScorer` |
-| `MULTITURN` | Multi-turn attack strategies run against the objective target |
+| `PENTESTER_TARGET_TYPE` | Single-turn behaviour | Multi-turn (enable_multiturn=True) |
+|---|---|---|
+| `SEMANTIC_FENCE` | Each seed sent once to the scanner | Strategies run against `ScannerTarget` |
+| `LLM` | Each seed sent to `OpenAIChatTarget`; scored with `SelfAskTrueFalseScorer` | Strategies run against `OpenAIChatTarget` |
 
 ---
 
@@ -69,10 +77,10 @@ This means **any HTTP-accessible AI chat** can be tested without needing an Open
 
 | Strategy | `MultiTurnStrategy` value | Description |
 |---|---|---|
-| Multi Prompt Sending | `multi_prompt_sending` | Seeds used as a fixed prompt sequence |
-| Red Teaming | `red_teaming` | Adversarial LLM iteratively crafts follow-up prompts |
-| Crescendo | `crescendo` | Gradual escalation with backtracking |
-| Tree of Attacks | `tree_of_attacks` | Explores a tree of attack variants with pruning |
+| Multi Prompt Sending | `multi_prompt_sending` | Seeds used as a fixed prompt sequence; no adversarial LLM |
+| Red Teaming | `red_teaming` | Adversarial LLM iteratively crafts follow-up prompts up to `max_turns` |
+| Crescendo | `crescendo` | Gradual escalation with backtracking; controlled by `max_turns` and `max_backtracks` |
+| Tree of Attacks | `tree_of_attacks` | Explores a tree of attack variants with pruning; controlled by `tree_width`, `tree_depth`, `branching_factor` |
 
 Set `PENTESTER_PYRIT__ATTACK_STRATEGIES` to a JSON list of strategy values. An **empty list runs all strategies**.
 
@@ -86,7 +94,8 @@ Settings live in `PyritSettings` (env prefix `PENTESTER_PYRIT__`):
 |---|---|---|
 | `dataset_names` | `[]` | PyRIT dataset names to load. Empty = all available datasets |
 | `max_seeds` | `None` | Maximum seeds per dataset (None = all) |
-| `attack_strategies` | `["multi_prompt_sending"]` | Strategies to run in MULTITURN mode. Empty = all strategies |
+| `enable_multiturn` | `True` | Whether to run multi-turn attack strategies after single-turn probes |
+| `attack_strategies` | `["multi_prompt_sending"]` | Strategies to run in the multi-turn phase. Empty = all strategies |
 | `multiturn_objective` | `""` | Goal statement used by RedTeaming, Crescendo, and TAP |
 | `max_turns` | `10` | Max conversation turns (RedTeaming, Crescendo) |
 | `max_backtracks` | `10` | Max backtrack steps (Crescendo only) |
@@ -98,32 +107,21 @@ Settings live in `PyritSettings` (env prefix `PENTESTER_PYRIT__`):
 
 ## Examples
 
-### Semantic fence — single-turn
+### Semantic fence — single-turn only
 
 ```bash
 PENTESTER_TARGET_TYPE=SEMANTIC_FENCE \
 PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": \"$PROMPT\"}"' \
 PENTESTER_PYRIT__DATASET_NAMES='["xstest"]' \
 PENTESTER_PYRIT__MAX_SEEDS=20 \
+PENTESTER_PYRIT__ENABLE_MULTITURN=false \
 python src/main.py
 ```
 
-### LLM — direct model scoring
+### Semantic fence — single-turn + multi-turn
 
 ```bash
-PENTESTER_TARGET_TYPE=LLM \
-PENTESTER_LLM__PROVIDER=openai \
-PENTESTER_LLM__MODEL=gpt-4o \
-OPENAI_API_KEY=<your-key> \
-PENTESTER_PYRIT__DATASET_NAMES='["xstest"]' \
-PENTESTER_PYRIT__MAX_SEEDS=10 \
-python src/main.py
-```
-
-### Multi-turn — HTTP scanner as target (any AI chat)
-
-```bash
-PENTESTER_TARGET_TYPE=MULTITURN \
+PENTESTER_TARGET_TYPE=SEMANTIC_FENCE \
 PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": \"$PROMPT\"}"' \
 PENTESTER_LLM__PROVIDER=gemini \
 PENTESTER_LLM__MODEL=gemini-2.5-flash-lite \
@@ -135,10 +133,23 @@ PENTESTER_PYRIT__MAX_TURNS=8 \
 python src/main.py
 ```
 
-### Multi-turn — all strategies, LLM as both attacker and target
+### LLM — direct model, single-turn only
 
 ```bash
-PENTESTER_TARGET_TYPE=MULTITURN \
+PENTESTER_TARGET_TYPE=LLM \
+PENTESTER_LLM__PROVIDER=openai \
+PENTESTER_LLM__MODEL=gpt-4o \
+OPENAI_API_KEY=<your-key> \
+PENTESTER_PYRIT__DATASET_NAMES='["xstest"]' \
+PENTESTER_PYRIT__MAX_SEEDS=10 \
+PENTESTER_PYRIT__ENABLE_MULTITURN=false \
+python src/main.py
+```
+
+### LLM — all strategies, LLM as both attacker and target
+
+```bash
+PENTESTER_TARGET_TYPE=LLM \
 PENTESTER_LLM__PROVIDER=anthropic \
 PENTESTER_LLM__MODEL=claude-sonnet-4-6 \
 ANTHROPIC_API_KEY=<your-key> \
