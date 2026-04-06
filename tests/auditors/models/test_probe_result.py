@@ -106,3 +106,14 @@ def test_formatted_duration_when_set() -> None:
 
 def test_formatted_duration_when_none() -> None:
     assert _make_result(duration=None).formatted_duration == "—"
+
+
+class TestJudgeReason:
+    def test_returns_none_when_metadata_is_empty(self) -> None:
+        assert _make_result().judge_reason is None
+
+    def test_returns_none_when_key_absent(self) -> None:
+        assert _make_result(metadata={"error": "oops"}).judge_reason is None
+
+    def test_returns_reason_when_set(self) -> None:
+        assert _make_result(metadata={"judge_reason": "Safe response"}).judge_reason == "Safe response"
