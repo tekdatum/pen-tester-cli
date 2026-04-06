@@ -69,6 +69,7 @@ from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import clear_settings_cache  # noqa: E402
 from pentester.enums.auditor_key import AuditorKey  # noqa: E402
+from pentester.enums.prompt_type import PromptType  # noqa: E402
 from pentester.enums.target_type import TargetType  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
@@ -762,3 +763,49 @@ class TestAuditLLM:
 
 def test_auditor_key_is_garak() -> None:
     assert _make_auditor().auditor_key == AuditorKey.GARAK
+
+
+# ---------------------------------------------------------------------------
+# prompt_type
+# ---------------------------------------------------------------------------
+
+
+class TestPromptTypeGarak:
+    @pytest.fixture(autouse=True)
+    def _mock_scanner(self) -> MagicMock:
+        self.mock_scanner = MagicMock()
+        self.mock_scanner.scan.return_value = _make_scan_result()
+        return self.mock_scanner
+
+    def _audit_with(self, probes: list) -> list[ProbeResult]:
+        auditor = _make_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=probes),
+            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
+        ):
+            results, _ = auditor.audit()
+            return results
+
+    def test_fence_result_prompt_type_is_single(self) -> None:
+        results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
+        assert results[0].prompt_type == PromptType.SINGLE
+
+    def test_llm_result_prompt_type_is_single(self) -> None:
+        mock_response = MagicMock()
+        mock_response.text = "reply"
+        mock_generator = MagicMock()
+        mock_generator.generate.return_value = [mock_response]
+        auditor = _make_llm_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(
+                auditor,
+                "_load_probes",
+                return_value=[_make_probe("probes.dan.Dan1", ["p"])],
+            ),
+            patch.object(auditor, "_init_generator", return_value=mock_generator),
+            patch.object(auditor, "_evaluate", return_value=0.8),
+        ):
+            results, _ = auditor.audit()
+        assert results[0].prompt_type == PromptType.SINGLE

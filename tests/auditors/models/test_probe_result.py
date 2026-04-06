@@ -1,4 +1,5 @@
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.enums.prompt_type import PromptType
 
 
 def _make_result(**kwargs) -> ProbeResult:
@@ -23,7 +24,21 @@ def test_all_fields_assigned() -> None:
     assert r.response == "Access denied."
     assert r.bypassed is False
     assert r.score == 0.0
+    assert r.prompt_type == PromptType.SINGLE
     assert r.metadata == {}
+
+
+class TestPromptType:
+    def test_default_is_single(self) -> None:
+        assert _make_result().prompt_type == PromptType.SINGLE
+
+    def test_single_value_accepted(self) -> None:
+        r = _make_result(prompt_type=PromptType.SINGLE)
+        assert r.prompt_type == PromptType.SINGLE
+
+    def test_multiturn_value_accepted(self) -> None:
+        r = _make_result(prompt_type=PromptType.MULTITURN)
+        assert r.prompt_type == PromptType.MULTITURN
 
 
 def test_bypassed_true() -> None:
