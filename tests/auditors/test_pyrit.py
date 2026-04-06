@@ -330,7 +330,7 @@ class TestLoadDatasets:
             return results
 
     def test_uses_settings_dataset_names_when_set(self) -> None:
-        self._run(PyritSettings(dataset_names=["xstest"]))
+        self._run(PyritSettings(dataset_names=["xstest"], enable_multiturn=False))
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async.assert_called_once_with(
             dataset_names=["xstest"]
         )
@@ -343,7 +343,7 @@ class TestLoadDatasets:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[]
         )
-        self._run(PyritSettings(dataset_names=[]))
+        self._run(PyritSettings(dataset_names=[], enable_multiturn=False))
         assert (
             _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async.call_count == 2
         )
@@ -357,7 +357,7 @@ class TestLoadDatasets:
             side_effect=[RuntimeError("gated"), []]
         )
         with patch("pentester.auditors.pyrit.auditor.logger") as mock_logger:
-            self._run(PyritSettings(dataset_names=[]))
+            self._run(PyritSettings(dataset_names=[], enable_multiturn=False))
         mock_logger.warning.assert_called_once()
 
     def test_applies_max_seeds_limit(self) -> None:
@@ -368,7 +368,9 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=2))
+        auditor = _make_auditor(
+            PyritSettings(dataset_names=["x"], max_seeds=2, enable_multiturn=False)
+        )
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 2
@@ -381,7 +383,9 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=None))
+        auditor = _make_auditor(
+            PyritSettings(dataset_names=["x"], max_seeds=None, enable_multiturn=False)
+        )
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 4
@@ -406,7 +410,9 @@ class TestAuditSemanticFence:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[dataset]
         )
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"]))
+        auditor = _make_auditor(
+            PyritSettings(dataset_names=["x"], enable_multiturn=False)
+        )
         with patch.object(
             auditor, "_init_scanner", return_value=scanner or self.mock_scanner
         ):
@@ -492,7 +498,7 @@ class TestAuditLLM:
             return_value=[dataset]
         )
         auditor = _make_llm_auditor(
-            settings=PyritSettings(dataset_names=["x"]),
+            settings=PyritSettings(dataset_names=["x"], enable_multiturn=False),
             llm_settings=LLMSettings(model="gpt-4o"),
         )
         with (
@@ -577,7 +583,9 @@ class TestAuditLLM:
             return_value=[dataset]
         )
         auditor = _make_llm_auditor(
-            settings=PyritSettings(dataset_names=["x"]),
+            settings=PyritSettings(
+                dataset_names=["x"], enable_multiturn=False
+            ),
             llm_settings=LLMSettings(model="gpt-4o"),
         )
         with (
@@ -595,7 +603,9 @@ class TestAuditLLM:
             return_value=[dataset]
         )
         auditor = _make_llm_auditor(
-            settings=PyritSettings(dataset_names=["x"]),
+            settings=PyritSettings(
+                dataset_names=["x"], enable_multiturn=False
+            ),
             llm_settings=LLMSettings(model="gpt-4o"),
         )
         with (
@@ -613,15 +623,6 @@ class TestAuditLLM:
 # ---------------------------------------------------------------------------
 
 
-def _make_multiturn_auditor(
-    settings: PyritSettings | None = None,
-    llm_settings: LLMSettings | None = None,
-) -> PyritProbe:
-    auditor = _make_auditor(settings, llm_settings)
-    auditor.target_type = TargetType.MULTITURN
-    return auditor
-
-
 class TestAuditMultiturn:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
@@ -629,6 +630,7 @@ class TestAuditMultiturn:
         self.mock_target = MagicMock()
         self.mock_scorer = MagicMock()
         self.mock_scanner = MagicMock()
+        self.mock_scanner.scan.return_value = _make_scan_result()
 
     def _run_multiturn(
         self, settings: PyritSettings, run_strategy_return: MagicMock | None = None
@@ -643,9 +645,11 @@ class TestAuditMultiturn:
             run_strategy_return.outcome = MagicMock()
             run_strategy_return.last_score = None
 
-        auditor = _make_multiturn_auditor(settings=settings)
+        # enable_multiturn=True on a SEMANTIC_FENCE target triggers multiturn phase
+        auditor = _make_auditor(settings=settings)
         auditor._scanner = self.mock_scanner
         with (
+            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
             patch.object(auditor, "_init_target", return_value=self.mock_target),
             patch.object(auditor, "_init_scorer", return_value=self.mock_scorer),
             patch.object(
@@ -664,6 +668,7 @@ class TestAuditMultiturn:
         calls = self._run_multiturn(
             PyritSettings(
                 dataset_names=["x"],
+                enable_multiturn=True,
                 attack_strategies=[MultiTurnStrategy.CRESCENDO],
             )
         )
@@ -674,7 +679,11 @@ class TestAuditMultiturn:
         from pentester.enums.attack_strategy import MultiTurnStrategy
 
         calls = self._run_multiturn(
-            PyritSettings(dataset_names=["x"], attack_strategies=[])
+            PyritSettings(
+                dataset_names=["x"],
+                enable_multiturn=True,
+                attack_strategies=[],
+            )
         )
         strategies_used = {c.kwargs["strategy"] for c in calls}
         assert strategies_used == set(MultiTurnStrategy)
