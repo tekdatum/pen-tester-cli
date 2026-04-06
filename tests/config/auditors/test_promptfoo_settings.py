@@ -213,6 +213,20 @@ class TestMaxAttacks:
         assert PromptfooSettings(max_attacks=None).max_attacks is None
 
 
+class TestDefaultEmail:
+    def test_default_email_value(self) -> None:
+        assert PromptfooSettings().default_email == "tools@tekdatum.com"
+
+    def test_accepts_custom_email(self) -> None:
+        settings = PromptfooSettings(default_email="custom@example.com")
+        assert settings.default_email == "custom@example.com"
+
+    def test_default_email_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DEFAULT_EMAIL", "env@example.com")
+        settings = PromptfooSettings()
+        assert settings.default_email == "env@example.com"
+
+
 class TestEnvVarOverrides:
     def test_config_path_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CONFIG_PATH", "/env/path")
