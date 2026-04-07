@@ -696,13 +696,14 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial", "make_me_pay"]
+        assert evals == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "makemesay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
 
     def test_llm_returns_all_six_evals(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial", "agentharm", "AgentDojo", "make_me_pay"]
+        assert evals == ["strong_reject", "b3", "fortress_adversarial" "agentharm", "AgentDojo", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber", "makemesay"]
+
 
     def test_settings_evals_override_takes_precedence(self) -> None:
         auditor = InspectAIAuditor(
@@ -957,3 +958,64 @@ class TestCustomScorers:
     def test_no_custom_scorers_defaults_to_empty_dict(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings())
         assert auditor._custom_scorers == {}
+
+
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    """Verify that max_attacks is forwarded as limit= to inspect_eval."""
+
+    def _make_auditor_with_llm(self, **kwargs: Any) -> InspectAIAuditor:
+        auditor = InspectAIAuditor(
+            settings=InspectSettings(**kwargs),
+            llm=_make_llm(LLMProvider.OPENAI, "gpt-4o"),
+        )
+        auditor.target_type = TargetType.LLM
+        return auditor
+
+    def _run_audit(self, auditor: InspectAIAuditor, samples: list[MagicMock]) -> MagicMock:
+        log = _make_log(samples)
+        with (
+            patch(
+                "pentester.auditors.inspect_ai.auditor.inspect_eval",
+                return_value=[log],
+            ) as mock_eval,
+            patch.object(auditor, "_get_task", return_value=MagicMock()),
+            patch.object(auditor, "_map_results", return_value=[]),
+            patch("inspect_ai.model.get_model", return_value=MagicMock()),
+        ):
+            auditor.audit()
+        return mock_eval
+
+    def test_max_attacks_passed_as_limit_to_inspect_eval(self) -> None:
+        auditor = self._make_auditor_with_llm(max_attacks=5, evals=["strong_reject"])
+        mock_eval = self._run_audit(auditor, [_make_sample()])
+        _, kwargs = mock_eval.call_args
+        assert kwargs["limit"] == 5
+
+    def test_max_attacks_none_passes_none_limit(self) -> None:
+        auditor = self._make_auditor_with_llm(max_attacks=None, evals=["strong_reject"])
+        mock_eval = self._run_audit(auditor, [_make_sample()])
+        _, kwargs = mock_eval.call_args
+        assert kwargs["limit"] is None
+
+    def test_max_attacks_applied_per_eval(self) -> None:
+        auditor = self._make_auditor_with_llm(max_attacks=3, evals=["strong_reject", "b3"])
+        log = _make_log([_make_sample()])
+        with (
+            patch(
+                "pentester.auditors.inspect_ai.auditor.inspect_eval",
+                return_value=[log],
+            ) as mock_eval,
+            patch.object(auditor, "_get_task", return_value=MagicMock()),
+            patch.object(auditor, "_map_results", return_value=[]),
+            patch("inspect_ai.model.get_model", return_value=MagicMock()),
+        ):
+            auditor.audit()
+        assert mock_eval.call_count == 2
+        for call in mock_eval.call_args_list:
+            _, kwargs = call
+            assert kwargs["limit"] == 3
