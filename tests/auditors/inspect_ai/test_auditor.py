@@ -52,6 +52,7 @@ def _make_sample(
     sample_id: Any = "sample-1",
     messages: list[Any] | None = None,
     error: Any = None,
+    total_time: float | None = None,
 ) -> MagicMock:
     sample = MagicMock()
     sample.input = input_text
@@ -60,6 +61,7 @@ def _make_sample(
     sample.metadata = metadata if metadata is not None else {}
     sample.id = sample_id
     sample.error = error
+    sample.total_time = total_time
     if messages is not None:
         sample.messages = messages
     return sample
@@ -456,6 +458,16 @@ class TestMapSample:
         sample = _make_sample(error=err)
         result = _make_auditor()._map_sample(sample, "strong_reject")
         assert result.is_error is True
+
+    def test_maps_duration_from_total_time(self) -> None:
+        sample = _make_sample(total_time=1.234)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.duration == pytest.approx(1.234)
+
+    def test_duration_none_when_total_time_absent(self) -> None:
+        sample = _make_sample(total_time=None)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.duration is None
 
 
 # ---------------------------------------------------------------------------
