@@ -360,7 +360,7 @@ class TestLoadDatasets:
             self._run(PyritSettings(dataset_names=[]))
         mock_logger.warning.assert_called_once()
 
-    def test_applies_max_seeds_limit(self) -> None:
+    def test_applies_max_attacks_limit(self) -> None:
         seeds = [_make_seed(f"p{i}") for i in range(5)]
         dataset = _make_dataset(seeds=seeds)
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
@@ -368,12 +368,12 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=2))
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_attacks=2))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 2
 
-    def test_no_limit_when_max_seeds_none(self) -> None:
+    def test_no_limit_when_max_attacks_none(self) -> None:
         seeds = [_make_seed(f"p{i}") for i in range(4)]
         dataset = _make_dataset(seeds=seeds)
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
@@ -381,7 +381,7 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=None))
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_attacks=None))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 4

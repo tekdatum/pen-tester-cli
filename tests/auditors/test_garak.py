@@ -186,19 +186,11 @@ class TestInitGarak:
     def setup(self) -> None:  # type: ignore[override]
         _garak_config_mod.reset_mock()
         _garak_command_mod.reset_mock()
-        self.auditor = _make_auditor(GarakSettings(generations=3, seed=99))
+        self.auditor = _make_auditor(GarakSettings())
 
     def test_calls_load_base_config(self) -> None:
         self.auditor._init_garak()
         _garak_config_mod.load_base_config.assert_called_once()
-
-    def test_sets_generations_from_settings(self) -> None:
-        self.auditor._init_garak()
-        assert _garak_config_mod.run.generations == 3
-
-    def test_sets_seed_from_settings(self) -> None:
-        self.auditor._init_garak()
-        assert _garak_config_mod.run.seed == 99
 
     def test_sets_interactive_to_false(self) -> None:
         self.auditor._init_garak()
@@ -814,7 +806,7 @@ class TestAuditLLM:
             results, _ = auditor.audit()
         assert len(results) == 1
         assert results[0].response == "ERROR"
-        assert results[0].metadata == {"error": True}
+        assert results[0].metadata == {"error": "True"}
 
     def test_empty_prompt_is_skipped(self) -> None:
         probe = _make_probe("probes.dan.Dan1", ["", "real prompt"])
