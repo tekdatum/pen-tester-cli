@@ -63,11 +63,11 @@ def main() -> None:
     setup_logging(level=logging.DEBUG)
     settings = get_settings()
     settings.target_type = TargetType.LLM
-    settings.auditors = ["garak", "pyrit"]
+    settings.auditors = ["pyrit"]
     settings.garak.probes = [
         "probes.dan.DanInTheWild",
     ]
-    settings.pyrit.dataset_names = ["harmbench"]
+    settings.pyrit.dataset_names = []
     settings.pyrit.attack_strategies = [
         MultiTurnStrategy.CRESCENDO,
         MultiTurnStrategy.RED_TEAMING,

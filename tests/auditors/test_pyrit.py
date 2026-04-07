@@ -319,7 +319,7 @@ class TestLoadDatasets:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[]
         )
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = []
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(return_value=[])
 
     def _run(self, settings: PyritSettings) -> list[ProbeResult]:
         auditor = _make_auditor(settings)
@@ -336,10 +336,9 @@ class TestLoadDatasets:
         )
 
     def test_uses_all_dataset_names_when_settings_empty(self) -> None:
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = [
-            "a",
-            "b",
-        ]
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=["a", "b"]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[]
         )
@@ -349,10 +348,9 @@ class TestLoadDatasets:
         )
 
     def test_skips_failed_dataset_and_logs_warning(self) -> None:
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = [
-            "bad",
-            "good",
-        ]
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=["bad", "good"]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             side_effect=[RuntimeError("gated"), []]
         )
