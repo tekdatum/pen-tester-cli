@@ -57,7 +57,7 @@ The response can be parsed using dot-notation to extract the field that indicate
 
 
 ```
-pentester --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+pentester --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
 ### 2. Specify report formats
@@ -65,7 +65,7 @@ pentester --json-dot-target "body.valid" --curl-command "curl -X POST 'https://a
 Use `--generator-keys` with a comma-separated list of formats:
 
 ```
-pentester --generator-keys html,pdf --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+pentester --generator-keys html,pdf --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
 ### 3. Specify target type
@@ -75,7 +75,7 @@ The tool supports LLMs and Semantic Fences (`LLM` | `SEMANTIC_FENCE`). For seman
 ```
 pentester \
   --target-type LLM \
-  --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+  --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
 ### 4. Specify auditors
@@ -83,7 +83,7 @@ pentester \
 Use `--auditors` with a comma-separated list of auditor names to run only a subset:
 
 ```
-pentester --auditors garak,pyrit --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+pentester --auditors garak,pyrit --json-dot-target "body.valid" --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
 ### 5. Limit the number of attacks
@@ -120,7 +120,7 @@ from pentester.orchestrator import Orchestrator
 
 settings = PentesterSettings()
 settings.target_type = TargetType.SEMANTIC_FENCE
-settings.scanner.curl_command = "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'"
+settings.scanner.curl_command = "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 settings.scanner.json_dot_target = "body.valid"
 settings.reporting.output_dir_path = "./my-reports"
 settings.reporting.generator_keys = "html,pdf"
