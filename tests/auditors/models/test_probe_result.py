@@ -116,4 +116,7 @@ class TestJudgeReason:
         assert _make_result(metadata={"error": "oops"}).judge_reason is None
 
     def test_returns_reason_when_set(self) -> None:
-        assert _make_result(metadata={"judge_reason": "Safe response"}).judge_reason == "Safe response"
+        assert (
+            _make_result(metadata={"judge_reason": "Safe response"}).judge_reason
+            == "Safe response"
+        )
