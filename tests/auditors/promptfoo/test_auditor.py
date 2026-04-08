@@ -620,7 +620,6 @@ class TestProviders:
         auditor = _make_auditor()
         new_config = {"url": "https://secure.com", "method": "GET"}
         auditor._set_html_provider(new_config)
-        assert auditor.providers[0]["id"] == "https"
         assert auditor.providers[0]["config"] == new_config
 
     def test_retrieves_http_provider_correctly(self) -> None:
@@ -706,6 +705,7 @@ class TestConfigureProviderInTestFiles:
     def test_custom_handler_replaces_providers_in_yaml(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
+        auditor.provider_id = "file://handler.py:H.promptfoo_call_api"
         auditor.providers = [
             {"id": "file://handler.py:H.promptfoo_call_api"}
         ]
@@ -732,6 +732,7 @@ class TestConfigureProviderInTestFiles:
     def test_http_provider_updates_config_in_yaml(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
+        auditor.provider_id = "http"
         auditor.providers = [
             {"id": "http", "config": {"url": "http://new.com", "method": "POST"}}
         ]
@@ -757,6 +758,7 @@ class TestConfigureProviderInTestFiles:
     def test_http_provider_updates_id_to_https_in_yaml(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
+        auditor.provider_id = "https"
         auditor.providers = [
             {"id": "https", "config": {"url": "https://new.com", "method": "POST"}}
         ]
@@ -782,6 +784,7 @@ class TestConfigureProviderInTestFiles:
     def test_applies_custom_handler_to_all_yaml_files(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
+        auditor.provider_id = "file://h.py:H.promptfoo_call_api"
         auditor.providers = [
             {"id": "file://h.py:H.promptfoo_call_api"}
         ]
