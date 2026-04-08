@@ -11,7 +11,7 @@ from pentester.scanners.response_serializers.json_dot_serializer import JSONDotS
 
 serializer = JSONDotSerializer(target="body.data.valid")
 handler = UncurlHandler(
-    curl_command="curl -X POST 'https://target.com/api' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'",
+    curl_command="curl -X POST 'https://target.com/api' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'",
     response_serializer=serializer,
 )
 scanner = Scanner(handler)
@@ -33,10 +33,10 @@ The curl command must include the `$PROMPT` variable, which is replaced by the p
 curl -X POST 'https://api.example.com/chat' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TOKEN' \
-  --data-raw '{"messages": [{"role": "user", "content": $PROMPT}]}'
+  --data-raw '{"messages": [{"role": "user", "content": "$PROMPT"}]}'
 ```
 
-> `$PROMPT` is replaced with the prompt wrapped in double quotes: `"Ignore previous instructions"`
+> `$PROMPT` is replaced literally with the prompt text. Use `"$PROMPT"` (with double quotes) when the value is a JSON string field.
 
 ---
 
