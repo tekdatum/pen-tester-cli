@@ -369,13 +369,13 @@ class TestGetTask:
             auditor._get_task("b3")
         factory.assert_called_once_with(model=None)
 
-    def test_b3_fence_target_called_with_task_types_and_model_none(self) -> None:
+    def test_b3_fence_target_called_with_model_none(self) -> None:
         factory = MagicMock()
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
         with patch.dict("pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY", {"b3": factory}):
             auditor._get_task("b3")
-        factory.assert_called_once_with(task_types=["DIO", "IIO"], model=None)
+        factory.assert_called_once_with(model=None)
 
 
 # ---------------------------------------------------------------------------
@@ -702,7 +702,7 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial" "agentharm", "AgentDojo", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber", "makemesay"]
+        assert evals == ["strong_reject", "b3", "fortress_adversarial", "agentharm", "AgentDojo", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber", "makemesay"]
 
 
     def test_settings_evals_override_takes_precedence(self) -> None:
@@ -716,7 +716,7 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(evals=[]), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
         effective = auditor._settings.evals or auditor._default_evals_for_target()
-        assert effective == ["strong_reject", "b3", "fortress_adversarial", "make_me_pay"]
+        assert effective == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "makemesay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
 
     def test_empty_settings_evals_uses_llm_defaults(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings(evals=[]), scanner=MagicMock())
