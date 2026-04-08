@@ -6,7 +6,7 @@ from pentester.scanners.request_handlers.curl_handlers.uncurl_handler import (
 )
 from pentester.scanners.scanner import Scanner
 
-curl_command = """curl https://api.openai.com/v1/chat/completions \
+gpt_curl_command = """curl https://api.openai.com/v1/chat/completions \
 -H "Content-Type: application/json" \
 -H "Authorization: <API_KEY>" \
 -d '{{
@@ -14,15 +14,22 @@ curl_command = """curl https://api.openai.com/v1/chat/completions \
 "messages": [
     {{
         "role": "user",
-        "content": $PROMPT
+        "content": "$PROMPT"
     }}
 ]
 }}'"""
+gpt_serializer = JSONDotSerializer(target="body.choices.0.message.content")
 
-serializer = JSONDotSerializer(target="body.choices.0.message.content")
+crocotiger_curl_command = """
+curl -X POST 'http://localhost:8090/api/v1/fence/validate/1' \
+  -H 'Content-Type: application/json' \
+  --data-raw '{"text": "$PROMPT"}'
+"""
+crocotiger_serializer = JSONDotSerializer(target="body.data.valid")
+
 handler = UncurlHandler(
-    curl_command=curl_command,
-    response_serializer=serializer,
+    curl_command=crocotiger_curl_command,
+    response_serializer=crocotiger_serializer,
 )
 scan = Scanner(handler).scan("Is this a test?")
-print(scan.response)
+print(scan)
