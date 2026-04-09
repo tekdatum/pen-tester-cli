@@ -1413,7 +1413,10 @@ class TestApplyMultiturnOverrides:
 
     def test_keeps_all_single_turn_strategies(self) -> None:
         auditor = _make_auditor(
-            _make_settings(enable_multiturn=True, multiturn_strategies=["crescendo", "goat", "mischievous-user"])
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_strategies=["crescendo", "goat", "mischievous-user"],
+            )
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         ids = [s["id"] for s in result["redteam"]["strategies"]]
@@ -1850,9 +1853,7 @@ class TestIsMultiturnRow:
         ],
         ids=["none", "empty_list", "single_message"],
     )
-    def test_returns_false_for_non_multiturn_messages(
-        self, messages: object
-    ) -> None:
+    def test_returns_false_for_non_multiturn_messages(self, messages: object) -> None:
         row = pd.Series({"multiturn_messages": messages})
         assert PromptfooAuditor._is_multiturn_row(row) is False
 
@@ -1867,9 +1868,7 @@ class TestBuildSuccessfulTurnsSet:
         assert PromptfooAuditor._build_successful_turns_set(attacks) == {2, 5}
 
     @pytest.mark.parametrize("attacks", [None, []], ids=["none", "empty_list"])
-    def test_returns_empty_set_for_empty_input(
-        self, attacks: list | None
-    ) -> None:
+    def test_returns_empty_set_for_empty_input(self, attacks: list | None) -> None:
         assert PromptfooAuditor._build_successful_turns_set(attacks) == set()
 
     def test_skips_entries_without_turn_key(self) -> None:
@@ -2071,5 +2070,22 @@ class TestGenerateProbeResultsMixed:
 
         conv_ids = {r.metadata["conversation_id"] for r in results}
         assert len(conv_ids) == 2  # two distinct conversation IDs
+
+
 def test_auditor_key_is_promptfoo() -> None:
     assert _make_auditor().auditor_key == AuditorKey.PROMPTFOO
+
+
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    def test_max_attacks_defaults_to_none(self) -> None:
+        auditor = _make_auditor(settings=_make_settings())
+        assert auditor.settings.max_attacks is None
+
+    def test_max_attacks_is_readable_when_set(self) -> None:
+        auditor = _make_auditor(settings=_make_settings(max_attacks=75))
+        assert auditor.settings.max_attacks == 75

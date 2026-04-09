@@ -159,6 +159,45 @@ class TestMain:
         assert result.exit_code == 0
 
 
+class TestMaxAttacksCLI:
+    def test_max_attacks_sets_global_field(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, ["--max-attacks", "42"])
+        assert result.exit_code == 0
+        called_settings = mock_orchestrator_cls.call_args.args[0]
+        assert called_settings.max_attacks == 42
+
+    def test_max_attacks_propagates_to_all_auditors(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, ["--max-attacks", "10"])
+        assert result.exit_code == 0
+        s = mock_orchestrator_cls.call_args.args[0]
+        assert s.garak.max_attacks == 10
+        assert s.inspect.max_attacks == 10
+        assert s.pyrit.max_attacks == 10
+        assert s.promptfoo.max_attacks == 10
+
+    def test_max_attacks_not_set_leaves_auditors_as_none(self) -> None:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, [])
+        assert result.exit_code == 0
+        s = mock_orchestrator_cls.call_args.args[0]
+        assert s.max_attacks is None
+        assert s.garak.max_attacks is None
+        assert s.inspect.max_attacks is None
+        assert s.pyrit.max_attacks is None
+        assert s.promptfoo.max_attacks is None
+
+
 class TestAuditorsCLI:
     def test_auditors_calls_execute_auditors(self) -> None:
         mock_orchestrator = MagicMock()
