@@ -194,12 +194,29 @@ class TestExtractRows:
 
         # Verify schema structure
         expected_cols = {
-            "provider_url", "prompt", "input", "valid", "reason_code",
-            "duration", "accept_score", "reject_score", "latency_ms",
-            "http_status", "cached", "api_response", "source_file",
-            "strategy_id", "plugin_id", "error",
-            "success", "grading_score", "grading_reason", "conversation",
-            "multiturn_messages", "successful_attacks", "stored_grader_result",
+            "provider_url",
+            "prompt",
+            "input",
+            "valid",
+            "reason_code",
+            "duration",
+            "accept_score",
+            "reject_score",
+            "latency_ms",
+            "http_status",
+            "cached",
+            "api_response",
+            "source_file",
+            "strategy_id",
+            "plugin_id",
+            "error",
+            "success",
+            "grading_score",
+            "grading_reason",
+            "conversation",
+            "multiturn_messages",
+            "successful_attacks",
+            "stored_grader_result",
         }
         assert set(result.columns) == expected_cols
 
@@ -434,7 +451,9 @@ class TestBuildDataframe:
 
         assert len(result) == 2
         assert result["error"].iloc[0] is None
-        assert result["error"].iloc[1] == "Error running Python script: FileNotFoundError"
+        assert (
+            result["error"].iloc[1] == "Error running Python script: FileNotFoundError"
+        )
 
 
 class TestExtractConversation:
@@ -491,8 +510,14 @@ def _make_multiturn_response(
     if stored_grader_result is not None:
         meta["storedGraderResult"] = stored_grader_result
     return {
-        "raw": {"data": {"valid": False, "reason_code": "test", "duration": 1.0,
-                         "extra": {"accept_score": 0.5, "reject_score": 0.5}}},
+        "raw": {
+            "data": {
+                "valid": False,
+                "reason_code": "test",
+                "duration": 1.0,
+                "extra": {"accept_score": 0.5, "reject_score": 0.5},
+            }
+        },
         "latencyMs": 100,
         "cached": False,
         "metadata": {**meta, "http": {"status": 201}},
@@ -522,12 +547,16 @@ class TestExtractMultiturnMetadata:
         assert result["stored_grader_result"].iloc[0] == grader
 
     def test_returns_none_for_single_turn_rows(self) -> None:
-        resp = pd.Series([{
-            "raw": {"data": {}},
-            "latencyMs": 100,
-            "cached": False,
-            "metadata": {"http": {"status": 200}},
-        }])
+        resp = pd.Series(
+            [
+                {
+                    "raw": {"data": {}},
+                    "latencyMs": 100,
+                    "cached": False,
+                    "metadata": {"http": {"status": 200}},
+                }
+            ]
+        )
         result = PromptfooResultCollector._extract_multiturn_metadata(resp)
         assert result["multiturn_messages"].iloc[0] is None
         assert result["successful_attacks"].iloc[0] is None

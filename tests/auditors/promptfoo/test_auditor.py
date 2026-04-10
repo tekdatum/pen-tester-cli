@@ -19,6 +19,7 @@ from pentester.config.auditors.promptfoo_settings import (
 )
 from pentester.config.settings import TargetType
 from pentester.enums.auditor_key import AuditorKey
+from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
 
 
 _FAKE_CONFIG: dict[str, Any] = {
@@ -548,12 +549,32 @@ class TestGenerateTestsFiles:
         with (
             patch.object(auditor, "_write_plugin_configs") as mock_write,
             patch.object(auditor, "_run_redteam_generate_for_configs") as mock_gen,
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
         ):
             auditor.generate_tests_files()
 
         mock_write.assert_called_once()
         assert mock_write.call_args[0][0] == _FAKE_CONFIG["redteam"]["plugins"]
         mock_gen.assert_called_once()
+
+    def test_configures_provider_in_configurations_and_llm_assert_dirs(self) -> None:
+        auditor = _make_auditor()
+        with (
+            patch.object(auditor, "_write_plugin_configs"),
+            patch.object(auditor, "_run_redteam_generate_for_configs"),
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
+        ):
+            auditor.generate_tests_files()
+
+        configurations_dir = auditor.settings.tests_path / "configurations"
+        llm_assert_dir = auditor.settings.tests_path / "llm_as_judge_assert"
+        assert mock_configure.call_count == 2
+        mock_configure.assert_any_call(configurations_dir)
+        mock_configure.assert_any_call(llm_assert_dir)
 
     def test_calls_remove_cloud_only_tests_for_llm_target(self) -> None:
         auditor = _make_auditor(target_type=TargetType.LLM)
@@ -592,6 +613,13 @@ class TestProviders:
         auditor = _make_auditor()
         new_config = {"url": "http://new.com", "method": "GET"}
         auditor._set_html_provider(new_config)
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"] == new_config
+
+    def test_sets_https_provider_id_for_https_url(self) -> None:
+        auditor = _make_auditor()
+        new_config = {"url": "https://secure.com", "method": "GET"}
+        auditor._set_html_provider(new_config)
         assert auditor.providers[0]["config"] == new_config
 
     def test_retrieves_http_provider_correctly(self) -> None:
@@ -613,6 +641,213 @@ class TestProviders:
         auditor = _make_auditor()
         auditor.config["providers"] = [{"id": "openai", "config": {}}]
         assert auditor.get_providers() == {}
+
+
+class TestSetProviderFromScanner:
+    def test_custom_handler_sets_file_provider_id(self) -> None:
+        auditor = _make_auditor()
+        scanner = MagicMock()
+        scanner.request_handler = MagicMock()
+        scanner.custom_handler = "path/to/file.py:MyHandler"
+
+        auditor._set_provider_from_scanner(scanner)
+
+        expected_path = Path("path/to/file.py:MyHandler").resolve().as_posix()
+        assert len(auditor.providers) == 1
+        assert auditor.providers[0] == {
+            "id": f"file://{expected_path}.promptfoo_call_api"
+        }
+        assert "config" not in auditor.providers[0]
+
+    def test_non_curl_without_custom_handler_leaves_providers_unchanged(self) -> None:
+        auditor = _make_auditor()
+        original_providers = auditor.providers
+        scanner = MagicMock()
+        scanner.request_handler = MagicMock()
+        scanner.custom_handler = None
+
+        auditor._set_provider_from_scanner(scanner)
+
+        assert auditor.providers is original_providers
+
+    def test_curl_handler_sets_http_provider(self) -> None:
+        auditor = _make_auditor()
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        parsed = MagicMock(
+            url="http://test.com",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            data='{"text":"$PROMPT"}',
+        )
+        handler._parse_command.return_value = parsed
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+
+        auditor._set_provider_from_scanner(scanner)
+
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"]["url"] == "http://test.com"
+        assert auditor.providers[0]["config"]["method"] == "POST"
+
+    def test_curl_handler_no_providers_skips_setup(self) -> None:
+        auditor = _make_auditor()
+        auditor.providers = []
+        scanner = MagicMock()
+        scanner.request_handler = MagicMock(spec=CurlHandler)
+
+        auditor._set_provider_from_scanner(scanner)
+
+        assert auditor.providers == []
+
+
+class TestConfigureProviderInTestFiles:
+    def test_custom_handler_replaces_providers_in_yaml(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "file://handler.py:H.promptfoo_call_api"
+        auditor.providers = [
+            {"id": "file://handler.py:H.promptfoo_call_api"}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
+        assert result["providers"] == [
+            {"id": "file://handler.py:H.promptfoo_call_api"}
+        ]
+
+    def test_http_provider_updates_config_in_yaml(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "http"
+        auditor.providers = [
+            {"id": "http", "config": {"url": "http://new.com", "method": "POST"}}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
+        assert result["providers"][0]["id"] == "http"
+        assert result["providers"][0]["config"]["url"] == "http://new.com"
+
+    def test_http_provider_updates_id_to_https_in_yaml(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "https"
+        auditor.providers = [
+            {"id": "https", "config": {"url": "https://new.com", "method": "POST"}}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
+        assert result["providers"][0]["id"] == "https"
+        assert result["providers"][0]["config"]["url"] == "https://new.com"
+
+    def test_applies_custom_handler_to_all_yaml_files(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "file://h.py:H.promptfoo_call_api"
+        auditor.providers = [
+            {"id": "file://h.py:H.promptfoo_call_api"}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
+            (cfg_dir / name).write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
+            result = yaml.safe_load((cfg_dir / name).read_text())
+            assert result["providers"] == [
+                {"id": "file://h.py:H.promptfoo_call_api"}
+            ]
+
+    def test_skips_when_no_scanner(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = None
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        content = (cfg_dir / "test_1.yaml").read_text()
+        assert "http://old.com" in content
+
+    def test_skips_when_no_providers(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.providers = []
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        content = (cfg_dir / "test_1.yaml").read_text()
+        assert "http://old.com" in content
 
 
 class TestCleanConfig:
@@ -692,11 +927,40 @@ class TestPrepareAuditFiles:
         (llm_dir / "test_1.yaml").write_text("data")
         (custom_dir / "test_1.yaml").write_text("cleaned")
 
-        with patch.object(auditor, "clean_config") as mock_clean:
+        with (
+            patch.object(auditor, "clean_config") as mock_clean,
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
+        ):
             files = auditor._prepare_audit_files()
 
         mock_clean.assert_called_once()
+        mock_configure.assert_called_once_with(custom_dir)
         assert all(str(f).startswith(str(custom_dir)) for f in files)
+
+    def test_configures_provider_in_custom_assert_dir(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(output_path=str(tmp_path)),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        llm_dir = tmp_path / "tests" / "llm_as_judge_assert"
+        custom_dir = tmp_path / "tests" / "custom_assert"
+        llm_dir.mkdir(parents=True, exist_ok=True)
+        custom_dir.mkdir(parents=True, exist_ok=True)
+
+        (llm_dir / "test_1.yaml").write_text("data")
+        (custom_dir / "test_1.yaml").write_text("cleaned")
+
+        with (
+            patch.object(auditor, "clean_config"),
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
+        ):
+            auditor._prepare_audit_files()
+
+        mock_configure.assert_called_once_with(custom_dir)
 
     def test_prepares_llm_target_files(self, tmp_path: Path) -> None:
         auditor = _make_auditor(
@@ -1149,7 +1413,10 @@ class TestApplyMultiturnOverrides:
 
     def test_keeps_all_single_turn_strategies(self) -> None:
         auditor = _make_auditor(
-            _make_settings(enable_multiturn=True, multiturn_strategies=["crescendo", "goat", "mischievous-user"])
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_strategies=["crescendo", "goat", "mischievous-user"],
+            )
         )
         result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
         ids = [s["id"] for s in result["redteam"]["strategies"]]
@@ -1586,9 +1853,7 @@ class TestIsMultiturnRow:
         ],
         ids=["none", "empty_list", "single_message"],
     )
-    def test_returns_false_for_non_multiturn_messages(
-        self, messages: object
-    ) -> None:
+    def test_returns_false_for_non_multiturn_messages(self, messages: object) -> None:
         row = pd.Series({"multiturn_messages": messages})
         assert PromptfooAuditor._is_multiturn_row(row) is False
 
@@ -1603,9 +1868,7 @@ class TestBuildSuccessfulTurnsSet:
         assert PromptfooAuditor._build_successful_turns_set(attacks) == {2, 5}
 
     @pytest.mark.parametrize("attacks", [None, []], ids=["none", "empty_list"])
-    def test_returns_empty_set_for_empty_input(
-        self, attacks: list | None
-    ) -> None:
+    def test_returns_empty_set_for_empty_input(self, attacks: list | None) -> None:
         assert PromptfooAuditor._build_successful_turns_set(attacks) == set()
 
     def test_skips_entries_without_turn_key(self) -> None:
@@ -1807,5 +2070,22 @@ class TestGenerateProbeResultsMixed:
 
         conv_ids = {r.metadata["conversation_id"] for r in results}
         assert len(conv_ids) == 2  # two distinct conversation IDs
+
+
 def test_auditor_key_is_promptfoo() -> None:
     assert _make_auditor().auditor_key == AuditorKey.PROMPTFOO
+
+
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    def test_max_attacks_defaults_to_none(self) -> None:
+        auditor = _make_auditor(settings=_make_settings())
+        assert auditor.settings.max_attacks is None
+
+    def test_max_attacks_is_readable_when_set(self) -> None:
+        auditor = _make_auditor(settings=_make_settings(max_attacks=75))
+        assert auditor.settings.max_attacks == 75
