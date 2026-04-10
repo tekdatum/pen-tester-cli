@@ -87,3 +87,22 @@ class TestDetailsTemplate:
         )
         csv = CsvGenerator().generate_detail_report([probe], {}, {}).decode()
         assert PromptType.MULTITURN.value in csv
+
+    def test_judge_reason_column_in_header(self) -> None:
+        csv = CsvGenerator().generate_detail_report([_probe()], {}, {}).decode()
+        header = csv.splitlines()[0]
+        assert "judge_reason" in header
+
+    def test_judge_reason_value_in_row(self) -> None:
+        probe = ProbeResult(
+            auditor="injector",
+            attack_category="prompt",
+            attack_type="injection",
+            prompt="test",
+            response="ok",
+            bypassed=False,
+            score=0.0,
+            metadata={"judge_reason": "safe response"},
+        )
+        csv = CsvGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "safe response" in csv

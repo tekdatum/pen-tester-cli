@@ -155,3 +155,24 @@ class TestDetailsTemplate:
         )
         md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
         assert PromptType.MULTITURN.value in md
+
+    def test_judge_reason_column_header_present(self) -> None:
+        probe = _probe()
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "Judge Reason" in md
+
+    def test_judge_reason_appears_in_bypassed_section(self) -> None:
+        bypassed = _probe(
+            bypassed=True, metadata={"judge_reason": "response is harmful"}
+        )
+        md = MarkdownGenerator().generate_detail_report([bypassed], {}, {}).decode()
+        bypassed_section = md.split("## Blocked Prompts")[0]
+        assert "response is harmful" in bypassed_section
+
+    def test_judge_reason_appears_in_blocked_section(self) -> None:
+        blocked = _probe(
+            bypassed=False, metadata={"judge_reason": "safe response detected"}
+        )
+        md = MarkdownGenerator().generate_detail_report([blocked], {}, {}).decode()
+        blocked_section = md.split("## Blocked Prompts")[1].split("## Error Prompts")[0]
+        assert "safe response detected" in blocked_section

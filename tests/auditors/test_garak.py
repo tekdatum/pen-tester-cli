@@ -809,3 +809,18 @@ class TestPromptTypeGarak:
         ):
             results, _ = auditor.audit()
         assert results[0].prompt_type == PromptType.SINGLE
+
+
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    def test_max_attacks_defaults_to_none(self) -> None:
+        auditor = _make_auditor(settings=GarakSettings())
+        assert auditor._settings.max_attacks is None
+
+    def test_max_attacks_is_readable_when_set(self) -> None:
+        auditor = _make_auditor(settings=GarakSettings(max_attacks=50))
+        assert auditor._settings.max_attacks == 50

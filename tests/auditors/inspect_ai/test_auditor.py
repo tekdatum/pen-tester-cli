@@ -52,6 +52,8 @@ def _make_sample(
     metadata: dict[str, Any] | None = None,
     sample_id: Any = "sample-1",
     messages: list[Any] | None = None,
+    error: Any = None,
+    total_time: float | None = None,
 ) -> MagicMock:
     sample = MagicMock()
     sample.input = input_text
@@ -63,6 +65,8 @@ def _make_sample(
     }
     sample.metadata = metadata if metadata is not None else {}
     sample.id = sample_id
+    sample.error = error
+    sample.total_time = total_time
     if messages is not None:
         sample.messages = messages
     return sample
@@ -520,6 +524,30 @@ class TestMapSample:
         result = _make_auditor()._map_sample(sample, "strong_reject")
         assert result.prompt_type == PromptType.SINGLE
 
+    def test_errored_sample_bypassed_false(self) -> None:
+        err = MagicMock()
+        err.message = "model call timed out"
+        sample = _make_sample(score_value=_CORRECT, error=err)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.bypassed is False
+
+    def test_errored_sample_is_error_true(self) -> None:
+        err = MagicMock()
+        err.message = "model call timed out"
+        sample = _make_sample(error=err)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.is_error is True
+
+    def test_maps_duration_from_total_time(self) -> None:
+        sample = _make_sample(total_time=1.234)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.duration == pytest.approx(1.234)
+
+    def test_duration_none_when_total_time_absent(self) -> None:
+        sample = _make_sample(total_time=None)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.duration is None
+
 
 # ---------------------------------------------------------------------------
 # TestDetectPromptType
@@ -558,6 +586,37 @@ class TestDetectPromptType:
         ]
         sample = _make_sample(messages=messages)
         assert _make_auditor()._detect_prompt_type(sample) == PromptType.SINGLE
+
+
+# ---------------------------------------------------------------------------
+# TestBuildMetadata
+# ---------------------------------------------------------------------------
+
+
+class TestBuildMetadata:
+    def test_no_error_sets_no_error_key(self) -> None:
+        sample = _make_sample()
+        meta = _make_auditor()._build_metadata(sample, None)
+        assert "error" not in meta
+
+    def test_error_message_stored_in_metadata(self) -> None:
+        err = MagicMock()
+        err.message = "timeout after 30s"
+        sample = _make_sample(error=err)
+        meta = _make_auditor()._build_metadata(sample, None)
+        assert meta["error"] == "timeout after 30s"
+
+    def test_judge_reason_stored_from_score_explanation(self) -> None:
+        score = _make_score(explanation="response is harmful")
+        sample = _make_sample()
+        meta = _make_auditor()._build_metadata(sample, score)
+        assert meta["judge_reason"] == "response is harmful"
+
+    def test_judge_reason_absent_when_explanation_is_empty(self) -> None:
+        score = _make_score(explanation="")
+        sample = _make_sample()
+        meta = _make_auditor()._build_metadata(sample, score)
+        assert "judge_reason" not in meta
 
 
 # ---------------------------------------------------------------------------
@@ -700,7 +759,7 @@ class TestAudit:
             patch("pentester.auditors.inspect_ai.auditor.inspect_eval") as m_eval,
         ):
             m_eval.return_value = [_make_log(samples=[])]
-            results, _ = auditor.audit()
+            results = auditor.audit()
         assert len(results) == 2
 
     def test_isolates_exception_per_eval(self) -> None:
@@ -1068,5 +1127,16 @@ class TestCustomScorers:
         assert auditor._custom_scorers == {}
 
 
-def test_auditor_key_is_inspect_ai() -> None:
-    assert _make_auditor().auditor_key == AuditorKey.INSPECT_AI
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    def test_max_attacks_defaults_to_none(self) -> None:
+        auditor = InspectAIAuditor(settings=InspectSettings())
+        assert auditor._settings.max_attacks is None
+
+    def test_max_attacks_is_readable_when_set(self) -> None:
+        auditor = InspectAIAuditor(settings=InspectSettings(max_attacks=200))
+        assert auditor._settings.max_attacks == 200
