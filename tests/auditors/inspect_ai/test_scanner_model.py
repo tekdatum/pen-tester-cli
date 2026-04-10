@@ -51,10 +51,7 @@ class TestScannerModelAPI:
             "pentester.auditors.inspect_ai.scanner_model.ModelOutput"
         ) as _m_output:
             asyncio.run(api.generate([msg], [], None, MagicMock()))
-        expected = json.dumps(
-            [{"role": "user", "content": "attack prompt"}], ensure_ascii=False
-        )
-        mock_scanner.scan.assert_called_once_with(expected)
+        mock_scanner.scan.assert_called_once_with("attack prompt")
 
     def test_generate_returns_model_output_with_response_text(self) -> None:
         mock_scanner = MagicMock()
@@ -78,14 +75,7 @@ class TestScannerModelAPI:
         msg2 = self._make_message("user attack")
         with patch("pentester.auditors.inspect_ai.scanner_model.ModelOutput"):
             asyncio.run(api.generate([msg1, msg2], [], None, MagicMock()))
-        expected = json.dumps(
-            [
-                {"role": "user", "content": "system message"},
-                {"role": "user", "content": "user attack"},
-            ],
-            ensure_ascii=False,
-        )
-        mock_scanner.scan.assert_called_once_with(expected)
+        mock_scanner.scan.assert_called_once_with("user attack")
 
     def test_extract_prompt_from_messages_uses_text_property(self) -> None:
         api = self._make_api()
