@@ -742,7 +742,7 @@ class TestAuditLLM:
             results, _ = auditor.audit()
         assert len(results) == 1
         assert results[0].response == "ERROR"
-        assert results[0].metadata == {"error": True}
+        assert results[0].metadata == {"error": "True"}
 
     def test_empty_prompt_is_skipped(self) -> None:
         probe = _make_probe("probes.dan.Dan1", ["", "real prompt"])
