@@ -96,13 +96,17 @@ class TestReadRequirements:
 
 class TestSetupVenv:
     def test_creates_venv_when_path_does_not_exist(self, tmp_path: Path) -> None:
-        venv_path = str(tmp_path / "new_venv")
-        auditor = _make_auditor(venv_path=venv_path)
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        venv_path = tmp_path / "new_venv"
+        auditor = _make_auditor(venv_path=str(venv_path))
+
+        def create_dir(cmd, **_kwargs):
+            if "venv" in cmd:
+                venv_path.mkdir(exist_ok=True)
+
+        with patch("subprocess.run", side_effect=create_dir) as mock_run:
             auditor._setup_venv()
         assert (
-            call(["python", "-m", "venv", venv_path], check=True)
+            call(["python", "-m", "venv", str(venv_path)], check=True)
             in mock_run.call_args_list
         )
 

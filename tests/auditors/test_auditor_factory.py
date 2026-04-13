@@ -63,7 +63,6 @@ for _name, _stub in [
     sys.modules.setdefault(_name, _stub)
 
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
-from pentester.auditors.garak import GarakAuditor  # noqa: E402
 from pentester.auditors.models.base_auditor import BaseAuditor  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
@@ -73,6 +72,13 @@ from pentester.scanners.scanner import Scanner  # noqa: E402
 def _patch_promptfoo_auditor():
     """Mock PromptfooAuditor at the factory boundary so its __init__ never runs."""
     with patch("pentester.auditors.auditor_factory.PromptfooAuditor") as mock_cls:
+        yield mock_cls
+
+
+@pytest.fixture(autouse=True)
+def _patch_venv_auditor():
+    """Mock VenvAuditor at the factory boundary so its __init__ never runs."""
+    with patch("pentester.auditors.auditor_factory.VenvAuditor") as mock_cls:
         yield mock_cls
 
 
@@ -118,15 +124,21 @@ class TestScannerConstruction:
 
 
 class TestScannerInjection:
-    def test_garak_auditor_receives_none_scanner_when_not_configured(self) -> None:
+    def test_garak_auditor_receives_none_scanner_when_not_configured(
+        self, _patch_venv_auditor
+    ) -> None:
         factory = AuditorFactory(_make_settings())
-        auditor = factory.get_auditor("garak")
-        assert auditor._scanner is None
+        factory.get_auditor("garak")
+        _, kwargs = _patch_venv_auditor.call_args
+        assert kwargs["scanner"] is None
 
-    def test_garak_auditor_receives_scanner_when_configured(self) -> None:
+    def test_garak_auditor_receives_scanner_when_configured(
+        self, _patch_venv_auditor
+    ) -> None:
         factory = AuditorFactory(_make_settings(curl_command="curl http://example.com"))
-        auditor = factory.get_auditor("garak")
-        assert isinstance(auditor._scanner, Scanner)
+        factory.get_auditor("garak")
+        _, kwargs = _patch_venv_auditor.call_args
+        assert isinstance(kwargs["scanner"], Scanner)
 
     def test_promptfoo_auditor_receives_none_scanner_when_not_configured(
         self, _patch_promptfoo_auditor
@@ -153,9 +165,10 @@ class TestScannerInjection:
 
 
 class TestGetAuditor:
-    def test_get_garak_returns_garak_auditor(self) -> None:
+    def test_get_garak_returns_venv_auditor(self, _patch_venv_auditor) -> None:
         factory = AuditorFactory(_make_settings())
-        assert isinstance(factory.get_auditor("garak"), GarakAuditor)
+        auditor = factory.get_auditor("garak")
+        assert auditor is _patch_venv_auditor.return_value
 
     def test_get_promptfoo_returns_promptfoo_auditor(
         self, _patch_promptfoo_auditor
@@ -183,21 +196,26 @@ class TestGetAvailableAuditors:
         factory = AuditorFactory(_make_settings())
         assert isinstance(factory.get_available_auditors(), list)
 
-    def test_contains_garak_auditor(self) -> None:
+    def test_contains_garak_auditor(self, _patch_venv_auditor) -> None:
         factory = AuditorFactory(_make_settings())
         auditors = factory.get_available_auditors()
-        assert any(isinstance(a, GarakAuditor) for a in auditors)
+        assert _patch_venv_auditor.return_value in auditors
 
     def test_contains_promptfoo_auditor(self, _patch_promptfoo_auditor) -> None:
         factory = AuditorFactory(_make_settings())
         auditors = factory.get_available_auditors()
         assert _patch_promptfoo_auditor.return_value in auditors
 
-    def test_all_items_are_base_auditors(self, _patch_promptfoo_auditor) -> None:
+    def test_all_items_are_base_auditors(
+        self, _patch_promptfoo_auditor, _patch_venv_auditor
+    ) -> None:
         factory = AuditorFactory(_make_settings())
         for auditor in factory.get_available_auditors():
+            is_mock = auditor in (
+                _patch_promptfoo_auditor.return_value,
+                _patch_venv_auditor.return_value,
+            )
             is_real = isinstance(auditor, BaseAuditor)
-            is_mock = auditor is _patch_promptfoo_auditor.return_value
             assert is_real or is_mock
 
 
@@ -212,11 +230,11 @@ class TestGetAvailableAuditors:
 
 
 class TestGetAuditors:
-    def test_returns_requested_auditors(self) -> None:
+    def test_returns_requested_auditors(self, _patch_venv_auditor) -> None:
         factory = AuditorFactory(_make_settings())
         result = factory.get_auditors(["garak"])
         assert len(result) == 1
-        assert isinstance(result[0], GarakAuditor)
+        assert result[0] is _patch_venv_auditor.return_value
 
     def test_empty_keys_returns_empty_list(self) -> None:
         factory = AuditorFactory(_make_settings())
