@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.enums.prompt_type import PromptType
 from pentester.reporting.enum.generator_extension import GeneratorExtension
 from pentester.reporting.enum.generator_key import GeneratorKey
 from pentester.reporting.generators.base_generator import BaseGenerator
@@ -143,6 +144,29 @@ class TestDetailsTemplate:
         )
         assert "\\n" in html
         assert "line1\nline2" not in html
+
+    def test_prompt_type_column_heading_present(self) -> None:
+        html = HtmlGenerator().generate_detail_report([_probe()], {}, {}).decode()
+        assert "Prompt Type" in html
+
+    def test_prompt_type_single_value_in_row(self) -> None:
+        probe = _probe(bypassed=True)
+        html = HtmlGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert PromptType.SINGLE.value in html
+
+    def test_prompt_type_multiturn_value_in_row(self) -> None:
+        probe = ProbeResult(
+            auditor="injector",
+            attack_category="prompt",
+            attack_type="injection",
+            prompt="attack",
+            response="response",
+            bypassed=True,
+            score=1.0,
+            prompt_type=PromptType.MULTITURN,
+        )
+        html = HtmlGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert PromptType.MULTITURN.value in html
 
     def test_judge_reason_appears_in_bypassed_section(self) -> None:
         bypassed = _probe(

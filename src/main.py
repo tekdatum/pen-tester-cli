@@ -19,7 +19,7 @@ def main() -> None:
     settings.garak.probes = ["probes.dan.DanInTheWild"]
     settings.garak.max_attacks = 20
     settings.llm.provider = LLMProvider.OPENAI
-    settings.llm.model = "gpt-5.4-mini"
+    settings.llm.model = "gpt-4o-mini"
 
     orchestrator = Orchestrator(settings)
     orchestrator.execute_auditors(settings.auditors)

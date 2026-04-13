@@ -19,6 +19,7 @@ from pentester.config.auditors.promptfoo_settings import (
 )
 from pentester.config.settings import TargetType
 from pentester.enums.auditor_key import AuditorKey
+from pentester.enums.prompt_type import PromptType
 from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
 
 
@@ -1075,6 +1076,14 @@ class TestGenerateProbeResults:
         results = auditor._generate_probe_results()
 
         assert results[0].bypassed is False
+
+    def test_prompt_type_is_single(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df()
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].prompt_type == PromptType.SINGLE
 
 
 # ---------------------------------------------------------------------------
