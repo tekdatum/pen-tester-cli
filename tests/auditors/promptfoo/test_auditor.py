@@ -19,6 +19,7 @@ from pentester.config.auditors.promptfoo_settings import (
 )
 from pentester.config.settings import TargetType
 from pentester.enums.auditor_key import AuditorKey
+from pentester.enums.prompt_type import PromptType
 from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
 
 
@@ -706,18 +707,11 @@ class TestConfigureProviderInTestFiles:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
         auditor.provider_id = "file://handler.py:H.promptfoo_call_api"
-        auditor.providers = [
-            {"id": "file://handler.py:H.promptfoo_call_api"}
-        ]
+        auditor.providers = [{"id": "file://handler.py:H.promptfoo_call_api"}]
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -725,9 +719,7 @@ class TestConfigureProviderInTestFiles:
         import yaml
 
         result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
-        assert result["providers"] == [
-            {"id": "file://handler.py:H.promptfoo_call_api"}
-        ]
+        assert result["providers"] == [{"id": "file://handler.py:H.promptfoo_call_api"}]
 
     def test_http_provider_updates_config_in_yaml(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
@@ -739,12 +731,7 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -765,12 +752,7 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -785,18 +767,11 @@ class TestConfigureProviderInTestFiles:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
         auditor.provider_id = "file://h.py:H.promptfoo_call_api"
-        auditor.providers = [
-            {"id": "file://h.py:H.promptfoo_call_api"}
-        ]
+        auditor.providers = [{"id": "file://h.py:H.promptfoo_call_api"}]
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
             (cfg_dir / name).write_text(yaml_content)
 
@@ -806,9 +781,7 @@ class TestConfigureProviderInTestFiles:
 
         for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
             result = yaml.safe_load((cfg_dir / name).read_text())
-            assert result["providers"] == [
-                {"id": "file://h.py:H.promptfoo_call_api"}
-            ]
+            assert result["providers"] == [{"id": "file://h.py:H.promptfoo_call_api"}]
 
     def test_skips_when_no_scanner(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
@@ -816,12 +789,7 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -836,12 +804,7 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -1113,6 +1076,14 @@ class TestGenerateProbeResults:
         results = auditor._generate_probe_results()
 
         assert results[0].bypassed is False
+
+    def test_prompt_type_is_single(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df()
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].prompt_type == PromptType.SINGLE
 
 
 # ---------------------------------------------------------------------------
