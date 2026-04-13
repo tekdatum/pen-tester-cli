@@ -213,6 +213,28 @@ class TestMaxAttacks:
         assert PromptfooSettings(max_attacks=None).max_attacks is None
 
 
+class TestPluginNumTests:
+    def test_default_is_none(self) -> None:
+        assert PromptfooSettings().plugin_num_tests is None
+
+    def test_accepts_positive_value(self) -> None:
+        assert PromptfooSettings(plugin_num_tests=50).plugin_num_tests == 50
+
+    def test_accepts_one(self) -> None:
+        assert PromptfooSettings(plugin_num_tests=1).plugin_num_tests == 1
+
+    def test_accepts_none_explicitly(self) -> None:
+        assert PromptfooSettings(plugin_num_tests=None).plugin_num_tests is None
+
+    def test_rejects_zero(self) -> None:
+        with pytest.raises(Exception):
+            PromptfooSettings(plugin_num_tests=0)
+
+    def test_rejects_negative(self) -> None:
+        with pytest.raises(Exception):
+            PromptfooSettings(plugin_num_tests=-1)
+
+
 class TestDefaultEmail:
     def test_default_email_value(self) -> None:
         assert PromptfooSettings().default_email == "tools@tekdatum.com"
