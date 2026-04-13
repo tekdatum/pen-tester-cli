@@ -1,4 +1,5 @@
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.enums.prompt_type import PromptType
 from pentester.reporting.enum.generator_extension import GeneratorExtension
 from pentester.reporting.enum.generator_key import GeneratorKey
 from pentester.reporting.generators.base_generator import BaseGenerator
@@ -64,6 +65,28 @@ class TestDetailsTemplate:
             .decode()
         )
         assert '""' in csv
+
+    def test_prompt_type_column_in_header(self) -> None:
+        csv = CsvGenerator().generate_detail_report([], {}, {}).decode()
+        assert "prompt_type" in csv
+
+    def test_prompt_type_single_value_in_row(self) -> None:
+        csv = CsvGenerator().generate_detail_report([_probe()], {}, {}).decode()
+        assert PromptType.SINGLE.value in csv
+
+    def test_prompt_type_multiturn_value_in_row(self) -> None:
+        probe = ProbeResult(
+            auditor="injector",
+            attack_category="prompt",
+            attack_type="injection",
+            prompt="attack",
+            response="response",
+            bypassed=False,
+            score=0.0,
+            prompt_type=PromptType.MULTITURN,
+        )
+        csv = CsvGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert PromptType.MULTITURN.value in csv
 
     def test_judge_reason_column_in_header(self) -> None:
         csv = CsvGenerator().generate_detail_report([_probe()], {}, {}).decode()

@@ -90,6 +90,7 @@ from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
 from pentester.enums.auditor_key import AuditorKey  # noqa: E402
+from pentester.enums.prompt_type import PromptType  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
 
@@ -711,6 +712,93 @@ class TestInitObjectiveTarget:
 
 def test_auditor_key_is_pyrit() -> None:
     assert _make_auditor().auditor_key == AuditorKey.PYRIT
+
+
+# ---------------------------------------------------------------------------
+# prompt_type
+# ---------------------------------------------------------------------------
+
+
+class TestPromptTypePyrit:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:
+        _pyrit_setup_mod.initialize_pyrit_async.reset_mock()
+        self.mock_scanner = MagicMock()
+        self.mock_scanner.scan.return_value = _make_scan_result()
+
+    def test_semantic_fence_result_prompt_type_is_single(self) -> None:
+        dataset = _make_dataset(seeds=[_make_seed()])
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[dataset]
+        )
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"]))
+        with patch.object(auditor, "_init_scanner", return_value=self.mock_scanner):
+            results, _ = auditor.audit()
+        assert results[0].prompt_type == PromptType.SINGLE
+
+    def test_llm_result_prompt_type_is_single(self) -> None:
+        mock_target = MagicMock()
+        mock_scorer = MagicMock()
+        mock_response = _make_llm_response()
+        mock_target.send_prompt_async = AsyncMock(return_value=[mock_response])
+        mock_scorer.score_async = AsyncMock(return_value=[_make_score(True)])
+
+        dataset = _make_dataset(seeds=[_make_seed()])
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[dataset]
+        )
+        auditor = _make_llm_auditor(PyritSettings(dataset_names=["x"]))
+        with (
+            patch.object(auditor, "_init_target", return_value=mock_target),
+            patch.object(auditor, "_init_scorer", return_value=mock_scorer),
+        ):
+            results, _ = auditor.audit()
+        assert results[0].prompt_type == PromptType.SINGLE
+
+    def test_multiturn_result_prompt_type_is_multiturn(self) -> None:
+        from pentester.enums.attack_strategy import MultiTurnStrategy
+
+        mock_attack_result = MagicMock()
+        mock_attack_result.conversation_id = "cid"
+        mock_attack_result.outcome = MagicMock()
+        mock_attack_result.last_score = None
+
+        user_msg = MagicMock()
+        user_msg.message_pieces = [MagicMock(converted_value="attack")]
+        asst_msg = MagicMock()
+        asst_msg.message_pieces = [MagicMock(converted_value="response")]
+
+        dataset = _make_dataset(seeds=[_make_seed()])
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[dataset]
+        )
+
+        import sys
+
+        memory_mod = sys.modules["pyrit.memory"]
+        memory_mod.CentralMemory.get_memory_instance.return_value.get_conversation.return_value = [
+            user_msg,
+            asst_msg,
+        ]
+
+        auditor = _make_multiturn_auditor(
+            PyritSettings(
+                dataset_names=["x"],
+                attack_strategies=[MultiTurnStrategy.CRESCENDO],
+            )
+        )
+        auditor._scanner = MagicMock()
+        with (
+            patch.object(auditor, "_init_target", return_value=MagicMock()),
+            patch.object(auditor, "_init_scorer", return_value=MagicMock()),
+            patch.object(
+                auditor,
+                "_run_strategy_async",
+                new=AsyncMock(return_value=mock_attack_result),
+            ),
+        ):
+            results, _ = auditor.audit()
+        assert all(r.prompt_type == PromptType.MULTITURN for r in results)
 
 
 # ---------------------------------------------------------------------------
