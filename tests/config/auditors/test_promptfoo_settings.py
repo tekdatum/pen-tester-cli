@@ -287,7 +287,9 @@ class TestMultiturnDefaults:
         assert PromptfooSettings().multiturn_continue_after_success is False
 
     def test_multiturn_strategies_default(self) -> None:
-        assert set(PromptfooSettings().multiturn_strategies) == set(PromptfooMultiturnStrategy)
+        assert set(PromptfooSettings().multiturn_strategies) == set(
+            PromptfooMultiturnStrategy
+        )
 
 
 class TestMultiturnDirectInit:
@@ -347,10 +349,15 @@ class TestMultiturnValidation:
             PromptfooSettings(multiturn_max_backtracks=21)
 
     def test_max_backtracks_accepts_boundary_one(self) -> None:
-        assert PromptfooSettings(multiturn_max_backtracks=1).multiturn_max_backtracks == 1
+        assert (
+            PromptfooSettings(multiturn_max_backtracks=1).multiturn_max_backtracks == 1
+        )
 
     def test_max_backtracks_accepts_boundary_twenty(self) -> None:
-        assert PromptfooSettings(multiturn_max_backtracks=20).multiturn_max_backtracks == 20
+        assert (
+            PromptfooSettings(multiturn_max_backtracks=20).multiturn_max_backtracks
+            == 20
+        )
 
     def test_strategies_rejects_unknown_id(self) -> None:
         with pytest.raises(ValidationError):
@@ -372,11 +379,15 @@ class TestMultiturnEnvVars:
         monkeypatch.setenv("ENABLE_MULTITURN", "true")
         assert PromptfooSettings().enable_multiturn is True
 
-    def test_multiturn_max_turns_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_multiturn_max_turns_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("MULTITURN_MAX_TURNS", "10")
         assert PromptfooSettings().multiturn_max_turns == 10
 
-    def test_multiturn_max_backtracks_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_multiturn_max_backtracks_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("MULTITURN_MAX_BACKTRACKS", "8")
         assert PromptfooSettings().multiturn_max_backtracks == 8
 
@@ -384,18 +395,22 @@ class TestMultiturnEnvVars:
         monkeypatch.setenv("MULTITURN_STATEFUL", "true")
         assert PromptfooSettings().multiturn_stateful is True
 
-    def test_multiturn_continue_after_success_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_multiturn_continue_after_success_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("MULTITURN_CONTINUE_AFTER_SUCCESS", "true")
         assert PromptfooSettings().multiturn_continue_after_success is True
 
-    def test_multiturn_strategies_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_multiturn_strategies_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("MULTITURN_STRATEGIES", '["crescendo","goat"]')
         settings = PromptfooSettings()
         assert settings.multiturn_strategies == [
             PromptfooMultiturnStrategy.CRESCENDO,
             PromptfooMultiturnStrategy.GOAT,
         ]
-    
+
     def test_max_attacks_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MAX_ATTACKS", "300")
         settings = PromptfooSettings()

@@ -708,3 +708,18 @@ class TestInitObjectiveTarget:
 
 def test_auditor_key_is_pyrit() -> None:
     assert _make_auditor().auditor_key == AuditorKey.PYRIT
+
+
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    def test_max_attacks_defaults_to_none(self) -> None:
+        auditor = _make_auditor(settings=PyritSettings())
+        assert auditor._settings.max_attacks is None
+
+    def test_max_attacks_is_readable_when_set(self) -> None:
+        auditor = _make_auditor(settings=PyritSettings(max_attacks=100))
+        assert auditor._settings.max_attacks == 100
