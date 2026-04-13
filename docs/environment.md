@@ -15,5 +15,5 @@
 3. Install dependencies:
     ```bash
     python -m pip install -r requirements.txt
-    python -m pip install garak
+    python -m pip install garak==0.14.0
     ```

@@ -22,7 +22,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pytest-mock pytest-cov
-          python -m pip install garak
+          python -m pip install garak==0.14.0
 
       - name: Ruff Check (Linting)
         run: ruff check src/
