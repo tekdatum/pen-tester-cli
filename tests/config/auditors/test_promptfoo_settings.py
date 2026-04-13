@@ -17,7 +17,7 @@ class TestDefaults:
 
     def test_assertion_wrapper_path_default(self) -> None:
         settings = PromptfooSettings()
-        assert settings.assertion_wrapper_path == "../assert.py"
+        assert settings.assertion_wrapper_path is None
 
     def test_replace_existing_file_default(self) -> None:
         settings = PromptfooSettings()
