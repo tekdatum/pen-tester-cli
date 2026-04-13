@@ -31,6 +31,11 @@ class TestInit:
         assert runner.files_parallel == 5
         assert runner.concurrency == 4
         assert runner.max_tests == 20000
+        assert runner.default_email == "tools@tekdatum.com"
+
+    def test_initializes_with_custom_default_email(self) -> None:
+        runner = _make_runner(default_email="custom@example.com")
+        assert runner.default_email == "custom@example.com"
 
     def test_initializes_with_max_tests(self) -> None:
         runner = _make_runner(max_tests=500)
@@ -182,3 +187,34 @@ class TestRunAll:
 
         mock_eval.assert_not_called()
         assert results == []
+
+
+class TestEnsureEmailConfigured:
+    @pytest.fixture(autouse=True)
+    def _patch_subprocess(self) -> Generator[None]:
+        self.mock_result = MagicMock()
+        self.mock_result.stdout = ""
+        self.mock_result.returncode = 0
+        with patch(
+            "pentester.auditors.promptfoo.runner.subprocess.run",
+            return_value=self.mock_result,
+        ) as self.mock_run:
+            yield
+
+    def test_sets_email(self) -> None:
+        _make_runner().ensure_email_configured()
+
+        self.mock_run.assert_called_once_with(
+            ["promptfoo", "config", "set", "email", "tools@tekdatum.com"],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_uses_custom_default_email(self) -> None:
+        _make_runner(default_email="custom@example.com").ensure_email_configured()
+
+        self.mock_run.assert_called_once_with(
+            ["promptfoo", "config", "set", "email", "custom@example.com"],
+            capture_output=True,
+            text=True,
+        )

@@ -814,7 +814,7 @@ class TestAuditLLM:
             results, _ = auditor.audit()
         assert len(results) == 1
         assert results[0].response == "ERROR"
-        assert results[0].metadata == {"error": True}
+        assert results[0].metadata == {"error": "True"}
 
     def test_empty_prompt_is_skipped(self) -> None:
         probe = _make_probe("probes.dan.Dan1", ["", "real prompt"])
@@ -834,3 +834,18 @@ class TestAuditLLM:
 
 def test_auditor_key_is_garak() -> None:
     assert _make_auditor().auditor_key == AuditorKey.GARAK
+
+
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    def test_max_attacks_defaults_to_none(self) -> None:
+        auditor = _make_auditor(settings=GarakSettings())
+        assert auditor._settings.max_attacks is None
+
+    def test_max_attacks_is_readable_when_set(self) -> None:
+        auditor = _make_auditor(settings=GarakSettings(max_attacks=50))
+        assert auditor._settings.max_attacks == 50

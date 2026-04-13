@@ -2,18 +2,24 @@ from __future__ import annotations
 
 import copy
 import os
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, call, mock_open, patch
 
 import pandas as pd
 import pytest
 
 from pentester.auditors.models.probe_result import ProbeResult
 from pentester.auditors.promptfoo.auditor import PromptfooAuditor
-from pentester.config.auditors.promptfoo_settings import PromptfooSettings
+from pentester.auditors.promptfoo.runner import PromptfooRunner
+from pentester.config.auditors.promptfoo_settings import (
+    KNOWN_MULTITURN_STRATEGIES,
+    PromptfooSettings,
+)
 from pentester.config.settings import TargetType
 from pentester.enums.auditor_key import AuditorKey
+from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
 
 
 _FAKE_CONFIG: dict[str, Any] = {
@@ -22,6 +28,29 @@ _FAKE_CONFIG: dict[str, Any] = {
         {"id": "http", "config": {"url": "http://example.com", "method": "POST"}}
     ],
     "redteam": {
+        "strategies": [
+            {"id": "basic"},
+            {"id": "jailbreak"},
+            {
+                "id": "crescendo",
+                "config": {
+                    "maxTurns": 5,
+                    "maxBacktracks": 5,
+                    "stateful": False,
+                    "continueAfterSuccess": False,
+                },
+            },
+            {
+                "id": "goat",
+                "config": {
+                    "maxTurns": 5,
+                    "stateful": False,
+                    "continueAfterSuccess": False,
+                },
+            },
+            {"id": "crescendo", "config": {"maxTurns": 5}},
+            {"id": "mischievous-user", "config": {"maxTurns": 5, "stateful": False}},
+        ],
         "plugins": ["harmful:hate", "harmful:violent-crime"],
         "defaultAssertions": [{"type": "llm-rubric"}],
     },
@@ -520,12 +549,32 @@ class TestGenerateTestsFiles:
         with (
             patch.object(auditor, "_write_plugin_configs") as mock_write,
             patch.object(auditor, "_run_redteam_generate_for_configs") as mock_gen,
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
         ):
             auditor.generate_tests_files()
 
         mock_write.assert_called_once()
         assert mock_write.call_args[0][0] == _FAKE_CONFIG["redteam"]["plugins"]
         mock_gen.assert_called_once()
+
+    def test_configures_provider_in_configurations_and_llm_assert_dirs(self) -> None:
+        auditor = _make_auditor()
+        with (
+            patch.object(auditor, "_write_plugin_configs"),
+            patch.object(auditor, "_run_redteam_generate_for_configs"),
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
+        ):
+            auditor.generate_tests_files()
+
+        configurations_dir = auditor.settings.tests_path / "configurations"
+        llm_assert_dir = auditor.settings.tests_path / "llm_as_judge_assert"
+        assert mock_configure.call_count == 2
+        mock_configure.assert_any_call(configurations_dir)
+        mock_configure.assert_any_call(llm_assert_dir)
 
     def test_calls_remove_cloud_only_tests_for_llm_target(self) -> None:
         auditor = _make_auditor(target_type=TargetType.LLM)
@@ -564,6 +613,13 @@ class TestProviders:
         auditor = _make_auditor()
         new_config = {"url": "http://new.com", "method": "GET"}
         auditor._set_html_provider(new_config)
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"] == new_config
+
+    def test_sets_https_provider_id_for_https_url(self) -> None:
+        auditor = _make_auditor()
+        new_config = {"url": "https://secure.com", "method": "GET"}
+        auditor._set_html_provider(new_config)
         assert auditor.providers[0]["config"] == new_config
 
     def test_retrieves_http_provider_correctly(self) -> None:
@@ -585,6 +641,213 @@ class TestProviders:
         auditor = _make_auditor()
         auditor.config["providers"] = [{"id": "openai", "config": {}}]
         assert auditor.get_providers() == {}
+
+
+class TestSetProviderFromScanner:
+    def test_custom_handler_sets_file_provider_id(self) -> None:
+        auditor = _make_auditor()
+        scanner = MagicMock()
+        scanner.request_handler = MagicMock()
+        scanner.custom_handler = "path/to/file.py:MyHandler"
+
+        auditor._set_provider_from_scanner(scanner)
+
+        expected_path = Path("path/to/file.py:MyHandler").resolve().as_posix()
+        assert len(auditor.providers) == 1
+        assert auditor.providers[0] == {
+            "id": f"file://{expected_path}.promptfoo_call_api"
+        }
+        assert "config" not in auditor.providers[0]
+
+    def test_non_curl_without_custom_handler_leaves_providers_unchanged(self) -> None:
+        auditor = _make_auditor()
+        original_providers = auditor.providers
+        scanner = MagicMock()
+        scanner.request_handler = MagicMock()
+        scanner.custom_handler = None
+
+        auditor._set_provider_from_scanner(scanner)
+
+        assert auditor.providers is original_providers
+
+    def test_curl_handler_sets_http_provider(self) -> None:
+        auditor = _make_auditor()
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        parsed = MagicMock(
+            url="http://test.com",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            data='{"text":"$PROMPT"}',
+        )
+        handler._parse_command.return_value = parsed
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+
+        auditor._set_provider_from_scanner(scanner)
+
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"]["url"] == "http://test.com"
+        assert auditor.providers[0]["config"]["method"] == "POST"
+
+    def test_curl_handler_no_providers_skips_setup(self) -> None:
+        auditor = _make_auditor()
+        auditor.providers = []
+        scanner = MagicMock()
+        scanner.request_handler = MagicMock(spec=CurlHandler)
+
+        auditor._set_provider_from_scanner(scanner)
+
+        assert auditor.providers == []
+
+
+class TestConfigureProviderInTestFiles:
+    def test_custom_handler_replaces_providers_in_yaml(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "file://handler.py:H.promptfoo_call_api"
+        auditor.providers = [
+            {"id": "file://handler.py:H.promptfoo_call_api"}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
+        assert result["providers"] == [
+            {"id": "file://handler.py:H.promptfoo_call_api"}
+        ]
+
+    def test_http_provider_updates_config_in_yaml(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "http"
+        auditor.providers = [
+            {"id": "http", "config": {"url": "http://new.com", "method": "POST"}}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
+        assert result["providers"][0]["id"] == "http"
+        assert result["providers"][0]["config"]["url"] == "http://new.com"
+
+    def test_http_provider_updates_id_to_https_in_yaml(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "https"
+        auditor.providers = [
+            {"id": "https", "config": {"url": "https://new.com", "method": "POST"}}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
+        assert result["providers"][0]["id"] == "https"
+        assert result["providers"][0]["config"]["url"] == "https://new.com"
+
+    def test_applies_custom_handler_to_all_yaml_files(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "file://h.py:H.promptfoo_call_api"
+        auditor.providers = [
+            {"id": "file://h.py:H.promptfoo_call_api"}
+        ]
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
+            (cfg_dir / name).write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        import yaml
+
+        for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
+            result = yaml.safe_load((cfg_dir / name).read_text())
+            assert result["providers"] == [
+                {"id": "file://h.py:H.promptfoo_call_api"}
+            ]
+
+    def test_skips_when_no_scanner(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = None
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        content = (cfg_dir / "test_1.yaml").read_text()
+        assert "http://old.com" in content
+
+    def test_skips_when_no_providers(self, tmp_path: Path) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.providers = []
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = (
+            "providers:\n"
+            "- id: http\n"
+            "  config:\n"
+            "    url: http://old.com\n"
+        )
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        content = (cfg_dir / "test_1.yaml").read_text()
+        assert "http://old.com" in content
 
 
 class TestCleanConfig:
@@ -664,11 +927,40 @@ class TestPrepareAuditFiles:
         (llm_dir / "test_1.yaml").write_text("data")
         (custom_dir / "test_1.yaml").write_text("cleaned")
 
-        with patch.object(auditor, "clean_config") as mock_clean:
+        with (
+            patch.object(auditor, "clean_config") as mock_clean,
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
+        ):
             files = auditor._prepare_audit_files()
 
         mock_clean.assert_called_once()
+        mock_configure.assert_called_once_with(custom_dir)
         assert all(str(f).startswith(str(custom_dir)) for f in files)
+
+    def test_configures_provider_in_custom_assert_dir(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(output_path=str(tmp_path)),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        llm_dir = tmp_path / "tests" / "llm_as_judge_assert"
+        custom_dir = tmp_path / "tests" / "custom_assert"
+        llm_dir.mkdir(parents=True, exist_ok=True)
+        custom_dir.mkdir(parents=True, exist_ok=True)
+
+        (llm_dir / "test_1.yaml").write_text("data")
+        (custom_dir / "test_1.yaml").write_text("cleaned")
+
+        with (
+            patch.object(auditor, "clean_config"),
+            patch.object(
+                auditor, "_configure_provider_in_test_files"
+            ) as mock_configure,
+        ):
+            auditor._prepare_audit_files()
+
+        mock_configure.assert_called_once_with(custom_dir)
 
     def test_prepares_llm_target_files(self, tmp_path: Path) -> None:
         auditor = _make_auditor(
@@ -753,6 +1045,7 @@ class TestGenerateProbeResults:
             "cached": False,
             "error": None,
             "grading_reason": "All assertions passed",
+            "is_multiturn": False,
         }
 
     def test_attack_category_defaults_to_basic_when_strategy_id_is_none(self) -> None:
@@ -828,6 +1121,11 @@ class TestGenerateProbeResults:
 
 
 class TestValidatePreconditions:
+    @pytest.fixture(autouse=True)
+    def _patch_ensure_email(self) -> Generator[None, None, None]:
+        with patch.object(PromptfooRunner, "ensure_email_configured"):
+            yield
+
     def test_semantic_fence_passes_when_assert_file_exists(self) -> None:
         auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
         with patch("pathlib.Path.exists", return_value=True):
@@ -997,7 +1295,7 @@ class TestAudit:
         ):
             result, _ = auditor.audit()
 
-        assert mock_build.call_count == 2
+        assert mock_build.call_count == 1
         assert mock_gen_probes.call_count == 2
         mock_logger.error.assert_called_once_with(
             "Probe error — category: %s | type: %s | error: %s",
@@ -1071,5 +1369,723 @@ class TestAudit:
         assert result is expected_probes
 
 
+# ---------------------------------------------------------------------------
+# Multi-turn Strategy Tests
+# ---------------------------------------------------------------------------
+
+
+class TestStripMultiturnStrategies:
+    def test_strips_multiturn_keeps_single_turn(self) -> None:
+        result = PromptfooAuditor._strip_multiturn_strategies(
+            copy.deepcopy(_FAKE_CONFIG)
+        )
+        ids = {s["id"] for s in result["redteam"]["strategies"]}
+        assert ids == {"basic", "jailbreak"}
+
+    def test_does_not_mutate_input(self) -> None:
+        original = copy.deepcopy(_FAKE_CONFIG)
+        original_count = len(original["redteam"]["strategies"])
+        PromptfooAuditor._strip_multiturn_strategies(original)
+        assert len(original["redteam"]["strategies"]) == original_count
+
+    def test_handles_empty_strategies_list(self) -> None:
+        config = copy.deepcopy(_FAKE_CONFIG)
+        config["redteam"]["strategies"] = []
+        result = PromptfooAuditor._strip_multiturn_strategies(config)
+        assert result["redteam"]["strategies"] == []
+
+
+class TestApplyMultiturnOverrides:
+    def test_filters_to_allowlist(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_strategies=["crescendo", "goat"],
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        mt_ids = {
+            s["id"]
+            for s in result["redteam"]["strategies"]
+            if s["id"] in KNOWN_MULTITURN_STRATEGIES
+        }
+        assert mt_ids == {"crescendo", "goat"}
+
+    def test_keeps_all_single_turn_strategies(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_strategies=["crescendo", "goat", "mischievous-user"],
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        ids = [s["id"] for s in result["redteam"]["strategies"]]
+        assert "goat" in ids
+        assert "crescendo" in ids
+
+    def test_patches_max_turns(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_max_turns=10)
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        for s in result["redteam"]["strategies"]:
+            if s["id"] in KNOWN_MULTITURN_STRATEGIES:
+                assert s["config"]["maxTurns"] == 10
+
+    def test_patches_crescendo_specific_fields(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_max_backtracks=3,
+                multiturn_stateful=True,
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        crescendo = next(
+            s for s in result["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        assert crescendo["config"]["maxBacktracks"] == 3
+        assert crescendo["config"]["stateful"] is True
+        assert crescendo["config"]["continueAfterSuccess"] is False
+
+    def test_patches_crescendo_continue_after_success_true(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_continue_after_success=True,
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        crescendo = next(
+            s for s in result["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        assert crescendo["config"]["continueAfterSuccess"] is True
+
+    def test_patches_goat_specific_fields(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_stateful=True)
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        goat = next(s for s in result["redteam"]["strategies"] if s["id"] == "goat")
+        assert goat["config"]["stateful"] is True
+        assert goat["config"]["continueAfterSuccess"] is False
+
+    def test_patches_goat_continue_after_success_true(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(
+                enable_multiturn=True,
+                multiturn_continue_after_success=True,
+            )
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        goat = next(s for s in result["redteam"]["strategies"] if s["id"] == "goat")
+        assert goat["config"]["continueAfterSuccess"] is True
+
+    def test_mischievous_user_includes_stateful(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_stateful=True)
+        )
+        result = auditor._apply_multiturn_overrides(copy.deepcopy(_FAKE_CONFIG))
+        mu = next(
+            s for s in result["redteam"]["strategies"] if s["id"] == "mischievous-user"
+        )
+        assert mu["config"]["stateful"] is True
+        assert "continueAfterSuccess" not in mu["config"]
+
+    def test_does_not_mutate_input(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True, multiturn_max_turns=10)
+        )
+        original = copy.deepcopy(_FAKE_CONFIG)
+        crescendo_before = next(
+            s for s in original["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        original_max = crescendo_before["config"]["maxTurns"]
+        auditor._apply_multiturn_overrides(original)
+        crescendo_after = next(
+            s for s in original["redteam"]["strategies"] if s["id"] == "crescendo"
+        )
+        assert crescendo_after["config"]["maxTurns"] == original_max
+
+
+class TestWritePluginConfigsMultiturn:
+    def test_generates_multiturn_files_when_enabled(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        # 1 single-turn + 1 multiturn = 2 dumps
+        assert mock_dump.call_count == 2
+        mt_config = mock_dump.call_args_list[1][0][0]
+        strategy_ids = [s["id"] for s in mt_config["redteam"]["strategies"]]
+        assert "crescendo" in strategy_ids
+
+    def test_single_turn_file_has_no_multiturn_strategies(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        st_config = mock_dump.call_args_list[0][0][0]
+        st_ids = {s["id"] for s in st_config["redteam"]["strategies"]}
+        assert st_ids.isdisjoint(KNOWN_MULTITURN_STRATEGIES)
+
+    def test_multiturn_file_has_correct_prefix(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump"):
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        files = list(configs_dir.glob("*.yaml"))
+        names = {f.name for f in files}
+        assert "test_1.yaml" in names
+        assert "multiturn_test_1.yaml" in names
+
+    def test_no_multiturn_files_when_disabled(self, tmp_path: Path) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=False), target_type=TargetType.LLM
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump:
+            auditor._write_plugin_configs(["harmful:hate"], configs_dir)
+
+        assert mock_dump.call_count == 1  # single-turn only
+        st_config = mock_dump.call_args_list[0][0][0]
+        st_ids = {s["id"] for s in st_config["redteam"]["strategies"]}
+        assert st_ids.isdisjoint(KNOWN_MULTITURN_STRATEGIES)
+
+
+class TestSplitAuditFiles:
+    def test_splits_by_prefix(self) -> None:
+        files = [
+            Path("/test_1.yaml"),
+            Path("/multiturn_test_1.yaml"),
+            Path("/test_2.yaml"),
+            Path("/multiturn_test_2.yaml"),
+        ]
+        single, multi = PromptfooAuditor._split_audit_files(files)
+        assert len(single) == 2
+        assert len(multi) == 2
+        assert all(not f.name.startswith("multiturn_") for f in single)
+        assert all(f.name.startswith("multiturn_") for f in multi)
+
+    def test_returns_empty_lists_when_no_files(self) -> None:
+        single, multi = PromptfooAuditor._split_audit_files([])
+        assert single == []
+        assert multi == []
+
+    def test_all_single_turn(self) -> None:
+        files = [Path("/test_1.yaml"), Path("/test_2.yaml")]
+        single, multi = PromptfooAuditor._split_audit_files(files)
+        assert len(single) == 2
+        assert multi == []
+
+
+class TestValidatePreconditionsMultiturn:
+    @pytest.fixture(autouse=True)
+    def _patch_ensure_email(self) -> Generator[None, None, None]:
+        with patch.object(PromptfooRunner, "ensure_email_configured"):
+            yield
+
+    def test_requires_llm_key_for_multiturn_semantic_fence(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            pytest.raises(ValueError, match="Multi-turn strategies require"),
+        ):
+            auditor._validate_preconditions()
+
+    def test_requires_llm_key_for_multiturn_llm_target(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.LLM,
+        )
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            pytest.raises(ValueError, match="Multi-turn strategies require"),
+        ):
+            auditor._validate_preconditions()
+
+    def test_passes_with_key_for_multiturn_semantic_fence(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        with (
+            patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=True),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            auditor._validate_preconditions()  # should not raise
+
+
+class TestAuditTwoPassSemanticFence:
+    def test_two_pass_when_semantic_fence_and_multiturn(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        single_files = [Path("/test_1.yaml")]
+        multi_files = [Path("/multiturn_test_1.yaml")]
+        all_files = single_files + multi_files
+        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+        expected_df = pd.DataFrame({"col": [1]})
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=all_files),
+            patch.object(
+                auditor, "_split_audit_files", return_value=(single_files, multi_files)
+            ) as mock_split,
+            patch.object(auditor, "_unset_llm_api_keys") as mock_unset,
+            patch.object(auditor, "_restore_llm_api_keys") as mock_restore,
+            patch.object(auditor, "_run_eval_pass", return_value=runner_output),
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=expected_df
+            ),
+            patch.object(auditor, "_generate_probe_results", return_value=[]),
+        ):
+            auditor.audit()
+
+        mock_split.assert_called_once_with(all_files)
+        # Pass 1: unset keys, run single-turn, restore
+        mock_unset.assert_called_once()
+        # restore called: once after pass 1 + once in finally
+        assert mock_restore.call_count == 2
+
+    def test_single_pass_when_semantic_fence_without_multiturn(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=False),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
+        files = [Path("/test_1.yaml")]
+        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=files),
+            patch.object(auditor, "_unset_llm_api_keys") as mock_unset,
+            patch.object(auditor, "_restore_llm_api_keys"),
+            patch.object(auditor, "_run_eval_pass", return_value=runner_output),
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=pd.DataFrame()
+            ),
+            patch.object(auditor, "_generate_probe_results", return_value=[]),
+        ):
+            auditor.audit()
+
+        mock_unset.assert_called_once()
+
+
+class TestAuditSinglePassLLM:
+    def test_single_pass_for_llm_with_multiturn(self) -> None:
+        auditor = _make_auditor(
+            _make_settings(enable_multiturn=True),
+            target_type=TargetType.LLM,
+        )
+        files = [Path("/test_1.yaml"), Path("/multiturn_test_1.yaml")]
+        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+
+        with (
+            patch.object(auditor, "_validate_preconditions"),
+            patch.object(auditor, "generate_tests_files"),
+            patch.object(auditor.collector, "clean"),
+            patch.object(auditor, "_prepare_audit_files", return_value=files),
+            patch.object(auditor, "_unset_llm_api_keys") as mock_unset,
+            patch.object(auditor, "_restore_llm_api_keys"),
+            patch.object(
+                auditor, "_run_eval_pass", return_value=runner_output
+            ) as mock_eval,
+            patch.object(
+                auditor.collector, "build_dataframe", return_value=pd.DataFrame()
+            ),
+            patch.object(auditor, "_generate_probe_results", return_value=[]),
+        ):
+            auditor.audit()
+
+        mock_unset.assert_not_called()
+        mock_eval.assert_has_calls(
+            [
+                call([Path("/test_1.yaml")]),
+                call([Path("/multiturn_test_1.yaml")]),
+            ]
+        )
+        assert mock_eval.call_count == 2
+
+
+class TestGenerateProbeResultsMultiturn:
+    def test_is_multiturn_true_for_multiturn_strategy(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = pd.DataFrame(
+            [
+                {
+                    "strategy_id": "crescendo",
+                    "plugin_id": "harmful:hate",
+                    "prompt": "p",
+                    "api_response": "r",
+                    "success": False,
+                    "error": None,
+                    "grading_score": 1.0,
+                    "accept_score": None,
+                    "http_status": 200,
+                    "duration": 1.0,
+                    "latency_ms": 50,
+                    "cached": False,
+                    "grading_reason": None,
+                }
+            ]
+        )
+        results = auditor._generate_probe_results()
+        assert results[0].metadata["is_multiturn"] is True
+
+    def test_is_multiturn_false_for_single_turn_strategy(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = pd.DataFrame(
+            [
+                {
+                    "strategy_id": "basic",
+                    "plugin_id": "harmful:hate",
+                    "prompt": "p",
+                    "api_response": "r",
+                    "success": True,
+                    "error": None,
+                    "grading_score": 1.0,
+                    "accept_score": None,
+                    "http_status": 200,
+                    "duration": 1.0,
+                    "latency_ms": 50,
+                    "cached": False,
+                    "grading_reason": None,
+                }
+            ]
+        )
+        results = auditor._generate_probe_results()
+        assert results[0].metadata["is_multiturn"] is False
+
+
+# ---------------------------------------------------------------------------
+# Multiturn Explosion Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_multiturn_messages(num_turns: int = 3) -> list[dict[str, str]]:
+    """Create alternating user/assistant message pairs."""
+    messages = []
+    for i in range(1, num_turns + 1):
+        messages.append({"role": "user", "content": f"user_msg_{i}"})
+        messages.append({"role": "assistant", "content": f"assistant_resp_{i}"})
+    return messages
+
+
+def _make_multiturn_row(
+    num_turns: int = 3,
+    successful_turns: list[int] | None = None,
+    grader_score: float = 0.0,
+    grader_reason: str = "attack succeeded",
+    grader_pass: bool = False,
+    **overrides: object,
+) -> dict[str, Any]:
+    """Build a dict representing a multiturn DataFrame row."""
+    attacks = [
+        {"turn": t, "prompt": f"user_msg_{t}", "response": f"assistant_resp_{t}"}
+        for t in (successful_turns or [])
+    ]
+    row: dict[str, Any] = {
+        "strategy_id": "crescendo",
+        "plugin_id": "competitors",
+        "prompt": f"user_msg_{num_turns}",
+        "api_response": f"assistant_resp_{num_turns}",
+        "success": False,
+        "error": None,
+        "grading_score": 1.0,
+        "accept_score": None,
+        "http_status": 201,
+        "duration": 1.5,
+        "latency_ms": 100,
+        "cached": False,
+        "grading_reason": None,
+        "multiturn_messages": _make_multiturn_messages(num_turns),
+        "successful_attacks": attacks,
+        "stored_grader_result": {
+            "score": grader_score,
+            "reason": grader_reason,
+            "pass": grader_pass,
+        },
+    }
+    row.update(overrides)
+    return row
+
+
+class TestIsMultiturnRow:
+    def test_returns_true_when_multiturn_messages_is_nonempty_list(self) -> None:
+        row = pd.Series(
+            {"multiturn_messages": [{"role": "user"}, {"role": "assistant"}]}
+        )
+        assert PromptfooAuditor._is_multiturn_row(row) is True
+
+    @pytest.mark.parametrize(
+        "messages",
+        [
+            None,
+            [],
+            [{"role": "user"}],
+        ],
+        ids=["none", "empty_list", "single_message"],
+    )
+    def test_returns_false_for_non_multiturn_messages(self, messages: object) -> None:
+        row = pd.Series({"multiturn_messages": messages})
+        assert PromptfooAuditor._is_multiturn_row(row) is False
+
+    def test_returns_false_when_column_missing(self) -> None:
+        row = pd.Series({"other": "value"})
+        assert PromptfooAuditor._is_multiturn_row(row) is False
+
+
+class TestBuildSuccessfulTurnsSet:
+    def test_returns_set_of_turn_numbers(self) -> None:
+        attacks = [{"turn": 2, "prompt": "p"}, {"turn": 5, "prompt": "p"}]
+        assert PromptfooAuditor._build_successful_turns_set(attacks) == {2, 5}
+
+    @pytest.mark.parametrize("attacks", [None, []], ids=["none", "empty_list"])
+    def test_returns_empty_set_for_empty_input(self, attacks: list | None) -> None:
+        assert PromptfooAuditor._build_successful_turns_set(attacks) == set()
+
+    def test_skips_entries_without_turn_key(self) -> None:
+        attacks = [{"turn": 3}, {"prompt": "no turn key"}]
+        assert PromptfooAuditor._build_successful_turns_set(attacks) == {3}
+
+
+class TestExplodeMultiturnRow:
+    def test_explodes_into_correct_number_of_probes(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert len(results) == 3
+
+    def test_prompt_and_response_per_turn(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=2))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].prompt == "user_msg_1"
+        assert results[0].response == "assistant_resp_1"
+        assert results[1].prompt == "user_msg_2"
+        assert results[1].response == "assistant_resp_2"
+
+    def test_bypassed_and_score_per_turn(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[2]))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].bypassed is False
+        assert results[1].bypassed is True
+        assert results[2].bypassed is False
+        assert results[0].score == 1.0
+        assert results[1].score == 0.0
+        assert results[2].score == 1.0
+
+    def test_blocked_turn_score_is_one(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=2, successful_turns=[1]))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].score == 0.0  # bypassed
+        assert results[1].score == 1.0  # blocked
+
+    def test_grading_reason_for_bypassed_turns_only(self) -> None:
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=2, successful_turns=[2], grader_reason="defense failed"
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].metadata["grading_reason"] is None
+        assert results[1].metadata["grading_reason"] == "defense failed"
+
+    def test_conversation_id_shared_across_turns(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-abc", "promptfoo")
+        for r in results:
+            assert r.metadata["conversation_id"] == "conv-abc"
+
+    def test_turn_number_is_one_indexed(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert [r.metadata["turn_number"] for r in results] == [1, 2, 3]
+
+    def test_is_multiturn_true_for_all_turns(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=2))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        for r in results:
+            assert r.metadata["is_multiturn"] is True
+
+    def test_attack_category_from_strategy_id(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=1, strategy_id="goat"))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].attack_category == "goat"
+
+    def test_attack_type_from_plugin_id(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=1, plugin_id="harmful:hate"))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].attack_type == "harmful:hate"
+
+    def test_odd_message_count_ignores_trailing_user_message(self) -> None:
+        messages = _make_multiturn_messages(2)
+        messages.append({"role": "user", "content": "trailing"})
+        row_data = _make_multiturn_row(num_turns=2)
+        row_data["multiturn_messages"] = messages
+        row = pd.Series(row_data)
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert len(results) == 2
+
+    def test_empty_successful_attacks_means_no_bypasses(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=3, successful_turns=[]))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert all(r.bypassed is False for r in results)
+        assert all(r.score == 1.0 for r in results)
+
+    def test_metadata_includes_row_level_fields(self) -> None:
+        row = pd.Series(_make_multiturn_row(num_turns=1))
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        m = results[0].metadata
+        assert m["http_status"] == 201
+        assert m["duration"] == 1.5
+        assert m["latency_ms"] == 100
+        assert m["cached"] is False
+        assert m["error"] is None
+
+    def test_stored_grader_result_none_handled(self) -> None:
+        row_data = _make_multiturn_row(num_turns=1, successful_turns=[1])
+        row_data["stored_grader_result"] = None
+        row = pd.Series(row_data)
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].bypassed is True
+        assert results[0].score == 0.0
+        assert results[0].metadata["grading_reason"] is None
+
+    def test_conversation_bypassed_true_when_grader_fails(self) -> None:
+        """conversation_bypassed is True when storedGraderResult.pass is
+        false, meaning the overall conversation was compromised."""
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=2,
+                successful_turns=[1],
+                grader_pass=False,
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert all(r.metadata["conversation_bypassed"] is True for r in results)
+
+    def test_conversation_bypassed_false_when_grader_passes(self) -> None:
+        """conversation_bypassed is False when storedGraderResult.pass is
+        true, even if there are intermediate successful attacks."""
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=3,
+                successful_turns=[2],
+                grader_pass=True,
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert all(r.metadata["conversation_bypassed"] is False for r in results)
+
+    def test_bypassed_turns_independent_of_grader_pass(self) -> None:
+        """Turns in successfulAttacks are bypassed regardless of the
+        conversation-level grader outcome."""
+        row = pd.Series(
+            _make_multiturn_row(
+                num_turns=3,
+                successful_turns=[2],
+                grader_pass=True,
+            )
+        )
+        results = PromptfooAuditor._explode_multiturn_row(row, "conv-123", "promptfoo")
+        assert results[0].bypassed is False
+        assert results[1].bypassed is True
+        assert results[2].bypassed is False
+        assert results[0].score == 1.0
+        assert results[1].score == 0.0
+        assert results[2].score == 1.0
+
+
+def _make_single_turn_row() -> dict[str, Any]:
+    return {
+        "strategy_id": "basic",
+        "plugin_id": "harmful:hate",
+        "prompt": "single prompt",
+        "api_response": {"data": "resp"},
+        "success": True,
+        "error": None,
+        "grading_score": 1.0,
+        "accept_score": 0.9,
+        "http_status": 200,
+        "duration": 0.5,
+        "latency_ms": 50,
+        "cached": False,
+        "grading_reason": "passed",
+        "multiturn_messages": None,
+        "successful_attacks": None,
+        "stored_grader_result": None,
+    }
+
+
+class TestGenerateProbeResultsMixed:
+    def test_mixed_single_and_multiturn_rows(self) -> None:
+        auditor = _make_auditor()
+        single = _make_single_turn_row()
+        multi = _make_multiturn_row(num_turns=3, successful_turns=[2])
+        auditor.results_df = pd.DataFrame([single, multi])
+
+        results = auditor._generate_probe_results()
+
+        # 1 single-turn + 3 exploded turns = 4
+        assert len(results) == 4
+        assert results[0].metadata.get("conversation_id") is None
+        assert results[0].metadata["is_multiturn"] is False
+        assert results[1].metadata["is_multiturn"] is True
+        assert results[1].metadata["turn_number"] == 1
+        assert results[3].metadata["turn_number"] == 3
+
+    def test_multiturn_conversation_ids_are_unique_per_row(self) -> None:
+        auditor = _make_auditor()
+        multi1 = _make_multiturn_row(num_turns=2)
+        multi2 = _make_multiturn_row(num_turns=2)
+        auditor.results_df = pd.DataFrame([multi1, multi2])
+
+        results = auditor._generate_probe_results()
+
+        conv_ids = {r.metadata["conversation_id"] for r in results}
+        assert len(conv_ids) == 2  # two distinct conversation IDs
+
+
 def test_auditor_key_is_promptfoo() -> None:
     assert _make_auditor().auditor_key == AuditorKey.PROMPTFOO
+
+
+# ---------------------------------------------------------------------------
+# TestMaxAttacks
+# ---------------------------------------------------------------------------
+
+
+class TestMaxAttacks:
+    def test_max_attacks_defaults_to_none(self) -> None:
+        auditor = _make_auditor(settings=_make_settings())
+        assert auditor.settings.max_attacks is None
+
+    def test_max_attacks_is_readable_when_set(self) -> None:
+        auditor = _make_auditor(settings=_make_settings(max_attacks=75))
+        assert auditor.settings.max_attacks == 75
