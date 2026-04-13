@@ -33,6 +33,7 @@ _garak_generators_litellm_mod = MagicMock(name="garak.generators.litellm")
 _garak_generators_openai_mod = MagicMock(name="garak.generators.openai")
 _garak_mod = MagicMock(name="garak")
 
+
 # Generator base class — must be a real class so ScannerGenerator can inherit
 class _FakeGenerator:
     def __init__(self, name: str, config_root: object = None) -> None:
@@ -725,7 +726,9 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_objective_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0),
         ):
             auditor.audit()
@@ -739,7 +742,9 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_objective_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0) as m_eval,
         ):
             auditor.audit()
@@ -785,7 +790,9 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_objective_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0),
             patch("pentester.auditors.garak.auditor.logger") as mock_logger,
         ):
@@ -799,7 +806,9 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_objective_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0),
             patch("pentester.auditors.garak.auditor.logger"),
         ):

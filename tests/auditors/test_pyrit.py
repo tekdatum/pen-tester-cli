@@ -319,7 +319,9 @@ class TestLoadDatasets:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[]
         )
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(return_value=[])
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=[]
+        )
 
     def _run(self, settings: PyritSettings) -> list[ProbeResult]:
         auditor = _make_auditor(settings)

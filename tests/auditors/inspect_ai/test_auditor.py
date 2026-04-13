@@ -761,14 +761,34 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "makemesay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "agentharm",
+            "fortress_adversarial",
+            "make_me_pay",
+            "makemesay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+        ]
 
     def test_llm_returns_all_six_evals(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial", "agentharm", "AgentDojo", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber", "makemesay"]
-
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "fortress_adversarial",
+            "agentharm",
+            "AgentDojo",
+            "make_me_pay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+            "makemesay",
+        ]
 
     def test_settings_evals_override_takes_precedence(self) -> None:
         auditor = InspectAIAuditor(
@@ -783,7 +803,17 @@ class TestDefaultEvalsForTarget:
         )
         auditor.target_type = TargetType.SEMANTIC_FENCE
         effective = auditor._settings.evals or auditor._default_evals_for_target()
-        assert effective == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "makemesay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
+        assert effective == [
+            "strong_reject",
+            "b3",
+            "agentharm",
+            "fortress_adversarial",
+            "make_me_pay",
+            "makemesay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+        ]
 
     def test_empty_settings_evals_uses_llm_defaults(self) -> None:
         auditor = InspectAIAuditor(
@@ -1067,7 +1097,9 @@ class TestMaxAttacks:
         auditor.target_type = TargetType.LLM
         return auditor
 
-    def _run_audit(self, auditor: InspectAIAuditor, samples: list[MagicMock]) -> MagicMock:
+    def _run_audit(
+        self, auditor: InspectAIAuditor, samples: list[MagicMock]
+    ) -> MagicMock:
         log = _make_log(samples)
         with (
             patch(
@@ -1094,7 +1126,9 @@ class TestMaxAttacks:
         assert kwargs["limit"] is None
 
     def test_max_attacks_applied_per_eval(self) -> None:
-        auditor = self._make_auditor_with_llm(max_attacks=3, evals=["strong_reject", "b3"])
+        auditor = self._make_auditor_with_llm(
+            max_attacks=3, evals=["strong_reject", "b3"]
+        )
         log = _make_log([_make_sample()])
         with (
             patch(
