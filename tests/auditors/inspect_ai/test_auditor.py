@@ -16,7 +16,6 @@ from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.inspect_settings import InspectSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType  # noqa: E402
-from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 from pentester.enums.prompt_type import PromptType  # noqa: E402
 
 # Re-read stubs registered by conftest.pytest_configure so helpers reference

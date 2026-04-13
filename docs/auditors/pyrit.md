@@ -13,7 +13,6 @@ The auditor loads seed datasets from PyRIT's dataset registry and sends each see
 | Component | Role |
 |---|---|
 | `PyritAuditor` | Orchestrates dataset loading, strategy execution, and result mapping |
-| `ScannerTarget` | PyRIT `PromptChatTarget` that routes prompts through the configured HTTP scanner |
 | `PyritSettings` | Configuration for datasets, strategies, and per-strategy tuning |
 
 ---
@@ -38,14 +37,7 @@ PyritAuditor.audit()
 
 ### Objective target selection
 
-`_init_objective_target()` picks the target automatically:
-
-| Scanner configured? | Objective target |
-|---|---|
-| Yes | `ScannerTarget` — routes prompts to the HTTP endpoint via curl |
-| No | `OpenAIChatTarget` — sends directly to the configured LLM provider |
-
-This means **any HTTP-accessible AI chat** can be tested without needing an OpenAI-compatible API.
+`_init_objective_target()` always uses the configured LLM provider (`OpenAIChatTarget`). Use `SEMANTIC_FENCE` target type to route prompts through an HTTP scanner instead.
 
 ### Score interpretation
 

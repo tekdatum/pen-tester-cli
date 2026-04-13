@@ -550,9 +550,7 @@ class TestGenerateTestsFiles:
         with (
             patch.object(auditor, "_write_plugin_configs") as mock_write,
             patch.object(auditor, "_run_redteam_generate_for_configs") as mock_gen,
-            patch.object(
-                auditor, "_configure_provider_in_test_files"
-            ) as mock_configure,
+            patch.object(auditor, "_configure_provider_in_test_files"),
         ):
             auditor.generate_tests_files()
 

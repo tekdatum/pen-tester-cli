@@ -34,14 +34,6 @@ _garak_generators_openai_mod = MagicMock(name="garak.generators.openai")
 _garak_mod = MagicMock(name="garak")
 
 
-# Generator base class — must be a real class so ScannerGenerator can inherit
-class _FakeGenerator:
-    def __init__(self, name: str, config_root: object = None) -> None:
-        self.name = name
-
-
-_garak_generators_base_mod.Generator = _FakeGenerator
-
 # tqdm is a runtime dependency; stub it so tests run in environments where it
 # is not yet installed (e.g. CI before pip install .[...] resolves deps).
 _tqdm_mod = MagicMock(name="tqdm")
@@ -565,49 +557,11 @@ class TestInitObjectiveGenerator:
             auditor._init_objective_generator()
         m.assert_called_once()
 
-    def test_scanner_takes_priority_over_model(self) -> None:
-        from pentester.auditors.garak.scanner_generator import ScannerGenerator
-
-        scanner = MagicMock()
-        auditor = _make_llm_auditor(
-            llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI),
-            scanner=scanner,
-        )
-        with patch("pentester.auditors.garak.auditor.get_settings") as m_settings:
-            m_settings.return_value.scanner.response_text_target = None
-            with patch.object(auditor, "_init_generator") as m_gen:
-                result = auditor._init_objective_generator()
-        m_gen.assert_not_called()
-        assert isinstance(result, ScannerGenerator)
-
-    def test_no_model_with_scanner_returns_scanner_generator(self) -> None:
-        from pentester.auditors.garak.scanner_generator import ScannerGenerator
-
-        scanner = MagicMock()
-        auditor = _make_auditor(scanner=scanner)
-        auditor.target_type = TargetType.LLM
-        with patch("pentester.auditors.garak.auditor.get_settings") as m_settings:
-            m_settings.return_value.scanner.response_text_target = None
-            result = auditor._init_objective_generator()
-        assert isinstance(result, ScannerGenerator)
-
-    def test_no_model_no_scanner_raises(self) -> None:
+    def test_no_model_raises(self) -> None:
         auditor = _make_auditor()
         auditor.target_type = TargetType.LLM
-        with pytest.raises(ValueError, match="No scanner or LLM model configured"):
+        with pytest.raises(ValueError, match="No LLM model configured"):
             auditor._init_objective_generator()
-
-    def test_scanner_generator_receives_response_text_target(self) -> None:
-        from pentester.auditors.garak.scanner_generator import ScannerGenerator
-
-        scanner = MagicMock()
-        auditor = _make_auditor(scanner=scanner)
-        auditor.target_type = TargetType.LLM
-        with patch("pentester.auditors.garak.auditor.get_settings") as m_settings:
-            m_settings.return_value.scanner.response_text_target = "content.0.text"
-            result = auditor._init_objective_generator()
-        assert isinstance(result, ScannerGenerator)
-        assert result._response_text_target == "content.0.text"
 
 
 # ---------------------------------------------------------------------------
@@ -851,11 +805,11 @@ class TestPromptTypeGarak:
         return self.mock_scanner
 
     def _audit_with(self, probes: list) -> list[ProbeResult]:
-        auditor = _make_auditor()
+        auditor = _make_auditor(scanner=self.mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=probes),
-            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
         ):
             results, _ = auditor.audit()
             return results
@@ -877,7 +831,9 @@ class TestPromptTypeGarak:
                 "_load_probes",
                 return_value=[_make_probe("probes.dan.Dan1", ["p"])],
             ),
-            patch.object(auditor, "_init_generator", return_value=mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.8),
         ):
             results, _ = auditor.audit()
