@@ -63,7 +63,7 @@ for _name, _stub in [
     sys.modules.setdefault(_name, _stub)
 
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
-from pentester.auditors.garak import GarakAuditor  # noqa: E402
+from pentester.auditors.garak.auditor import GarakAuditor  # noqa: E402
 from pentester.auditors.models.base_auditor import BaseAuditor  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402

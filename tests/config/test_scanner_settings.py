@@ -16,6 +16,10 @@ class TestDefaults:
         settings = ScannerSettings()
         assert settings.json_dot_target is None
 
+    def test_response_text_target_defaults_to_none(self) -> None:
+        settings = ScannerSettings()
+        assert settings.response_text_target is None
+
 
 class TestEnvVarOverrides:
     def test_curl_command_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,3 +53,7 @@ class TestDirectInit:
         )
         assert settings.curl_command == "curl http://example.com"
         assert settings.json_dot_target == "body.result"
+
+    def test_set_response_text_target(self) -> None:
+        settings = ScannerSettings(response_text_target="body.content.0.text")
+        assert settings.response_text_target == "body.content.0.text"
