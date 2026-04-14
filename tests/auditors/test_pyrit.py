@@ -366,6 +366,9 @@ class TestLoadDatasets:
         _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
             return_value=["bad", "good"]
         )
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=["bad", "good"]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             side_effect=[RuntimeError("gated"), []]
         )
