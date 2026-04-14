@@ -72,7 +72,7 @@ class TestFenceScorerAPI:
             asyncio.run(api.score(state, MagicMock()))
             assert False, "expected RuntimeError"
         except RuntimeError as exc:
-            assert "bypassed key missing" in str(exc)
+            assert "missing 'bypassed' in metadata" in str(exc)
 
     def test_extract_prompt_from_state_uses_last_message_text(self) -> None:
         api = _make_fence_api()
