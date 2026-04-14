@@ -229,6 +229,31 @@ class TestDetailReport:
         )
         assert PromptType.SINGLE.value in content
 
+    def test_judge_reason_column_header_present(self) -> None:
+        content = (
+            PdfGenerator().generate_detail_report([_probe()], {}, {}).decode("latin-1")
+        )
+        assert "Judge Reason" in content
+
+    def test_judge_reason_value_in_bypassed_section(self) -> None:
+        probe = _probe(bypassed=True, metadata={"judge_reason": "sentinel_jr_bypass"})
+        content = (
+            PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
+        )
+        assert "sentinel_jr_bypass" in content
+
+    def test_judge_reason_value_in_blocked_section(self) -> None:
+        probe = _probe(bypassed=False, metadata={"judge_reason": "sentinel_jr_blocked"})
+        content = (
+            PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
+        )
+        assert "sentinel_jr_blocked" in content
+
+    def test_judge_reason_empty_when_missing(self) -> None:
+        probe = _probe(bypassed=True)
+        result = PdfGenerator().generate_detail_report([probe], {}, {})
+        assert isinstance(result, bytes)
+
     def test_prompt_type_multiturn_value_present(self) -> None:
         probe = ProbeResult(
             auditor="injector",
