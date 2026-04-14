@@ -52,6 +52,28 @@ class TestFenceScorerAPI:
         result = asyncio.run(api.score(state, MagicMock()))
         assert result is None
 
+    def test_score_raises_output_error_when_bypassed_key_missing(self) -> None:
+        api = _make_fence_api()
+        state = _make_state()
+        state.output.metadata = {"other_key": "value"}
+        state.output.error = "content moderation refusal"
+        try:
+            asyncio.run(api.score(state, MagicMock()))
+            assert False, "expected RuntimeError"
+        except RuntimeError as exc:
+            assert str(exc) == "content moderation refusal"
+
+    def test_score_raises_fallback_message_when_bypassed_key_missing_and_no_output_error(self) -> None:
+        api = _make_fence_api()
+        state = _make_state()
+        state.output.metadata = {}
+        state.output.error = None
+        try:
+            asyncio.run(api.score(state, MagicMock()))
+            assert False, "expected RuntimeError"
+        except RuntimeError as exc:
+            assert "bypassed key missing" in str(exc)
+
     def test_extract_prompt_from_state_uses_last_message_text(self) -> None:
         api = _make_fence_api()
         msg1 = MagicMock()

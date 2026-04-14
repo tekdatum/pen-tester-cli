@@ -214,3 +214,28 @@ class TestDetailReport:
         )
         # formatted_prompt uses unicode_escape, so \xe9 appears
         assert "\\xe9" in content
+
+    def test_judge_reason_header_present(self) -> None:
+        content = (
+            PdfGenerator().generate_detail_report([_probe()], {}, {}).decode("latin-1")
+        )
+        assert "Judge Reason" in content
+
+    def test_bypassed_judge_reason_present(self) -> None:
+        probe = _probe(bypassed=True, metadata={"judge_reason": "sentinel_judge_bypass"})
+        content = (
+            PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
+        )
+        assert "sentinel_judge_bypass" in content
+
+    def test_blocked_judge_reason_present(self) -> None:
+        probe = _probe(bypassed=False, metadata={"judge_reason": "sentinel_judge_blocked"})
+        content = (
+            PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
+        )
+        assert "sentinel_judge_blocked" in content
+
+    def test_missing_judge_reason_renders_empty(self) -> None:
+        probe = _probe(bypassed=True)
+        result = PdfGenerator().generate_detail_report([probe], {}, {})
+        assert isinstance(result, bytes)
