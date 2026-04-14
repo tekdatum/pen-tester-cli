@@ -36,7 +36,7 @@ def _make_target() -> MagicMock:
 
 def _run_score(scorer_fn: Any, state: Any, target: Any) -> Any:
     """Run an async scorer synchronously."""
-    return asyncio.get_event_loop().run_until_complete(scorer_fn(state, target))
+    return asyncio.run(scorer_fn(state, target))
 
 
 # ---------------------------------------------------------------------------

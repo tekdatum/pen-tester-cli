@@ -84,7 +84,6 @@ _pyrit_score_tf_scorer_mod = sys.modules[
 _pyrit_models_mod = sys.modules["pyrit.models"]
 
 from pentester.auditors.pyrit.auditor import PyritAuditor as PyritProbe  # noqa: E402
-from pentester.auditors.pyrit.scanner_target import ScannerTarget  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
@@ -320,7 +319,6 @@ class TestLoadDatasets:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[]
         )
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = []
         _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
             return_value=[]
         )
@@ -355,6 +353,9 @@ class TestLoadDatasets:
         _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
             return_value=["bad", "good"]
         )
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=["bad", "good"]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             side_effect=[RuntimeError("gated"), []]
         )
@@ -362,7 +363,7 @@ class TestLoadDatasets:
             self._run(PyritSettings(dataset_names=[]))
         mock_logger.warning.assert_called_once()
 
-    def test_applies_max_seeds_limit(self) -> None:
+    def test_applies_max_attacks_limit(self) -> None:
         seeds = [_make_seed(f"p{i}") for i in range(5)]
         dataset = _make_dataset(seeds=seeds)
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
@@ -370,12 +371,12 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=2))
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_attacks=2))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 2
 
-    def test_no_limit_when_max_seeds_none(self) -> None:
+    def test_no_limit_when_max_attacks_none(self) -> None:
         seeds = [_make_seed(f"p{i}") for i in range(4)]
         dataset = _make_dataset(seeds=seeds)
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
@@ -383,7 +384,7 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=None))
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_attacks=None))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 4
@@ -688,22 +689,8 @@ class TestAuditMultiturn:
 
 
 class TestInitObjectiveTarget:
-    def test_returns_scanner_target_when_scanner_set(self) -> None:
-        auditor = _make_auditor()
-        auditor._scanner = MagicMock()
-        result = auditor._init_objective_target()
-        assert isinstance(result, ScannerTarget)
-
-    def test_scanner_target_wraps_injected_scanner(self) -> None:
-        mock_scanner = MagicMock()
-        auditor = _make_auditor()
-        auditor._scanner = mock_scanner
-        result = auditor._init_objective_target()
-        assert result.scanner is mock_scanner
-
-    def test_returns_llm_target_when_scanner_is_none(self) -> None:
+    def test_delegates_to_init_target(self) -> None:
         auditor = _make_auditor(llm_settings=LLMSettings(model="gpt-4o"))
-        auditor._scanner = None
         mock_llm_target = MagicMock()
         with patch.object(auditor, "_init_target", return_value=mock_llm_target):
             result = auditor._init_objective_target()
@@ -776,10 +763,10 @@ class TestPromptTypePyrit:
         import sys
 
         memory_mod = sys.modules["pyrit.memory"]
-        memory_mod.CentralMemory.get_memory_instance.return_value.get_conversation.return_value = [
-            user_msg,
-            asst_msg,
-        ]
+        get_conv = (
+            memory_mod.CentralMemory.get_memory_instance.return_value.get_conversation
+        )
+        get_conv.return_value = [user_msg, asst_msg]
 
         auditor = _make_multiturn_auditor(
             PyritSettings(
