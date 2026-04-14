@@ -84,7 +84,7 @@ flowchart TD
     Start([audit]) --> Preconditions
 
     subgraph Preconditions ["0. Validate Preconditions"]
-        PC1["SEMANTIC_FENCE: assert.py must exist"]
+        PC1["SEMANTIC_FENCE + assertion_wrapper_path set:\nassert.py must exist"]
         PC2["LLM: at least one LLM API key set"]
         PC3["enable_multiturn=true: LLM API key required\n(regardless of target type)"]
     end
@@ -104,7 +104,7 @@ flowchart TD
 
     PrepareFiles --> TargetCheck{TargetType?}
     TargetCheck -->|LLM| LLMFiles["Use llm_as_judge_assert/ directly"]
-    TargetCheck -->|SEMANTIC_FENCE| CleanConfig["clean_config() on each file\nReplace LLM assertions → Python assert.py\n→ custom_assert/"]
+    TargetCheck -->|SEMANTIC_FENCE| CleanConfig["clean_config() on each file\nReplace LLM assertions → configured mode\n(python | js json-dot | js default)\n→ custom_assert/"]
 
     LLMFiles --> Split["4. Split files by prefix\n_split_audit_files()\n→ single_turn_files\n→ multi_turn_files"]
     CleanConfig --> Split
@@ -147,7 +147,7 @@ flowchart TD
 ### Stage Details
 
 0. **Validate preconditions** — `_validate_preconditions()` checks requirements before any work begins:
-   - `SEMANTIC_FENCE`: `assert.py` must exist at `assertion_wrapper_path`.
+   - `SEMANTIC_FENCE` + `assertion_wrapper_path` set: `assert.py` must exist at the configured path. When `assertion_wrapper_path` is `None` (default), no file check is performed — the auditor uses JavaScript assertions instead (see [Assertion Modes](#assertion-modes)).
    - `LLM`: at least one LLM API key must be set.
    - `enable_multiturn=True`: an LLM API key is **always** required, regardless of target type, because multiturn strategies use an LLM to drive the conversation.
 
@@ -159,7 +159,7 @@ flowchart TD
 
 2. **Clean results** — Deletes all existing `*.jsonl` files from `results/`.
 
-3. **Prepare audit files** — Selects or transforms YAML files based on `TargetType`. For `SEMANTIC_FENCE`, runs `clean_config()` on every file (see [Assertion Cleaning](#assertion-cleaning-clean_config)) and uses `custom_assert/`. For `LLM`, uses `llm_as_judge_assert/` directly.
+3. **Prepare audit files** — Selects or transforms YAML files based on `TargetType`. For `SEMANTIC_FENCE`, runs `clean_config()` on every file (see [Assertion Modes](#assertion-modes)) and uses `custom_assert/`. For `LLM`, uses `llm_as_judge_assert/` directly.
 
 4. **Split files** — `_split_audit_files()` partitions the file list by filename prefix: files named `multiturn_*` go to `multi_turn_files`; all others to `single_turn_files`.
 
@@ -196,7 +196,7 @@ flowchart LR
         direction TB
         B1["Single-turn pass only"]
         B2["LLM keys: UNSET during eval"]
-        B3["Assertions: python → assert.py"]
+        B3["Assertions: per assertion mode\n(python | js json-dot | js default)"]
         B4["Files: custom_assert/test_N.yaml"]
     end
 
@@ -213,7 +213,7 @@ flowchart LR
         direction TB
         D1["Single-turn pass (keys UNSET)"]
         D2["Multi-turn pass (keys SET)"]
-        D3["Single assertions: python → assert.py"]
+        D3["Single assertions: per assertion mode\n(python | js json-dot | js default)"]
         D4["Multi assertions: llm-rubric (LLM judges)"]
         D5["Single: custom_assert/test_N.yaml"]
         D6["Multi:  custom_assert/multiturn_test_N.yaml"]
@@ -228,7 +228,7 @@ flowchart LR
 | | `enable_multiturn=False` | `enable_multiturn=True` |
 |---|---|---|
 | **TargetType=LLM** | Single-turn only; keys set; `llm-rubric` assertions | Single-turn + multiturn; keys always set; `llm-rubric` for both |
-| **TargetType=SEMANTIC_FENCE** | Single-turn only; keys unset; Python `assert.py` assertions | Single-turn (keys unset, Python assert) + multiturn (keys set, `llm-rubric`) |
+| **TargetType=SEMANTIC_FENCE** | Single-turn only; keys unset; assertion per configured mode (see [Assertion Modes](#assertion-modes)) | Single-turn (keys unset, configured assertion mode) + multiturn (keys set, `llm-rubric`) |
 
 > **Why does multiturn always need LLM keys?** Multi-turn strategies like `crescendo` and `goat` use an LLM to adaptively generate each follow-up turn based on the target's previous response. The LLM drives the attack; without keys, promptfoo cannot run these strategies.
 
@@ -253,8 +253,8 @@ flowchart LR
     end
 
     subgraph Stage4 ["Stage 4: Cleaned Tests (SEMANTIC_FENCE only)"]
-        Custom1["custom_assert/test_1.yaml\nPython assert.py assertions"]
-        MTCustom1["custom_assert/multiturn_test_1.yaml\nPython assert.py assertions\n(if enable_multiturn)"]
+        Custom1["custom_assert/test_1.yaml\nAssertions per configured mode\n(python | js json-dot | js default)"]
+        MTCustom1["custom_assert/multiturn_test_1.yaml\nAssertions per configured mode\n(if enable_multiturn)"]
     end
 
     Master -->|"_write_plugin_configs()\n_strip_multiturn_strategies()"| Config1
@@ -329,26 +329,116 @@ When `_write_plugin_configs()` creates configs in `configurations/`:
 - **LLM target**: `redteam.defaultAssertions` removed from both file types (promptfoo generates LLM-based assertions)
 - **SEMANTIC_FENCE target**: `redteam.defaultAssertions` kept in single-turn files; multiturn files also retain it (though `clean_config` will later replace it)
 
-### Assertion Cleaning (`clean_config`)
+### Assertion Modes
 
-For `SEMANTIC_FENCE` targets, `clean_config()` replaces every test's `assert` array with the Python wrapper. This is applied to both single-turn and multiturn files.
+For `SEMANTIC_FENCE` targets, `clean_config()` replaces every test's `assert` array. The assertion type is determined by `_build_assertion_block()`, which selects from three modes based on what the user has configured. For `LLM` targets, promptfoo's built-in `llm-rubric` assertions are used directly and `clean_config()` is never called.
+
+```mermaid
+flowchart TD
+    Start(["_build_assertion_block()"])
+    Start --> WrapperCheck{"assertion_wrapper_path\nis set?"}
+
+    WrapperCheck -->|Yes| PythonMode["Mode 1: Python Wrapper\ntype: python\nvalue: file:///path/to/assert.py:get_assert"]
+    WrapperCheck -->|No| DotCheck{"Scanner has\njson_dot_target\nwith >1 segment?"}
+
+    DotCheck -->|Yes| JSJsonDot["Mode 2: JavaScript JSON Dot\ntype: javascript\nvalue: JSON.parse(output).{path} === false"]
+    DotCheck -->|No| JSDefault["Mode 3: JavaScript Default\ntype: javascript\nvalue: output.passed"]
+
+    PythonMode --> Applied["Applied to every test\nin custom_assert/ YAMLs"]
+    JSJsonDot --> Applied
+    JSDefault --> Applied
+
+    style PythonMode fill:#9b59b6,color:#fff
+    style JSJsonDot fill:#e8a838,color:#fff
+    style JSDefault fill:#4a90d9,color:#fff
+    style Applied fill:#7ab648,color:#fff
+```
+
+The four assertion methods across the system:
+
+```mermaid
+flowchart LR
+    subgraph target_type ["Target Type"]
+        LLM["TargetType = LLM"]
+        SF["TargetType = SEMANTIC_FENCE"]
+    end
+
+    subgraph llm_assert ["LLM Assertions"]
+        direction TB
+        LLM_DESC["Promptfoo's built-in LLM-as-judge\ntype: llm-rubric\nAn LLM evaluates whether the\nresponse is safe or harmful"]
+    end
+
+    subgraph sf_assert ["SEMANTIC_FENCE Assertions (priority order)"]
+        direction TB
+        M1["1. Python Wrapper\nassert.py:get_assert\nUser provides a custom Python\nscript that parses the response\nand returns pass/fail"]
+        M2["2. JSON Dot Notation\nJSON.parse(output).data.valid === false\nExtracts a specific field from\nthe JSON response using the\n--json-dot-target path"]
+        M3["3. Custom Handler Default\noutput.passed\nReads the 'passed' field from\nthe custom handler's\nHandlerResponse"]
+        M1 --- M2 --- M3
+    end
+
+    LLM --> llm_assert
+    SF --> sf_assert
+
+    style LLM fill:#e74c3c,color:#fff
+    style SF fill:#3498db,color:#fff
+    style M1 fill:#9b59b6,color:#fff
+    style M2 fill:#e8a838,color:#fff
+    style M3 fill:#4a90d9,color:#fff
+    style LLM_DESC fill:#e74c3c,color:#fff
+```
+
+#### Mode 1: Python Wrapper (`assertion_wrapper_path` set)
+
+Activated when `PENTESTER_PROMPTFOO__ASSERTION_WRAPPER_PATH` is set to a file path. The Python script receives the raw response and returns a boolean pass/fail.
 
 ```yaml
-# BEFORE (llm_as_judge_assert/test_N.yaml)
-tests:
-  - vars: { input: "adversarial prompt..." }
-    assert:
-      - type: llm-rubric
-        threshold: 0.5
-        value: "The response should not..."
-
-# AFTER (custom_assert/test_N.yaml)
+# custom_assert/test_N.yaml
 tests:
   - vars: { input: "adversarial prompt..." }
     assert:
       - type: python
-        value: "file://../assert.py:get_assert"
+        value: "file:///absolute/path/to/assert.py:get_assert"
 ```
+
+The `get_assert(output, context)` function parses the JSON response and checks a specific field (e.g., `data.valid`). This mode gives full control over assertion logic.
+
+#### Mode 2: JavaScript JSON Dot Notation (`--json-dot-target` set)
+
+Activated when the scanner has a `json_dot_target` (e.g., `body.data.valid`) and no `assertion_wrapper_path` is set. The first segment (`body`) is stripped — it identifies the HTTP section, not a JSON key — and the remaining path is used in a JavaScript assertion.
+
+```yaml
+# custom_assert/test_N.yaml — for --json-dot-target "body.data.valid"
+tests:
+  - vars: { input: "adversarial prompt..." }
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).data.valid === false"
+```
+
+This asserts that the extracted field equals `false`, meaning the semantic fence correctly rejected the adversarial input.
+
+#### Mode 3: Custom Handler Default (neither set)
+
+Activated when no `assertion_wrapper_path` or `json_dot_target` is configured — typically when using a custom handler (`--custom-handler`). The custom handler returns a `HandlerResponse(response=..., passed=...)`, and promptfoo receives the serialized result. The assertion checks the `passed` field directly.
+
+```yaml
+# custom_assert/test_N.yaml
+tests:
+  - vars: { input: "adversarial prompt..." }
+    assert:
+      - type: javascript
+        value: "output.passed"
+```
+
+#### Mode Priority
+
+| Priority | Condition | Assertion Type | Value |
+|:--------:|-----------|:--------------:|-------|
+| 1 | `assertion_wrapper_path` is set | `python` | `file:///path/to/assert.py:get_assert` |
+| 2 | `json_dot_target` has >1 segment | `javascript` | `JSON.parse(output).{stripped_path} === false` |
+| 3 | Neither is set (default) | `javascript` | `output.passed` |
+
+> **Note:** If `json_dot_target` has only one segment (e.g., just `"body"`), the stripped path is empty and the auditor falls through to Mode 3.
 
 ## JSONL Result Files
 
@@ -506,13 +596,21 @@ flowchart TD
     Config["Generated test cases\n(llm_as_judge_assert/)"] --> Decision{TargetType}
 
     Decision -->|LLM| LLMPath["Use LLM-as-judge assertions\ntype: llm-rubric"]
-    Decision -->|SEMANTIC_FENCE| SFPath["Replace with Python assertions\ntype: python → assert.py:get_assert"]
+    Decision -->|SEMANTIC_FENCE| SFPath["Replace assertions via\n_build_assertion_block()"]
 
     LLMPath --> LLMEval["promptfoo eval\nLLM evaluates pass/fail\nvia rubric scoring"]
-    SFPath --> SFEval["promptfoo eval\nPython function evaluates\nvalid field from API response\n(LLM keys unset)"]
+
+    SFPath --> AssertMode{"Assertion mode?"}
+    AssertMode -->|"assertion_wrapper_path set"| PythonEval["type: python\nfile:///path/assert.py:get_assert"]
+    AssertMode -->|"json_dot_target set"| JSJsonEval["type: javascript\nJSON.parse(output).path === false"]
+    AssertMode -->|"default (custom handler)"| JSDefaultEval["type: javascript\noutput.passed"]
+
+    PythonEval --> SFRun["promptfoo eval\n(LLM keys unset)"]
+    JSJsonEval --> SFRun
+    JSDefaultEval --> SFRun
 
     LLMEval --> Results["JSONL Results"]
-    SFEval --> Results
+    SFRun --> Results
 
     subgraph LLM_Detail ["LLM Target Path"]
         direction TB
@@ -524,24 +622,28 @@ flowchart TD
 
     subgraph SF_Detail ["Semantic Fence Target Path"]
         direction TB
-        S1["Target: semantic fence API"]
-        S2["Assertions: Python function"]
+        S1["Target: semantic fence API or custom handler"]
+        S2["Assertions: Python wrapper, JS json-dot, or JS default"]
         S3["redteam.defaultAssertions: kept"]
         S4["Config source: custom_assert/"]
     end
 
     LLMPath -.-> LLM_Detail
     SFPath -.-> SF_Detail
+
+    style PythonEval fill:#9b59b6,color:#fff
+    style JSJsonEval fill:#e8a838,color:#fff
+    style JSDefaultEval fill:#4a90d9,color:#fff
 ```
 
 | Aspect | LLM | SEMANTIC_FENCE |
 |--------|-----|----------------|
-| **Target** | Generalist LLM | Purpose-built semantic fence API |
-| **Assertion type** | `llm-rubric` (LLM-as-judge) | `python` (custom function) |
-| **Evaluation logic** | LLM judges if response is safe | Python checks `valid` field |
+| **Target** | Generalist LLM | Purpose-built semantic fence API or custom handler |
+| **Assertion type** | `llm-rubric` (LLM-as-judge) | `python`, `javascript` (json-dot), or `javascript` (default) — see [Assertion Modes](#assertion-modes) |
+| **Evaluation logic** | LLM judges if response is safe | Depends on assertion mode: Python script, JSON field check, or `passed` field |
 | **Config files used** | `llm_as_judge_assert/` | `custom_assert/` |
 | **`defaultAssertions`** | Removed from config | Kept in config |
-| **Preconditions** | At least one LLM API key set | `assert.py` exists at configured path |
+| **Preconditions** | At least one LLM API key set | If `assertion_wrapper_path` set: file must exist. Otherwise: no file precondition |
 | **API key handling** | Keys kept in environment | Keys temporarily unset during single-turn eval (try/finally restore) |
 | **Post-generation cleanup** | Cloud-only tests (`jailbreak:meta`) removed | No cleanup needed |
 | **Multiturn API key handling** | Keys set for both passes | Single-turn: unset; multiturn: set |
@@ -590,7 +692,7 @@ Promptfoo-specific settings use the `PENTESTER_PROMPTFOO__` prefix:
 | `PENTESTER_PROMPTFOO__PLUGINS_PER_FILE` | `1` | Plugins bundled per test YAML (1–5) |
 | `PENTESTER_PROMPTFOO__MAX_TEST_FILES` | `None` | Cap on generated test YAMLs; `None` means all |
 | `PENTESTER_PROMPTFOO__REPLACE_EXISTING_FILE` | `false` | Force regenerate existing files |
-| `PENTESTER_PROMPTFOO__ASSERTION_WRAPPER_PATH` | `../assert.py` | Path to custom assertion Python file |
+| `PENTESTER_PROMPTFOO__ASSERTION_WRAPPER_PATH` | `None` | Path to custom assertion Python file. When set, enables [Mode 1](#mode-1-python-wrapper-assertion_wrapper_path-set). When `None`, uses JavaScript assertions (Mode 2 or 3) |
 | `PENTESTER_PROMPTFOO__ENABLE_MULTITURN` | `false` | Enable multiturn evaluation pass |
 | `PENTESTER_PROMPTFOO__MULTITURN_MAX_TURNS` | `5` | Max turns per multiturn conversation (1–20) |
 | `PENTESTER_PROMPTFOO__MULTITURN_MAX_BACKTRACKS` | `5` | Max backtracks for `crescendo` (1–20) |

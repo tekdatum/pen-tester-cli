@@ -56,7 +56,7 @@ def test_build_curl_command_escapes_double_quotes_in_prompt() -> None:
     cmd = """curl -X POST 'https://example.com' --data-raw '{"text": "$PROMPT"}'"""
     handler = CurlReaderHandler(curl_command=cmd, response_serializer=None)
     result = handler._build_curl_command('say "hello"')
-    assert r'say \"hello\"' in result
+    assert r"say \"hello\"" in result
 
 
 def test_build_curl_command_escapes_single_quotes_in_prompt() -> None:

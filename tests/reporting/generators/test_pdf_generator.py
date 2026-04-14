@@ -1,6 +1,7 @@
 import datetime
 
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.enums.prompt_type import PromptType
 from pentester.reporting.enum.generator_extension import GeneratorExtension
 from pentester.reporting.enum.generator_key import GeneratorKey
 from pentester.reporting.generators.base_generator import BaseGenerator
@@ -215,27 +216,31 @@ class TestDetailReport:
         # formatted_prompt uses unicode_escape, so \xe9 appears
         assert "\\xe9" in content
 
-    def test_judge_reason_header_present(self) -> None:
+    def test_prompt_type_column_heading_present(self) -> None:
         content = (
             PdfGenerator().generate_detail_report([_probe()], {}, {}).decode("latin-1")
         )
-        assert "Judge Reason" in content
+        assert "Prompt Type" in content
 
-    def test_bypassed_judge_reason_present(self) -> None:
-        probe = _probe(bypassed=True, metadata={"judge_reason": "sentinel_judge_bypass"})
+    def test_prompt_type_single_value_present(self) -> None:
+        probe = _probe()  # default prompt_type=PromptType.SINGLE
         content = (
             PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
         )
-        assert "sentinel_judge_bypass" in content
+        assert PromptType.SINGLE.value in content
 
-    def test_blocked_judge_reason_present(self) -> None:
-        probe = _probe(bypassed=False, metadata={"judge_reason": "sentinel_judge_blocked"})
+    def test_prompt_type_multiturn_value_present(self) -> None:
+        probe = ProbeResult(
+            auditor="injector",
+            attack_category="prompt",
+            attack_type="injection",
+            prompt="attack",
+            response="response",
+            bypassed=True,
+            score=1.0,
+            prompt_type=PromptType.MULTITURN,
+        )
         content = (
             PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
         )
-        assert "sentinel_judge_blocked" in content
-
-    def test_missing_judge_reason_renders_empty(self) -> None:
-        probe = _probe(bypassed=True)
-        result = PdfGenerator().generate_detail_report([probe], {}, {})
-        assert isinstance(result, bytes)
+        assert PromptType.MULTITURN.value in content

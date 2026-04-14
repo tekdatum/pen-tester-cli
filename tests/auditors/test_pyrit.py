@@ -84,12 +84,12 @@ _pyrit_score_tf_scorer_mod = sys.modules[
 _pyrit_models_mod = sys.modules["pyrit.models"]
 
 from pentester.auditors.pyrit.auditor import PyritAuditor as PyritProbe  # noqa: E402
-from pentester.auditors.pyrit.scanner_target import ScannerTarget  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
 from pentester.enums.auditor_key import AuditorKey  # noqa: E402
+from pentester.enums.prompt_type import PromptType  # noqa: E402
 from pentester.scanners.scanner import Scanner  # noqa: E402
 
 
@@ -319,7 +319,9 @@ class TestLoadDatasets:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[]
         )
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = []
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=[]
+        )
 
     def _run(self, settings: PyritSettings) -> list[ProbeResult]:
         auditor = _make_auditor(settings)
@@ -336,10 +338,9 @@ class TestLoadDatasets:
         )
 
     def test_uses_all_dataset_names_when_settings_empty(self) -> None:
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = [
-            "a",
-            "b",
-        ]
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=["a", "b"]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[]
         )
@@ -349,10 +350,9 @@ class TestLoadDatasets:
         )
 
     def test_skips_failed_dataset_and_logs_warning(self) -> None:
-        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names.return_value = [
-            "bad",
-            "good",
-        ]
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=["bad", "good"]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             side_effect=[RuntimeError("gated"), []]
         )
@@ -360,7 +360,7 @@ class TestLoadDatasets:
             self._run(PyritSettings(dataset_names=[]))
         mock_logger.warning.assert_called_once()
 
-    def test_applies_max_seeds_limit(self) -> None:
+    def test_applies_max_attacks_limit(self) -> None:
         seeds = [_make_seed(f"p{i}") for i in range(5)]
         dataset = _make_dataset(seeds=seeds)
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
@@ -368,12 +368,12 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=2))
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_attacks=2))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 2
 
-    def test_no_limit_when_max_seeds_none(self) -> None:
+    def test_no_limit_when_max_attacks_none(self) -> None:
         seeds = [_make_seed(f"p{i}") for i in range(4)]
         dataset = _make_dataset(seeds=seeds)
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
@@ -381,7 +381,7 @@ class TestLoadDatasets:
         )
         scanner = MagicMock()
         scanner.scan.return_value = _make_scan_result()
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_seeds=None))
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"], max_attacks=None))
         with patch.object(auditor, "_init_scanner", return_value=scanner):
             results, _ = auditor.audit()
         assert len(results) == 4
@@ -686,22 +686,8 @@ class TestAuditMultiturn:
 
 
 class TestInitObjectiveTarget:
-    def test_returns_scanner_target_when_scanner_set(self) -> None:
-        auditor = _make_auditor()
-        auditor._scanner = MagicMock()
-        result = auditor._init_objective_target()
-        assert isinstance(result, ScannerTarget)
-
-    def test_scanner_target_wraps_injected_scanner(self) -> None:
-        mock_scanner = MagicMock()
-        auditor = _make_auditor()
-        auditor._scanner = mock_scanner
-        result = auditor._init_objective_target()
-        assert result.scanner is mock_scanner
-
-    def test_returns_llm_target_when_scanner_is_none(self) -> None:
+    def test_delegates_to_init_target(self) -> None:
         auditor = _make_auditor(llm_settings=LLMSettings(model="gpt-4o"))
-        auditor._scanner = None
         mock_llm_target = MagicMock()
         with patch.object(auditor, "_init_target", return_value=mock_llm_target):
             result = auditor._init_objective_target()
@@ -710,6 +696,93 @@ class TestInitObjectiveTarget:
 
 def test_auditor_key_is_pyrit() -> None:
     assert _make_auditor().auditor_key == AuditorKey.PYRIT
+
+
+# ---------------------------------------------------------------------------
+# prompt_type
+# ---------------------------------------------------------------------------
+
+
+class TestPromptTypePyrit:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:
+        _pyrit_setup_mod.initialize_pyrit_async.reset_mock()
+        self.mock_scanner = MagicMock()
+        self.mock_scanner.scan.return_value = _make_scan_result()
+
+    def test_semantic_fence_result_prompt_type_is_single(self) -> None:
+        dataset = _make_dataset(seeds=[_make_seed()])
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[dataset]
+        )
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"]))
+        with patch.object(auditor, "_init_scanner", return_value=self.mock_scanner):
+            results, _ = auditor.audit()
+        assert results[0].prompt_type == PromptType.SINGLE
+
+    def test_llm_result_prompt_type_is_single(self) -> None:
+        mock_target = MagicMock()
+        mock_scorer = MagicMock()
+        mock_response = _make_llm_response()
+        mock_target.send_prompt_async = AsyncMock(return_value=[mock_response])
+        mock_scorer.score_async = AsyncMock(return_value=[_make_score(True)])
+
+        dataset = _make_dataset(seeds=[_make_seed()])
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[dataset]
+        )
+        auditor = _make_llm_auditor(PyritSettings(dataset_names=["x"]))
+        with (
+            patch.object(auditor, "_init_target", return_value=mock_target),
+            patch.object(auditor, "_init_scorer", return_value=mock_scorer),
+        ):
+            results, _ = auditor.audit()
+        assert results[0].prompt_type == PromptType.SINGLE
+
+    def test_multiturn_result_prompt_type_is_multiturn(self) -> None:
+        from pentester.enums.attack_strategy import MultiTurnStrategy
+
+        mock_attack_result = MagicMock()
+        mock_attack_result.conversation_id = "cid"
+        mock_attack_result.outcome = MagicMock()
+        mock_attack_result.last_score = None
+
+        user_msg = MagicMock()
+        user_msg.message_pieces = [MagicMock(converted_value="attack")]
+        asst_msg = MagicMock()
+        asst_msg.message_pieces = [MagicMock(converted_value="response")]
+
+        dataset = _make_dataset(seeds=[_make_seed()])
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[dataset]
+        )
+
+        import sys
+
+        memory_mod = sys.modules["pyrit.memory"]
+        get_conv = (
+            memory_mod.CentralMemory.get_memory_instance.return_value.get_conversation
+        )
+        get_conv.return_value = [user_msg, asst_msg]
+
+        auditor = _make_multiturn_auditor(
+            PyritSettings(
+                dataset_names=["x"],
+                attack_strategies=[MultiTurnStrategy.CRESCENDO],
+            )
+        )
+        auditor._scanner = MagicMock()
+        with (
+            patch.object(auditor, "_init_target", return_value=MagicMock()),
+            patch.object(auditor, "_init_scorer", return_value=MagicMock()),
+            patch.object(
+                auditor,
+                "_run_strategy_async",
+                new=AsyncMock(return_value=mock_attack_result),
+            ),
+        ):
+            results, _ = auditor.audit()
+        assert all(r.prompt_type == PromptType.MULTITURN for r in results)
 
 
 # ---------------------------------------------------------------------------
