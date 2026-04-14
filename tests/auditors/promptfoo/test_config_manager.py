@@ -671,7 +671,7 @@ class TestConfigureProviderInTestFiles:
         cm.configure_provider_in_test_files(cfg_dir, provider, provider_id)
 
         result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
-        assert result["providers"] == [{"id": provider_id}]
+        assert result["providers"] == [{"id": provider_id, "label": "target-api"}]
 
     def test_http_provider_updates_config_in_yaml(self, tmp_path: Path) -> None:
         import yaml
@@ -689,6 +689,7 @@ class TestConfigureProviderInTestFiles:
 
         result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
         assert result["providers"][0]["id"] == "http"
+        assert result["providers"][0]["label"] == "target-api"
         assert result["providers"][0]["config"]["url"] == "http://new.com"
 
     def test_http_provider_updates_id_to_https_in_yaml(self, tmp_path: Path) -> None:
@@ -707,6 +708,7 @@ class TestConfigureProviderInTestFiles:
 
         result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
         assert result["providers"][0]["id"] == "https"
+        assert result["providers"][0]["label"] == "target-api"
         assert result["providers"][0]["config"]["url"] == "https://new.com"
 
     def test_applies_custom_handler_to_all_yaml_files(self, tmp_path: Path) -> None:
@@ -726,7 +728,24 @@ class TestConfigureProviderInTestFiles:
 
         for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
             result = yaml.safe_load((cfg_dir / name).read_text())
-            assert result["providers"] == [{"id": provider_id}]
+            assert result["providers"] == [{"id": provider_id, "label": "target-api"}]
+
+    def test_custom_target_label_written_to_yaml(self, tmp_path: Path) -> None:
+        import yaml
+
+        cm = _make_config_manager(_make_settings(target_label="helpdesk-agent"))
+        provider_id = "https"
+        provider = {"id": "https", "config": {"url": "https://api.example.com", "method": "POST"}}
+
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
+        (cfg_dir / "test_1.yaml").write_text(yaml_content)
+
+        cm.configure_provider_in_test_files(cfg_dir, provider, provider_id)
+
+        result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
+        assert result["providers"][0]["label"] == "helpdesk-agent"
 
 
 # ---------------------------------------------------------------------------

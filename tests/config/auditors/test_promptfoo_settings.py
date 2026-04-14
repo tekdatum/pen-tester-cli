@@ -39,6 +39,10 @@ class TestDefaults:
         settings = PromptfooSettings()
         assert settings.output_path == "./output/promptfoo"
 
+    def test_target_label_default(self) -> None:
+        settings = PromptfooSettings()
+        assert settings.target_label == "target-api"
+
 
 class TestComputedFields:
     def test_config_file_appends_yaml_filename(self) -> None:
@@ -290,6 +294,11 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("OUTPUT_PATH", "/env/output")
         settings = PromptfooSettings()
         assert settings.output_path == "/env/output"
+
+    def test_target_label_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TARGET_LABEL", "my-custom-api")
+        settings = PromptfooSettings()
+        assert settings.target_label == "my-custom-api"
 
 
 class TestMultiturnDefaults:
