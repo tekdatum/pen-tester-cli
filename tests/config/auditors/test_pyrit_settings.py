@@ -7,9 +7,6 @@ class TestDefaults:
     def test_dataset_names_default(self) -> None:
         assert PyritSettings().dataset_names == []
 
-    def test_max_seeds_default_is_none(self) -> None:
-        assert PyritSettings().max_seeds is None
-
     def test_max_attacks_default_is_none(self) -> None:
         assert PyritSettings().max_attacks is None
 
@@ -18,10 +15,6 @@ class TestDirectInit:
     def test_set_dataset_names(self) -> None:
         settings = PyritSettings(dataset_names=["dataset_a"])
         assert settings.dataset_names == ["dataset_a"]
-
-    def test_set_max_seeds(self) -> None:
-        settings = PyritSettings(max_seeds=10)
-        assert settings.max_seeds == 10
 
     def test_set_max_attacks(self) -> None:
         settings = PyritSettings(max_attacks=25)

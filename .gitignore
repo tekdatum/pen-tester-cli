@@ -18,3 +18,4 @@ pentester_env
 pentester.log
 output/
 logs/
+.claude/CLAUDE.md

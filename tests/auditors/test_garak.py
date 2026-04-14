@@ -28,12 +28,11 @@ _garak_plugins_mod = MagicMock(name="garak._plugins")
 _garak_command_mod = MagicMock(name="garak.command")
 _garak_attempt_mod = MagicMock(name="garak.attempt")
 _garak_generators_mod = MagicMock(name="garak.generators")
+_garak_generators_base_mod = MagicMock(name="garak.generators.base")
 _garak_generators_litellm_mod = MagicMock(name="garak.generators.litellm")
 _garak_generators_openai_mod = MagicMock(name="garak.generators.openai")
 _garak_mod = MagicMock(name="garak")
-_garak_mod._config = _garak_config_mod
-_garak_mod._plugins = _garak_plugins_mod
-_garak_mod.command = _garak_command_mod
+
 
 # tqdm is a runtime dependency; stub it so tests run in environments where it
 # is not yet installed (e.g. CI before pip install .[...] resolves deps).
@@ -47,6 +46,7 @@ for _name, _stub in [
     ("garak.command", _garak_command_mod),
     ("garak.attempt", _garak_attempt_mod),
     ("garak.generators", _garak_generators_mod),
+    ("garak.generators.base", _garak_generators_base_mod),
     ("garak.generators.litellm", _garak_generators_litellm_mod),
     ("garak.generators.openai", _garak_generators_openai_mod),
     ("tqdm", _tqdm_mod),
@@ -60,10 +60,19 @@ _garak_config_mod = sys.modules["garak._config"]
 _garak_plugins_mod = sys.modules["garak._plugins"]
 _garak_command_mod = sys.modules["garak.command"]
 _garak_attempt_mod = sys.modules["garak.attempt"]
+_garak_generators_base_mod = sys.modules["garak.generators.base"]
 _garak_generators_litellm_mod = sys.modules["garak.generators.litellm"]
 _garak_generators_openai_mod = sys.modules["garak.generators.openai"]
 
-from pentester.auditors.garak import GarakAuditor  # noqa: E402
+# Python's import machinery does not set submodule attributes on a parent that
+# is already a MagicMock in sys.modules.  Bind them explicitly so that
+# garak._config / garak._plugins / garak.command lookups inside auditor.py
+# resolve to the correct stubs rather than auto-generated child mocks.
+_garak_mod._config = _garak_config_mod
+_garak_mod._plugins = _garak_plugins_mod
+_garak_mod.command = _garak_command_mod
+
+from pentester.auditors.garak.auditor import GarakAuditor  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
@@ -89,18 +98,21 @@ def reset_cache() -> None:  # type: ignore[return]
 def _make_auditor(
     settings: GarakSettings | None = None,
     llm_settings: LLMSettings | None = None,
+    scanner: Scanner | None = None,
 ) -> GarakAuditor:
     return GarakAuditor(
         settings=settings or GarakSettings(),
         llm_settings=llm_settings or LLMSettings(),
+        scanner=scanner,
     )
 
 
 def _make_llm_auditor(
     settings: GarakSettings | None = None,
     llm_settings: LLMSettings | None = None,
+    scanner: Scanner | None = None,
 ) -> GarakAuditor:
-    auditor = _make_auditor(settings, llm_settings)
+    auditor = _make_auditor(settings, llm_settings, scanner)
     auditor.target_type = TargetType.LLM
     return auditor
 
@@ -168,19 +180,11 @@ class TestInitGarak:
     def setup(self) -> None:  # type: ignore[override]
         _garak_config_mod.reset_mock()
         _garak_command_mod.reset_mock()
-        self.auditor = _make_auditor(GarakSettings(generations=3, seed=99))
+        self.auditor = _make_auditor(GarakSettings())
 
     def test_calls_load_base_config(self) -> None:
         self.auditor._init_garak()
         _garak_config_mod.load_base_config.assert_called_once()
-
-    def test_sets_generations_from_settings(self) -> None:
-        self.auditor._init_garak()
-        assert _garak_config_mod.run.generations == 3
-
-    def test_sets_seed_from_settings(self) -> None:
-        self.auditor._init_garak()
-        assert _garak_config_mod.run.seed == 99
 
     def test_sets_interactive_to_false(self) -> None:
         self.auditor._init_garak()
@@ -303,7 +307,7 @@ class TestLoadProbes:
 
     def test_exception_logs_warning(self) -> None:
         _garak_plugins_mod.load_plugin.side_effect = RuntimeError("load failed")
-        with patch("pentester.auditors.garak.logger") as mock_logger:
+        with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
             self._run(["bad.probe.Fails"])
         mock_logger.warning.assert_called_once()
 
@@ -323,16 +327,6 @@ class TestLoadProbes:
 
 
 # ---------------------------------------------------------------------------
-# _init_scanner
-# ---------------------------------------------------------------------------
-
-
-class TestInitScanner:
-    def test_returns_scanner_instance(self) -> None:
-        assert isinstance(_make_auditor()._init_scanner(), Scanner)
-
-
-# ---------------------------------------------------------------------------
 # audit
 # ---------------------------------------------------------------------------
 
@@ -347,13 +341,11 @@ class TestAudit:
     def _audit_with(
         self, probes: list, scanner: MagicMock | None = None
     ) -> list[ProbeResult]:
-        auditor = _make_auditor()
+        auditor = _make_auditor(scanner=scanner or self.mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=probes),
-            patch.object(
-                auditor, "_init_scanner", return_value=scanner or self.mock_scanner
-            ),
         ):
             results, _ = auditor.audit()
             return results
@@ -361,36 +353,35 @@ class TestAudit:
     # orchestration ----------------------------------------------------------
 
     def test_calls_init_garak(self) -> None:
-        auditor = _make_auditor()
+        auditor = _make_auditor(scanner=self.mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
         with (
             patch.object(auditor, "_init_garak") as m_init,
             patch.object(auditor, "_load_probes", return_value=[]),
-            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
         ):
             auditor.audit()
         m_init.assert_called_once()
 
     def test_calls_load_probes(self) -> None:
-        auditor = _make_auditor()
+        auditor = _make_auditor(scanner=self.mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]) as m_load,
-            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
         ):
             auditor.audit()
         m_load.assert_called_once()
 
-    def test_prints_each_probe_name(self, capsys: pytest.CaptureFixture[str]) -> None:
-        auditor = _make_auditor()
+    def test_uses_injected_scanner(self) -> None:
+        auditor = _make_auditor(scanner=self.mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]),
-            patch.object(
-                auditor, "_init_scanner", return_value=self.mock_scanner
-            ) as m_scanner,
         ):
             auditor.audit()
-        m_scanner.assert_called_once()
+        # scanner is used directly, not via any factory method
+        assert auditor._scanner is self.mock_scanner
 
     # result count -----------------------------------------------------------
 
@@ -548,6 +539,32 @@ class TestInitGenerator:
 
 
 # ---------------------------------------------------------------------------
+# _init_objective_generator
+# ---------------------------------------------------------------------------
+
+
+class TestInitObjectiveGenerator:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:  # type: ignore[override]
+        _garak_generators_litellm_mod.LiteLLMGenerator.reset_mock()
+        _garak_generators_litellm_mod.LiteLLMGenerator.return_value = MagicMock()
+
+    def test_model_set_calls_init_generator(self) -> None:
+        auditor = _make_llm_auditor(
+            llm_settings=LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI)
+        )
+        with patch.object(auditor, "_init_generator") as m:
+            auditor._init_objective_generator()
+        m.assert_called_once()
+
+    def test_no_model_raises(self) -> None:
+        auditor = _make_auditor()
+        auditor.target_type = TargetType.LLM
+        with pytest.raises(ValueError, match="No LLM model configured"):
+            auditor._init_objective_generator()
+
+
+# ---------------------------------------------------------------------------
 # _evaluate
 # ---------------------------------------------------------------------------
 
@@ -629,18 +646,20 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=probes),
-            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=score),
         ):
             results, _ = auditor.audit()
             return results
 
-    def test_calls_init_generator(self) -> None:
+    def test_calls_init_objective_generator(self) -> None:
         auditor = _make_llm_auditor()
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[]),
-            patch.object(auditor, "_init_generator") as m_gen,
+            patch.object(auditor, "_init_objective_generator") as m_gen,
             patch.object(auditor, "_evaluate", return_value=0.0),
         ):
             auditor.audit()
@@ -662,7 +681,9 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0),
         ):
             auditor.audit()
@@ -676,7 +697,9 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0) as m_eval,
         ):
             auditor.audit()
@@ -722,9 +745,11 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0),
-            patch("pentester.auditors.garak.logger") as mock_logger,
+            patch("pentester.auditors.garak.auditor.logger") as mock_logger,
         ):
             auditor.audit()
         mock_logger.exception.assert_called_once()
@@ -736,9 +761,11 @@ class TestAuditLLM:
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=[probe]),
-            patch.object(auditor, "_init_generator", return_value=self.mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=self.mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.0),
-            patch("pentester.auditors.garak.logger"),
+            patch("pentester.auditors.garak.auditor.logger"),
         ):
             results, _ = auditor.audit()
         assert len(results) == 1
@@ -778,11 +805,11 @@ class TestPromptTypeGarak:
         return self.mock_scanner
 
     def _audit_with(self, probes: list) -> list[ProbeResult]:
-        auditor = _make_auditor()
+        auditor = _make_auditor(scanner=self.mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=probes),
-            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
         ):
             results, _ = auditor.audit()
             return results
@@ -804,7 +831,9 @@ class TestPromptTypeGarak:
                 "_load_probes",
                 return_value=[_make_probe("probes.dan.Dan1", ["p"])],
             ),
-            patch.object(auditor, "_init_generator", return_value=mock_generator),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=mock_generator
+            ),
             patch.object(auditor, "_evaluate", return_value=0.8),
         ):
             results, _ = auditor.audit()
