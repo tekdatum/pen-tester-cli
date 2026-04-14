@@ -83,8 +83,8 @@ _pyrit_score_tf_scorer_mod = sys.modules[
 ]
 _pyrit_models_mod = sys.modules["pyrit.models"]
 
-from pentester.auditors.pyrit.auditor import PyritAuditor as PyritProbe  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
+from pentester.auditors.pyrit.auditor import PyritAuditor as PyritProbe  # noqa: E402
 from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
@@ -98,6 +98,13 @@ def reset_cache() -> None:  # type: ignore[return]
     clear_settings_cache()
     yield
     clear_settings_cache()
+
+
+@pytest.fixture(autouse=True)
+def _fake_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +189,7 @@ class TestInitTarget:
             model_name="gpt-4o",
             endpoint="https://api.openai.com/v1",
             is_json_supported=True,
+            api_key="test-key",
         )
 
     def test_openai_passes_endpoint(self) -> None:
@@ -200,6 +208,7 @@ class TestInitTarget:
             model_name="claude-3-5-sonnet",
             endpoint="https://api.anthropic.com/v1",
             is_json_supported=True,
+            api_key="test-key",
         )
 
     def test_gemini_passes_gemini_endpoint(self) -> None:
@@ -212,6 +221,7 @@ class TestInitTarget:
             model_name="gemini-1.5-pro",
             endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
             is_json_supported=True,
+            api_key="test-key",
         )
 
     def test_returns_openai_chat_target(self) -> None:
@@ -236,6 +246,7 @@ class TestInitScorer:
             model_name="gpt-4o",
             endpoint="https://api.openai.com/v1",
             is_json_supported=True,
+            api_key="test-key",
         )
 
     def test_scorer_passes_anthropic_endpoint_when_provider_anthropic(self) -> None:
@@ -248,6 +259,7 @@ class TestInitScorer:
             model_name="claude-3-5-haiku",
             endpoint="https://api.anthropic.com/v1",
             is_json_supported=False,
+            api_key="test-key",
         )
 
     def test_scorer_passes_gemini_endpoint_when_provider_gemini(self) -> None:
@@ -260,6 +272,7 @@ class TestInitScorer:
             model_name="gemini-1.5-flash",
             endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
             is_json_supported=True,
+            api_key="test-key",
         )
 
     def test_anthropic_scorer_disables_json_response(self) -> None:
@@ -350,6 +363,9 @@ class TestLoadDatasets:
         )
 
     def test_skips_failed_dataset_and_logs_warning(self) -> None:
+        _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
+            return_value=["bad", "good"]
+        )
         _pyrit_datasets_mod.SeedDatasetProvider.get_all_dataset_names_async = AsyncMock(
             return_value=["bad", "good"]
         )

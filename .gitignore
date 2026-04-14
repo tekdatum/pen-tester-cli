@@ -15,6 +15,7 @@ pr.md
 .vscode
 .pytest_cache
 pentester_env
+pentester_garak_env
 pentester.log
 output/
 logs/
