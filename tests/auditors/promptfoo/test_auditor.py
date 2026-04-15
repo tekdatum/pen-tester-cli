@@ -570,7 +570,7 @@ class TestGenerateProbeResults:
             "latency_ms": 100,
             "cached": False,
             "error": None,
-            "grading_reason": "All assertions passed",
+            "judge_reason": "All assertions passed",
             "is_multiturn": False,
         }
 
