@@ -148,6 +148,21 @@ class TestScannerInjection:
 
 
 # ---------------------------------------------------------------------------
+# scanner property
+# ---------------------------------------------------------------------------
+
+
+class TestScannerProperty:
+    def test_returns_none_when_no_scanner(self) -> None:
+        factory = AuditorFactory(_make_settings())
+        assert factory.scanner is None
+
+    def test_returns_scanner_when_configured(self) -> None:
+        factory = AuditorFactory(_make_settings(curl_command="curl http://example.com"))
+        assert isinstance(factory.scanner, Scanner)
+
+
+# ---------------------------------------------------------------------------
 # get_auditor
 # ---------------------------------------------------------------------------
 

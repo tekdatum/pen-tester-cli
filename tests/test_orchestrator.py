@@ -7,7 +7,7 @@ the real garak package.
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -125,6 +125,39 @@ class TestExecute:
 
 
 class TestRunAndReport:
+    def test_preflight_called_when_scanner_present(self) -> None:
+        orch = Orchestrator(_make_settings())
+        mock_scanner = MagicMock()
+        mock_auditor = MagicMock()
+        mock_auditor.audit_n_track.return_value = MagicMock(results=[])
+        with (
+            patch.object(type(orch._auditor_factory), "scanner", new_callable=PropertyMock, return_value=mock_scanner),
+            patch.object(orch._reporting, "generate"),
+        ):
+            orch._run_and_report([mock_auditor])
+            mock_scanner.preflight.assert_called_once()
+
+    def test_preflight_skipped_when_no_scanner(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(type(orch._auditor_factory), "scanner", new_callable=PropertyMock, return_value=None),
+            patch.object(orch._reporting, "generate"),
+        ):
+            orch._run_and_report([])  # must not raise
+
+    def test_auditors_not_run_if_preflight_raises(self) -> None:
+        orch = Orchestrator(_make_settings())
+        mock_scanner = MagicMock()
+        mock_scanner.preflight.side_effect = RuntimeError("fail")
+        mock_auditor = MagicMock()
+        with (
+            patch.object(type(orch._auditor_factory), "scanner", new_callable=PropertyMock, return_value=mock_scanner),
+            patch.object(orch._reporting, "generate"),
+        ):
+            with pytest.raises(RuntimeError):
+                orch._run_and_report([mock_auditor])
+            mock_auditor.audit_n_track.assert_not_called()
+
     def test_calls_audit_n_track_on_each_auditor(self) -> None:
         orch = Orchestrator(_make_settings())
         auditor_a = MagicMock()
