@@ -58,11 +58,11 @@ def test_scan_duration_is_non_negative() -> None:
 
 
 class TestPreflight:
-    def test_calls_scan_with_hello(self) -> None:
+    def test_calls_scan_with_preflight(self) -> None:
         handler = MagicMock(spec=RequestHandler)
         handler.request.return_value = TargetResponse(response="ok", bypassed=None)
         Scanner(handler).preflight()
-        handler.request.assert_called_once_with("hello")
+        handler.request.assert_called_once_with("This is a preflight test")
 
     def test_propagates_exception_on_failure(self) -> None:
         handler = MagicMock(spec=RequestHandler)

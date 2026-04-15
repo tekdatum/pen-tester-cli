@@ -131,7 +131,12 @@ class TestRunAndReport:
         mock_auditor = MagicMock()
         mock_auditor.audit_n_track.return_value = MagicMock(results=[])
         with (
-            patch.object(type(orch._auditor_factory), "scanner", new_callable=PropertyMock, return_value=mock_scanner),
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=mock_scanner,
+            ),
             patch.object(orch._reporting, "generate"),
         ):
             orch._run_and_report([mock_auditor])
@@ -140,7 +145,12 @@ class TestRunAndReport:
     def test_preflight_skipped_when_no_scanner(self) -> None:
         orch = Orchestrator(_make_settings())
         with (
-            patch.object(type(orch._auditor_factory), "scanner", new_callable=PropertyMock, return_value=None),
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
             patch.object(orch._reporting, "generate"),
         ):
             orch._run_and_report([])  # must not raise
@@ -151,7 +161,12 @@ class TestRunAndReport:
         mock_scanner.preflight.side_effect = RuntimeError("fail")
         mock_auditor = MagicMock()
         with (
-            patch.object(type(orch._auditor_factory), "scanner", new_callable=PropertyMock, return_value=mock_scanner),
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=mock_scanner,
+            ),
             patch.object(orch._reporting, "generate"),
         ):
             with pytest.raises(RuntimeError):
