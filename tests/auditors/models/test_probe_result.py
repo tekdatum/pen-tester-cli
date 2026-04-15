@@ -135,3 +135,113 @@ class TestJudgeReason:
             _make_result(metadata={"judge_reason": "Safe response"}).judge_reason
             == "Safe response"
         )
+
+
+class TestMarkdownFormattedProperties:
+    def test_pipe_in_prompt_is_escaped(self) -> None:
+        r = _make_result(prompt="say | this")
+        assert r.markdown_formatted_prompt == "say \\| this"
+
+    def test_asterisk_in_prompt_is_escaped(self) -> None:
+        r = _make_result(prompt="**bold**")
+        assert r.markdown_formatted_prompt == "\\*\\*bold\\*\\*"
+
+    def test_underscore_in_prompt_is_escaped(self) -> None:
+        r = _make_result(prompt="_italic_")
+        assert r.markdown_formatted_prompt == "\\_italic\\_"
+
+    def test_backtick_in_prompt_is_escaped(self) -> None:
+        r = _make_result(prompt="`code`")
+        assert r.markdown_formatted_prompt == "\\`code\\`"
+
+    def test_html_tag_in_prompt_is_escaped(self) -> None:
+        r = _make_result(prompt="<b>bold</b>")
+        assert r.markdown_formatted_prompt == "\\<b\\>bold\\</b\\>"
+
+    def test_link_syntax_in_prompt_is_escaped(self) -> None:
+        r = _make_result(prompt="[click](url)")
+        assert r.markdown_formatted_prompt == "\\[click\\](url)"
+
+    def test_backslash_in_prompt_not_double_escaped(self) -> None:
+        # formatted_prompt converts \ to \\ via unicode_escape;
+        # markdown_formatted_prompt must not add another layer.
+        r = _make_result(prompt="a\\b")
+        assert r.markdown_formatted_prompt == "a\\\\b"
+
+    def test_pipe_in_judge_reason_is_escaped(self) -> None:
+        r = _make_result(metadata={"judge_reason": "a | b"})
+        assert r.markdown_formatted_judge_reason == "a \\| b"
+
+    def test_newline_in_judge_reason_is_replaced_with_space(self) -> None:
+        r = _make_result(metadata={"judge_reason": "line1\nline2"})
+        assert r.markdown_formatted_judge_reason == "line1 line2"
+
+    def test_empty_judge_reason_returns_empty_string(self) -> None:
+        r = _make_result()
+        assert r.markdown_formatted_judge_reason == ""
+
+    def test_pipe_in_error_is_escaped(self) -> None:
+        r = _make_result(metadata={"error": "HTTP 4|22"})
+        assert r.markdown_formatted_error == "HTTP 4\\|22"
+
+    def test_newline_in_error_is_replaced_with_space(self) -> None:
+        r = _make_result(metadata={"error": "line1\nline2"})
+        assert r.markdown_formatted_error == "line1 line2"
+
+    def test_empty_error_returns_empty_string(self) -> None:
+        r = _make_result()
+        assert r.markdown_formatted_error == ""
+
+    def test_backslash_in_raw_field_is_escaped(self) -> None:
+        r = _make_result(metadata={"judge_reason": "back\\slash"})
+        assert r.markdown_formatted_judge_reason == "back\\\\slash"
+
+
+class TestCsvFormattedProperties:
+    def test_formula_equals_in_prompt_is_prefixed(self) -> None:
+        r = _make_result(prompt="=EVIL()")
+        assert r.csv_formatted_prompt.startswith("\t=")
+
+    def test_formula_plus_in_prompt_is_prefixed(self) -> None:
+        r = _make_result(prompt="+FORMULA")
+        assert r.csv_formatted_prompt.startswith("\t+")
+
+    def test_formula_minus_in_prompt_is_prefixed(self) -> None:
+        r = _make_result(prompt="-FORMULA")
+        assert r.csv_formatted_prompt.startswith("\t-")
+
+    def test_formula_at_in_prompt_is_prefixed(self) -> None:
+        r = _make_result(prompt="@SUM")
+        assert r.csv_formatted_prompt.startswith("\t@")
+
+    def test_non_formula_prompt_unchanged(self) -> None:
+        r = _make_result(prompt="hello world")
+        assert r.csv_formatted_prompt == "hello world"
+
+    def test_double_quote_in_prompt_is_csv_escaped(self) -> None:
+        r = _make_result(prompt='say "hello"')
+        assert '""' in r.csv_formatted_prompt
+
+    def test_newline_in_judge_reason_is_replaced(self) -> None:
+        r = _make_result(metadata={"judge_reason": "line1\nline2"})
+        assert "\n" not in r.csv_formatted_judge_reason
+
+    def test_formula_in_judge_reason_is_prefixed(self) -> None:
+        r = _make_result(metadata={"judge_reason": "=FORMULA"})
+        assert r.csv_formatted_judge_reason.startswith("\t=")
+
+    def test_empty_judge_reason_returns_empty_string(self) -> None:
+        r = _make_result()
+        assert r.csv_formatted_judge_reason == ""
+
+    def test_newline_in_error_is_replaced(self) -> None:
+        r = _make_result(metadata={"error": "HTTP\n500"})
+        assert "\n" not in r.csv_formatted_error
+
+    def test_formula_in_error_is_prefixed(self) -> None:
+        r = _make_result(metadata={"error": "=BAD"})
+        assert r.csv_formatted_error.startswith("\t=")
+
+    def test_double_quote_in_judge_reason_is_csv_escaped(self) -> None:
+        r = _make_result(metadata={"judge_reason": 'say "no"'})
+        assert '""' in r.csv_formatted_judge_reason
