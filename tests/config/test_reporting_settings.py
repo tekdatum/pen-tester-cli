@@ -9,9 +9,9 @@ class TestDefaults:
         settings = ReportingSettings()
         assert settings.output_dir_path == "./output/"
 
-    def test_generator_keys_does_not_contain_pdf(self) -> None:
+    def test_generator_keys_contains_pdf(self) -> None:
         settings = ReportingSettings()
-        assert GeneratorKey.PDF.value not in settings.generator_keys
+        assert GeneratorKey.PDF.value in settings.generator_keys
 
     def test_generator_keys_contains_csv(self) -> None:
         settings = ReportingSettings()

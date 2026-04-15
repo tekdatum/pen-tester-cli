@@ -1,5 +1,8 @@
 import datetime
 
+import pytest
+from fpdf.errors import FPDFUnicodeEncodingException
+
 from pentester.auditors.models.probe_result import ProbeResult
 from pentester.enums.prompt_type import PromptType
 from pentester.reporting.enum.generator_extension import GeneratorExtension
@@ -244,3 +247,52 @@ class TestDetailReport:
             PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
         )
         assert PromptType.MULTITURN.value in content
+
+    def test_judge_reason_column_heading_present(self) -> None:
+        content = (
+            PdfGenerator().generate_detail_report([_probe()], {}, {}).decode("latin-1")
+        )
+        assert "Judge Reason" in content
+
+    def test_judge_reason_value_present_when_set(self) -> None:
+        probe = _probe(bypassed=True, metadata={"judge_reason": "sentinel_reason_xyz"})
+        content = (
+            PdfGenerator().generate_detail_report([probe], {}, {}).decode("latin-1")
+        )
+        assert "sentinel_reason_xyz" in content
+
+    def test_judge_reason_empty_when_not_set(self) -> None:
+        probe = _probe(bypassed=True)  # no judge_reason in metadata
+        result = PdfGenerator().generate_detail_report([probe], {}, {})
+        assert isinstance(result, bytes)
+
+
+class TestHelveticaEncodingRegression:
+    def test_em_dash_is_not_helvetica_safe(self) -> None:
+        """Replicates the root cause: Helvetica cannot encode '—' (U+2014)."""
+        from fpdf import FPDF
+
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Helvetica", size=10)
+        with pytest.raises(FPDFUnicodeEncodingException):
+            pdf.cell(0, 10, "—")
+
+    def test_safe_replaces_em_dash(self) -> None:
+        """_safe() converts '—' to '_' so it never reaches fpdf."""
+        from pentester.reporting.generators.pdf_generator import _safe
+
+        assert _safe("—") == "_"
+
+    def test_detail_report_with_none_duration_does_not_raise(self) -> None:
+        """Probe with duration=None must not raise FPDFUnicodeEncodingException."""
+        probe = _probe()  # duration=None → formatted_duration returns "—"
+        result = PdfGenerator().generate_detail_report([probe], {}, {})
+        assert isinstance(result, bytes)
+
+    def test_detail_report_with_non_latin1_field_does_not_raise(self) -> None:
+        """Any non-Latin-1 character in probe fields must not crash the PDF."""
+        probe = _probe()
+        probe.attack_category = "cat\u2014egoría"
+        result = PdfGenerator().generate_detail_report([probe], {}, {})
+        assert isinstance(result, bytes)
