@@ -185,3 +185,18 @@ class TestDetailsTemplate:
             "<h2>Error Prompts</h2>"
         )[0]
         assert "safe response detected" in blocked_section
+
+    def test_html_tags_in_prompt_are_escaped(self) -> None:
+        probe = _probe(prompt="<script>evil()</script>")
+        html = HtmlGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "&lt;script&gt;" in html
+        assert "<script>evil()</script>" not in html
+
+    def test_html_closing_tags_in_prompt_do_not_break_document_structure(self) -> None:
+        # A prompt containing </html> used to cause the browser to consider
+        # the document finished, making the Error Prompts section disappear.
+        blocked = _probe(bypassed=False, prompt="</table></tbody></body></html>")
+        error = _error_probe(prompt="error probe")
+        html = HtmlGenerator().generate_detail_report([blocked, error], {}, {}).decode()
+        assert "Error Prompts" in html
+        assert "&lt;/table&gt;" in html
