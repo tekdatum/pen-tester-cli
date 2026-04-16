@@ -13,7 +13,6 @@ The auditor loads seed datasets from PyRIT's dataset registry and sends each see
 | Component | Role |
 |---|---|
 | `PyritAuditor` | Orchestrates dataset loading, strategy execution, and result mapping |
-| `ScannerTarget` | PyRIT `PromptChatTarget` that routes prompts through the configured HTTP scanner |
 | `PyritSettings` | Configuration for datasets, strategies, and per-strategy tuning |
 
 ---
@@ -45,14 +44,7 @@ PyritAuditor.audit()
 
 ### Objective target selection
 
-`_init_objective_target()` picks the target automatically:
-
-| Scanner configured? | Objective target |
-|---|---|
-| Yes | `ScannerTarget` — routes prompts to the HTTP endpoint via curl |
-| No | `OpenAIChatTarget` — sends directly to the configured LLM provider |
-
-This means **any HTTP-accessible AI chat** can be tested without needing a native LLM API key for the target.
+`_init_objective_target()` always uses the configured LLM provider (`OpenAIChatTarget`). Use `SEMANTIC_FENCE` target type to route prompts through an HTTP scanner instead.
 
 ### Score interpretation
 
@@ -70,6 +62,9 @@ This means **any HTTP-accessible AI chat** can be tested without needing a nativ
 |---|---|---|
 | `SEMANTIC_FENCE` | Each seed sent once to the scanner | Strategies run against `ScannerTarget` |
 | `LLM` | Each seed sent to `OpenAIChatTarget`; scored with `SelfAskTrueFalseScorer` | Strategies run against `OpenAIChatTarget` |
+
+**`SEMANTIC_FENCE` multi-turn requires `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET`.**
+`ScannerTarget` stores each assistant turn in PyRIT's conversation memory so the attacker LLM can reason about prior responses. The stored value must be plain text — if `response_text_target` is not set, `ScannerTarget` raises a `ValueError` at runtime. Example: `body.choices.0.message.content`.
 
 ---
 
@@ -111,7 +106,7 @@ Settings live in `PyritSettings` (env prefix `PENTESTER_PYRIT__`):
 
 ```bash
 PENTESTER_TARGET_TYPE=SEMANTIC_FENCE \
-PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": \"$PROMPT\"}"' \
+PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": $PROMPT}"' \
 PENTESTER_PYRIT__DATASET_NAMES='["xstest"]' \
 PENTESTER_PYRIT__MAX_SEEDS=20 \
 PENTESTER_PYRIT__ENABLE_MULTITURN=false \
@@ -122,7 +117,8 @@ python src/main.py
 
 ```bash
 PENTESTER_TARGET_TYPE=SEMANTIC_FENCE \
-PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": \"$PROMPT\"}"' \
+PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": $PROMPT}"' \
+PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.choices.0.message.content \
 PENTESTER_LLM__PROVIDER=gemini \
 PENTESTER_LLM__MODEL=gemini-2.5-flash-lite \
 GEMINI_API_KEY=<your-key> \

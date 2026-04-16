@@ -16,6 +16,7 @@ from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.inspect_settings import InspectSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType  # noqa: E402
+from pentester.enums.prompt_type import PromptType  # noqa: E402
 
 # Re-read stubs registered by conftest.pytest_configure so helpers reference
 # the same CORRECT/INCORRECT strings used by the module under test.
@@ -498,6 +499,30 @@ class TestMapSample:
         result = _make_auditor()._map_sample(_make_sample(), "strong_reject")
         assert isinstance(result, ProbeResult)
 
+    def test_prompt_type_is_single_for_one_turn_sample(self) -> None:
+        sample = _make_sample(messages=None)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.prompt_type == PromptType.SINGLE
+
+    def test_prompt_type_is_multiturn_for_more_than_two_chat_turns(self) -> None:
+        messages = [
+            _make_chat_message("user", "Hi"),
+            _make_chat_message("assistant", "Hello"),
+            _make_chat_message("user", "Attack"),
+        ]
+        sample = _make_sample(messages=messages)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.prompt_type == PromptType.MULTITURN
+
+    def test_prompt_type_is_single_for_exactly_two_chat_turns(self) -> None:
+        messages = [
+            _make_chat_message("user", "Hi"),
+            _make_chat_message("assistant", "Hello"),
+        ]
+        sample = _make_sample(messages=messages)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.prompt_type == PromptType.SINGLE
+
     def test_errored_sample_bypassed_false(self) -> None:
         err = MagicMock()
         err.message = "model call timed out"
@@ -521,6 +546,45 @@ class TestMapSample:
         sample = _make_sample(total_time=None)
         result = _make_auditor()._map_sample(sample, "strong_reject")
         assert result.duration is None
+
+
+# ---------------------------------------------------------------------------
+# TestDetectPromptType
+# ---------------------------------------------------------------------------
+
+
+class TestDetectPromptType:
+    def test_returns_single_when_no_messages(self) -> None:
+        sample = _make_sample(messages=None)
+        assert _make_auditor()._detect_prompt_type(sample) == PromptType.SINGLE
+
+    def test_returns_single_for_two_chat_turns(self) -> None:
+        messages = [
+            _make_chat_message("user", "q"),
+            _make_chat_message("assistant", "a"),
+        ]
+        sample = _make_sample(messages=messages)
+        assert _make_auditor()._detect_prompt_type(sample) == PromptType.SINGLE
+
+    def test_returns_multiturn_for_three_chat_turns(self) -> None:
+        messages = [
+            _make_chat_message("user", "q1"),
+            _make_chat_message("assistant", "a1"),
+            _make_chat_message("user", "q2"),
+        ]
+        sample = _make_sample(messages=messages)
+        assert _make_auditor()._detect_prompt_type(sample) == PromptType.MULTITURN
+
+    def test_ignores_system_messages_in_count(self) -> None:
+        system_msg = MagicMock()
+        system_msg.role = "system"
+        messages = [
+            system_msg,
+            _make_chat_message("user", "q"),
+            _make_chat_message("assistant", "a"),
+        ]
+        sample = _make_sample(messages=messages)
+        assert _make_auditor()._detect_prompt_type(sample) == PromptType.SINGLE
 
 
 # ---------------------------------------------------------------------------
@@ -761,14 +825,34 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "makemesay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "agentharm",
+            "fortress_adversarial",
+            "make_me_pay",
+            "makemesay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+        ]
 
     def test_llm_returns_all_six_evals(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial", "agentharm", "AgentDojo", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber", "makemesay"]
-
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "fortress_adversarial",
+            "agentharm",
+            "AgentDojo",
+            "make_me_pay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+            "makemesay",
+        ]
 
     def test_settings_evals_override_takes_precedence(self) -> None:
         auditor = InspectAIAuditor(
@@ -783,7 +867,17 @@ class TestDefaultEvalsForTarget:
         )
         auditor.target_type = TargetType.SEMANTIC_FENCE
         effective = auditor._settings.evals or auditor._default_evals_for_target()
-        assert effective == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "makemesay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
+        assert effective == [
+            "strong_reject",
+            "b3",
+            "agentharm",
+            "fortress_adversarial",
+            "make_me_pay",
+            "makemesay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+        ]
 
     def test_empty_settings_evals_uses_llm_defaults(self) -> None:
         auditor = InspectAIAuditor(
@@ -1067,7 +1161,9 @@ class TestMaxAttacks:
         auditor.target_type = TargetType.LLM
         return auditor
 
-    def _run_audit(self, auditor: InspectAIAuditor, samples: list[MagicMock]) -> MagicMock:
+    def _run_audit(
+        self, auditor: InspectAIAuditor, samples: list[MagicMock]
+    ) -> MagicMock:
         log = _make_log(samples)
         with (
             patch(
@@ -1094,7 +1190,9 @@ class TestMaxAttacks:
         assert kwargs["limit"] is None
 
     def test_max_attacks_applied_per_eval(self) -> None:
-        auditor = self._make_auditor_with_llm(max_attacks=3, evals=["strong_reject", "b3"])
+        auditor = self._make_auditor_with_llm(
+            max_attacks=3, evals=["strong_reject", "b3"]
+        )
         log = _make_log([_make_sample()])
         with (
             patch(

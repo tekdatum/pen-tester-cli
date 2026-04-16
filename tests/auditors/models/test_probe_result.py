@@ -1,4 +1,5 @@
 from pentester.auditors.models.probe_result import ProbeResult
+from pentester.enums.prompt_type import PromptType
 
 
 def _make_result(**kwargs) -> ProbeResult:
@@ -23,7 +24,21 @@ def test_all_fields_assigned() -> None:
     assert r.response == "Access denied."
     assert r.bypassed is False
     assert r.score == 0.0
+    assert r.prompt_type == PromptType.SINGLE
     assert r.metadata == {}
+
+
+class TestPromptType:
+    def test_default_is_single(self) -> None:
+        assert _make_result().prompt_type == PromptType.SINGLE
+
+    def test_single_value_accepted(self) -> None:
+        r = _make_result(prompt_type=PromptType.SINGLE)
+        assert r.prompt_type == PromptType.SINGLE
+
+    def test_multiturn_value_accepted(self) -> None:
+        r = _make_result(prompt_type=PromptType.MULTITURN)
+        assert r.prompt_type == PromptType.MULTITURN
 
 
 def test_bypassed_true() -> None:
@@ -90,6 +105,20 @@ class TestFormattedPrompt:
     def test_double_quote_is_not_csv_escaped(self) -> None:
         r = _make_result(prompt='say "hello"')
         assert r.formatted_prompt == 'say "hello"'
+
+
+class TestFormattedPromptMd:
+    def test_pipe_is_escaped(self) -> None:
+        r = _make_result(prompt="step 1 | step 2 | step 3")
+        assert r.formatted_prompt_md == "step 1 \\| step 2 \\| step 3"
+
+    def test_no_pipe_is_unchanged(self) -> None:
+        r = _make_result(prompt="hello world")
+        assert r.formatted_prompt_md == "hello world"
+
+    def test_unicode_and_pipe_both_handled(self) -> None:
+        r = _make_result(prompt="caf\u00e9 | enjoy")
+        assert r.formatted_prompt_md == "caf\\xe9 \\| enjoy"
 
 
 def test_duration_defaults_to_none() -> None:

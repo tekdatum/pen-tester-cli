@@ -6,9 +6,8 @@ imported so the suite runs without the real garak package installed.
 
 from __future__ import annotations
 
-import json
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -50,10 +49,7 @@ for _name, _stub in [
 _garak_attempt_mod = sys.modules["garak.attempt"]
 _garak_generators_base_mod = sys.modules["garak.generators.base"]
 
-from pentester.auditors.garak.scanner_generator import (  # noqa: E402
-    ScannerGenerator,
-    _DEFAULT_RESPONSE_PATH,
-)
+from pentester.auditors.garak.scanner_generator import ScannerGenerator  # noqa: E402
 from pentester.scanners.models.target_response import TargetResponse  # noqa: E402
 
 
@@ -61,20 +57,10 @@ from pentester.scanners.models.target_response import TargetResponse  # noqa: E4
 # Helpers
 # ---------------------------------------------------------------------------
 
-_OPENAI_BODY = json.dumps(
-    {"choices": [{"message": {"role": "assistant", "content": "hello world"}}]}
-)
-_ANTHROPIC_BODY = json.dumps({"content": [{"type": "text", "text": "hello world"}]})
-_HTTP_PREFIX = "HTTP/1.1 200 OK\nContent-Type: application/json\n\n"
 
-
-def _make_raw_http(body: str) -> str:
-    return f"{_HTTP_PREFIX}{body}"
-
-
-def _make_scanner(raw_http: str = _make_raw_http(_OPENAI_BODY)) -> MagicMock:
+def _make_scanner(text: str = "hello world") -> MagicMock:
     scanner = MagicMock()
-    scanner.scan.return_value = TargetResponse(response=raw_http, bypassed=None)
+    scanner.scan.return_value = TargetResponse(response="raw", bypassed=None, text=text)
     return scanner
 
 
@@ -84,103 +70,6 @@ def _make_prompt(text: str = "attack prompt") -> MagicMock:
     prompt = MagicMock()
     prompt.turns = [turn]
     return prompt
-
-
-# ---------------------------------------------------------------------------
-# _extract_llm_text — default OpenAI path
-# ---------------------------------------------------------------------------
-
-
-class TestExtractLlmTextDefault:
-    def test_extracts_content_from_openai_format(self) -> None:
-        gen = ScannerGenerator(_make_scanner())
-        result = gen._extract_llm_text(_make_raw_http(_OPENAI_BODY))
-        assert result == "hello world"
-
-    def test_splits_on_blank_line_to_find_body(self) -> None:
-        gen = ScannerGenerator(_make_scanner())
-        result = gen._extract_llm_text(_make_raw_http(_OPENAI_BODY))
-        assert result == "hello world"
-
-    def test_handles_response_without_http_prefix(self) -> None:
-        gen = ScannerGenerator(_make_scanner())
-        result = gen._extract_llm_text(_OPENAI_BODY)
-        assert result == "hello world"
-
-    def test_default_path_constant_is_openai_format(self) -> None:
-        assert _DEFAULT_RESPONSE_PATH == "choices.0.message.content"
-
-
-# ---------------------------------------------------------------------------
-# _extract_llm_text — custom response_text_target
-# ---------------------------------------------------------------------------
-
-
-class TestExtractLlmTextCustomPath:
-    def test_custom_path_extracts_anthropic_format(self) -> None:
-        gen = ScannerGenerator(
-            _make_scanner(), response_text_target="content.0.text"
-        )
-        result = gen._extract_llm_text(_make_raw_http(_ANTHROPIC_BODY))
-        assert result == "hello world"
-
-    def test_numeric_key_indexes_into_list(self) -> None:
-        body = json.dumps({"items": ["zero", "one", "two"]})
-        gen = ScannerGenerator(_make_scanner(), response_text_target="items.1")
-        assert gen._extract_llm_text(body) == "one"
-
-    def test_nested_path_traversal(self) -> None:
-        body = json.dumps({"a": {"b": {"c": "deep value"}}})
-        gen = ScannerGenerator(_make_scanner(), response_text_target="a.b.c")
-        assert gen._extract_llm_text(body) == "deep value"
-
-
-# ---------------------------------------------------------------------------
-# _extract_llm_text — misconfiguration: warn + raise
-# ---------------------------------------------------------------------------
-
-
-class TestExtractLlmTextMisconfigured:
-    def test_raises_on_invalid_json(self) -> None:
-        gen = ScannerGenerator(_make_scanner())
-        with pytest.raises(Exception):
-            gen._extract_llm_text("HTTP/1.1 200 OK\n\nnot-json")
-
-    def test_warns_on_invalid_json(self) -> None:
-        gen = ScannerGenerator(_make_scanner())
-        with patch("pentester.auditors.garak.scanner_generator.logger") as mock_log:
-            with pytest.raises(Exception):
-                gen._extract_llm_text("HTTP/1.1 200 OK\n\nnot-json")
-        mock_log.warning.assert_called_once()
-
-    def test_raises_on_missing_path_key(self) -> None:
-        body = json.dumps({"other": "field"})
-        gen = ScannerGenerator(_make_scanner())  # default path won't match
-        with pytest.raises(Exception):
-            gen._extract_llm_text(body)
-
-    def test_warns_on_missing_path_key(self) -> None:
-        body = json.dumps({"other": "field"})
-        gen = ScannerGenerator(_make_scanner())
-        with patch("pentester.auditors.garak.scanner_generator.logger") as mock_log:
-            with pytest.raises(Exception):
-                gen._extract_llm_text(body)
-        mock_log.warning.assert_called_once()
-
-    def test_raises_on_index_out_of_range(self) -> None:
-        body = json.dumps({"choices": []})
-        gen = ScannerGenerator(_make_scanner())
-        with pytest.raises(Exception):
-            gen._extract_llm_text(body)
-
-    def test_warning_includes_path_name(self) -> None:
-        body = json.dumps({"other": "field"})
-        gen = ScannerGenerator(_make_scanner(), response_text_target="my.custom.path")
-        with patch("pentester.auditors.garak.scanner_generator.logger") as mock_log:
-            with pytest.raises(Exception):
-                gen._extract_llm_text(body)
-        warning_msg = str(mock_log.warning.call_args)
-        assert "my.custom.path" in warning_msg
 
 
 # ---------------------------------------------------------------------------
@@ -200,16 +89,14 @@ class TestCallModel:
         result = gen._call_model(_make_prompt())
         assert len(result) == 1
 
-    def test_returned_message_contains_extracted_text(self) -> None:
-        gen = ScannerGenerator(_make_scanner())
+    def test_returned_message_contains_response_text(self) -> None:
+        gen = ScannerGenerator(_make_scanner(text="hello world"))
         result = gen._call_model(_make_prompt())
         assert result[0].text == "hello world"
 
-    def test_extraction_error_propagates_from_call_model(self) -> None:
+    def test_raises_when_text_is_none(self) -> None:
         scanner = MagicMock()
-        scanner.scan.return_value = TargetResponse(
-            response="HTTP/1.1 200 OK\n\nnot-json", bypassed=None
-        )
+        scanner.scan.return_value = TargetResponse(response="{}", bypassed=None)
         gen = ScannerGenerator(scanner)
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match="TargetResponse.text is None"):
             gen._call_model(_make_prompt())

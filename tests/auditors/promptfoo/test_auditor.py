@@ -19,7 +19,11 @@ from pentester.config.auditors.promptfoo_settings import (
 )
 from pentester.config.settings import TargetType
 from pentester.enums.auditor_key import AuditorKey
+from pentester.enums.prompt_type import PromptType
 from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
+from pentester.scanners.response_serializers.json_dot_serializer import (
+    JSONDotSerializer,
+)
 
 
 _FAKE_CONFIG: dict[str, Any] = {
@@ -74,6 +78,14 @@ def _make_settings(**kwargs: object) -> PromptfooSettings:
     return PromptfooSettings(**defaults)
 
 
+def _make_scanner_with_dot_target(target: str) -> MagicMock:
+    handler = MagicMock()
+    handler.response_serializer = JSONDotSerializer(target)
+    scanner = MagicMock()
+    scanner.request_handler = handler
+    return scanner
+
+
 def _make_auditor(
     settings: PromptfooSettings | None = None,
     scanner: object = None,
@@ -88,7 +100,11 @@ def _make_auditor(
             return_value=copy.deepcopy(_FAKE_CONFIG),
         ),
     ):
-        return PromptfooAuditor(settings=s, scanner=scanner, target_type=target_type)
+        return PromptfooAuditor(
+            settings=s,
+            scanner=scanner,
+            target_type=target_type,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -549,9 +565,7 @@ class TestGenerateTestsFiles:
         with (
             patch.object(auditor, "_write_plugin_configs") as mock_write,
             patch.object(auditor, "_run_redteam_generate_for_configs") as mock_gen,
-            patch.object(
-                auditor, "_configure_provider_in_test_files"
-            ) as mock_configure,
+            patch.object(auditor, "_configure_provider_in_test_files"),
         ):
             auditor.generate_tests_files()
 
@@ -706,18 +720,11 @@ class TestConfigureProviderInTestFiles:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
         auditor.provider_id = "file://handler.py:H.promptfoo_call_api"
-        auditor.providers = [
-            {"id": "file://handler.py:H.promptfoo_call_api"}
-        ]
+        auditor.providers = [{"id": "file://handler.py:H.promptfoo_call_api"}]
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -725,9 +732,7 @@ class TestConfigureProviderInTestFiles:
         import yaml
 
         result = yaml.safe_load((cfg_dir / "test_1.yaml").read_text())
-        assert result["providers"] == [
-            {"id": "file://handler.py:H.promptfoo_call_api"}
-        ]
+        assert result["providers"] == [{"id": "file://handler.py:H.promptfoo_call_api"}]
 
     def test_http_provider_updates_config_in_yaml(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
@@ -739,12 +744,7 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -765,12 +765,7 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -785,18 +780,11 @@ class TestConfigureProviderInTestFiles:
         auditor = _make_auditor()
         auditor._scanner = MagicMock()
         auditor.provider_id = "file://h.py:H.promptfoo_call_api"
-        auditor.providers = [
-            {"id": "file://h.py:H.promptfoo_call_api"}
-        ]
+        auditor.providers = [{"id": "file://h.py:H.promptfoo_call_api"}]
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
             (cfg_dir / name).write_text(yaml_content)
 
@@ -806,9 +794,7 @@ class TestConfigureProviderInTestFiles:
 
         for name in ["test_1.yaml", "test_2.yaml", "multiturn_test_1.yaml"]:
             result = yaml.safe_load((cfg_dir / name).read_text())
-            assert result["providers"] == [
-                {"id": "file://h.py:H.promptfoo_call_api"}
-            ]
+            assert result["providers"] == [{"id": "file://h.py:H.promptfoo_call_api"}]
 
     def test_skips_when_no_scanner(self, tmp_path: Path) -> None:
         auditor = _make_auditor()
@@ -816,12 +802,7 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
@@ -836,18 +817,97 @@ class TestConfigureProviderInTestFiles:
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
-        yaml_content = (
-            "providers:\n"
-            "- id: http\n"
-            "  config:\n"
-            "    url: http://old.com\n"
-        )
+        yaml_content = "providers:\n- id: http\n  config:\n    url: http://old.com\n"
         (cfg_dir / "test_1.yaml").write_text(yaml_content)
 
         auditor._configure_provider_in_test_files(cfg_dir)
 
         content = (cfg_dir / "test_1.yaml").read_text()
         assert "http://old.com" in content
+
+
+class TestExtractJsonDotTarget:
+    def test_returns_target_from_json_dot_serializer(self) -> None:
+        scanner = _make_scanner_with_dot_target("body.data.valid")
+        result = PromptfooAuditor._extract_json_dot_target(scanner)
+        assert result == "body.data.valid"
+
+    def test_returns_none_when_scanner_is_none(self) -> None:
+        assert PromptfooAuditor._extract_json_dot_target(None) is None
+
+    def test_returns_none_when_no_serializer(self) -> None:
+        scanner = MagicMock()
+        scanner.request_handler.response_serializer = None
+        assert PromptfooAuditor._extract_json_dot_target(scanner) is None
+
+    def test_returns_none_when_serializer_is_not_json_dot(self) -> None:
+        scanner = MagicMock()
+        scanner.request_handler.response_serializer = MagicMock()
+        assert PromptfooAuditor._extract_json_dot_target(scanner) is None
+
+
+class TestBuildAssertionBlock:
+    def test_returns_python_when_wrapper_path_set(self) -> None:
+        auditor = _make_auditor(_make_settings(assertion_wrapper_path="/my/assert.py"))
+        block = auditor._build_assertion_block()
+        assert len(block) == 1
+        assert block[0]["type"] == "python"
+        assert "/my/assert.py" in block[0]["value"]
+
+    def test_returns_javascript_with_stripped_path(self) -> None:
+        scanner = _make_scanner_with_dot_target("body.data.valid")
+        auditor = _make_auditor(scanner=scanner)
+        block = auditor._build_assertion_block()
+        assert block == [
+            {
+                "type": "javascript",
+                "value": "JSON.parse(output).data.valid === false",
+            }
+        ]
+
+    def test_returns_default_when_no_wrapper_no_dot_target(self) -> None:
+        auditor = _make_auditor()
+        block = auditor._build_assertion_block()
+        assert block == [{"type": "javascript", "value": "output.passed"}]
+
+    def test_single_segment_dot_target_returns_default(self) -> None:
+        scanner = _make_scanner_with_dot_target("body")
+        auditor = _make_auditor(scanner=scanner)
+        block = auditor._build_assertion_block()
+        assert block == [{"type": "javascript", "value": "output.passed"}]
+
+    def test_headers_dot_target_strips_first_segment(self) -> None:
+        scanner = _make_scanner_with_dot_target("headers.x-valid")
+        auditor = _make_auditor(scanner=scanner)
+        block = auditor._build_assertion_block()
+        assert block == [
+            {
+                "type": "javascript",
+                "value": "JSON.parse(output).x-valid === false",
+            }
+        ]
+
+    def test_wrapper_path_takes_priority_over_json_dot_target(self) -> None:
+        scanner = _make_scanner_with_dot_target("body.data.valid")
+        auditor = _make_auditor(
+            _make_settings(assertion_wrapper_path="/my/assert.py"),
+            scanner=scanner,
+        )
+        block = auditor._build_assertion_block()
+        assert len(block) == 1
+        assert block[0]["type"] == "python"
+        assert "/my/assert.py" in block[0]["value"]
+
+    def test_deep_nested_dot_target(self) -> None:
+        scanner = _make_scanner_with_dot_target("body.choices.0.message.content")
+        auditor = _make_auditor(scanner=scanner)
+        block = auditor._build_assertion_block()
+        assert block == [
+            {
+                "type": "javascript",
+                "value": "JSON.parse(output).choices.0.message.content === false",
+            }
+        ]
 
 
 class TestCleanConfig:
@@ -877,6 +937,52 @@ class TestCleanConfig:
         for test in written["tests"]:
             assert test["assert"][0]["type"] == "python"
             assert "/my/assert.py" in test["assert"][0]["value"]
+
+    def test_uses_javascript_for_json_dot_target(self, tmp_path: Path) -> None:
+        scanner = _make_scanner_with_dot_target("body.data.valid")
+        auditor = _make_auditor(scanner=scanner)
+        output = tmp_path / "output"
+        output.mkdir()
+
+        with (
+            patch("builtins.open", mock_open(read_data="")),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=copy.deepcopy(_FAKE_CONFIG),
+            ),
+            patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump,
+        ):
+            auditor.clean_config(Path("/test.yaml"), output)
+
+        written = mock_dump.call_args[0][0]
+        for test in written["tests"]:
+            assert test["assert"] == [
+                {
+                    "type": "javascript",
+                    "value": "JSON.parse(output).data.valid === false",
+                }
+            ]
+
+    def test_uses_default_when_neither_wrapper_nor_dot_target(
+        self, tmp_path: Path
+    ) -> None:
+        auditor = _make_auditor()
+        output = tmp_path / "output"
+        output.mkdir()
+
+        with (
+            patch("builtins.open", mock_open(read_data="")),
+            patch(
+                "pentester.auditors.promptfoo.auditor.yaml.safe_load",
+                return_value=copy.deepcopy(_FAKE_CONFIG),
+            ),
+            patch("pentester.auditors.promptfoo.auditor.yaml.dump") as mock_dump,
+        ):
+            auditor.clean_config(Path("/test.yaml"), output)
+
+        written = mock_dump.call_args[0][0]
+        for test in written["tests"]:
+            assert test["assert"] == [{"type": "javascript", "value": "output.passed"}]
 
     def test_handles_existing_files_based_on_replace_setting(
         self, tmp_path: Path
@@ -1114,6 +1220,14 @@ class TestGenerateProbeResults:
 
         assert results[0].bypassed is False
 
+    def test_prompt_type_is_single(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df()
+
+        results = auditor._generate_probe_results()
+
+        assert results[0].prompt_type == PromptType.SINGLE
+
 
 # ---------------------------------------------------------------------------
 # Test Pre-audit Precondition Validation
@@ -1127,15 +1241,25 @@ class TestValidatePreconditions:
             yield
 
     def test_semantic_fence_passes_when_assert_file_exists(self) -> None:
-        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        auditor = _make_auditor(
+            _make_settings(assertion_wrapper_path="/some/assert.py"),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
         with patch("pathlib.Path.exists", return_value=True):
             auditor._validate_preconditions()  # should not raise
 
     def test_semantic_fence_raises_when_assert_file_missing(self) -> None:
-        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        auditor = _make_auditor(
+            _make_settings(assertion_wrapper_path="/some/assert.py"),
+            target_type=TargetType.SEMANTIC_FENCE,
+        )
         with patch("pathlib.Path.exists", return_value=False):
             with pytest.raises(ValueError, match="Assert file not found"):
                 auditor._validate_preconditions()
+
+    def test_semantic_fence_passes_when_wrapper_path_is_none(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        auditor._validate_preconditions()  # should not raise
 
     def test_llm_passes_when_openai_key_is_set(self) -> None:
         auditor = _make_auditor(target_type=TargetType.LLM)

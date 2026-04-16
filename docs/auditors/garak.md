@@ -87,7 +87,9 @@ Settings live in `GarakSettings` (env prefix `PENTESTER_GARAK__`):
 
 ### Scanner response extraction (`PENTESTER_SCANNER__RESPONSE_TEXT_TARGET`)
 
-When using `ScannerGenerator` (LLM mode with a scanner injected), this dot-path locates the model's reply text inside the HTTP response JSON body. Defaults to `choices.0.message.content` (OpenAI chat format).
+When using `ScannerGenerator` (LLM mode with a scanner injected), this dot-path locates the model's reply text inside the HTTP response JSON body. **Required** — if not set, `ScannerGenerator` will raise a `ValueError` at runtime.
+
+Example for OpenAI-compatible endpoints: `body.choices.0.message.content`
 
 ---
 
@@ -97,7 +99,7 @@ When using `ScannerGenerator` (LLM mode with a scanner injected), this dot-path 
 
 ```bash
 PENTESTER_TARGET_TYPE=SEMANTIC_FENCE \
-PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": \"$PROMPT\"}"' \
+PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8090/api/v1/fence/validate/2" -H "Content-Type: application/json" --data-raw "{\"text\": $PROMPT}"' \
 PENTESTER_GARAK__PROBES='["probes.dan.Dan_6_2", "probes.knownbadsignatures.EICAR"]' \
 python src/main.py
 ```
@@ -118,8 +120,8 @@ python src/main.py
 
 ```bash
 PENTESTER_TARGET_TYPE=LLM \
-PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8080/v1/chat/completions" -H "Content-Type: application/json" --data-raw "{\"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]}"' \
-PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=choices.0.message.content \
+PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8080/v1/chat/completions" -H "Content-Type: application/json" --data-raw "{\"messages\": [{\"role\": \"user\", \"content\": $PROMPT}]}"' \
+PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.choices.0.message.content \
 PENTESTER_GARAK__PROBES='["probes.dan.Dan_6_2"]' \
 python src/main.py
 ```
