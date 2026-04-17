@@ -609,9 +609,7 @@ class TestAuditLLM:
             return_value=[dataset]
         )
         auditor = _make_llm_auditor(
-            settings=PyritSettings(
-                dataset_names=["x"], enable_multiturn=False
-            ),
+            settings=PyritSettings(dataset_names=["x"], enable_multiturn=False),
             llm_settings=LLMSettings(model="gpt-4o"),
         )
         with (
@@ -629,9 +627,7 @@ class TestAuditLLM:
             return_value=[dataset]
         )
         auditor = _make_llm_auditor(
-            settings=PyritSettings(
-                dataset_names=["x"], enable_multiturn=False
-            ),
+            settings=PyritSettings(dataset_names=["x"], enable_multiturn=False),
             llm_settings=LLMSettings(model="gpt-4o"),
         )
         with (

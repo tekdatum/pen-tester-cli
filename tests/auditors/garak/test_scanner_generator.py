@@ -20,6 +20,7 @@ _garak_attempt_mod = MagicMock(name="garak.attempt")
 _garak_generators_base_mod = MagicMock(name="garak.generators.base")
 _garak_mod = MagicMock(name="garak")
 
+
 # Generator base class — must be a real class so ScannerGenerator can inherit
 class _FakeGenerator:
     def __init__(self, name: str, config_root: object = None) -> None:
@@ -27,6 +28,7 @@ class _FakeGenerator:
 
 
 _garak_generators_base_mod.Generator = _FakeGenerator
+
 
 # Message stub — just holds .text
 class _FakeMessage:

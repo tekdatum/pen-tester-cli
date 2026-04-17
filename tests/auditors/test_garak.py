@@ -561,6 +561,7 @@ class TestInitObjectiveGenerator:
         with pytest.raises(ValueError, match="No LLM model configured"):
             auditor._init_objective_generator()
 
+
 # ---------------------------------------------------------------------------
 # _evaluate
 # ---------------------------------------------------------------------------

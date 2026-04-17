@@ -1,4 +1,3 @@
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,7 +9,7 @@ from pentester.scanners.request_handlers.curl_handlers.uncurl_handler import (
 _CURL_HTTPS = (
     "curl https://api.openai.com/v1/chat/completions"
     " -H 'Content-Type: application/json'"
-    " --data-raw '{\"model\": \"gpt-4o-mini\","
+    ' --data-raw \'{"model": "gpt-4o-mini",'
     ' "messages": [{"role": "user", "content": $PROMPT}]}\''
 )
 _CURL_INSECURE = _CURL_HTTPS + " -k"
