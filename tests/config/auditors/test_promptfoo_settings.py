@@ -39,6 +39,10 @@ class TestDefaults:
         settings = PromptfooSettings()
         assert settings.output_path == "./output/promptfoo"
 
+    def test_target_label_default(self) -> None:
+        settings = PromptfooSettings()
+        assert settings.target_label == "target-api"
+
 
 class TestComputedFields:
     def test_config_file_appends_yaml_filename(self) -> None:
@@ -213,6 +217,28 @@ class TestMaxAttacks:
         assert PromptfooSettings(max_attacks=None).max_attacks is None
 
 
+class TestPluginNumTests:
+    def test_default_is_none(self) -> None:
+        assert PromptfooSettings().plugin_num_tests is None
+
+    def test_accepts_positive_value(self) -> None:
+        assert PromptfooSettings(plugin_num_tests=50).plugin_num_tests == 50
+
+    def test_accepts_one(self) -> None:
+        assert PromptfooSettings(plugin_num_tests=1).plugin_num_tests == 1
+
+    def test_accepts_none_explicitly(self) -> None:
+        assert PromptfooSettings(plugin_num_tests=None).plugin_num_tests is None
+
+    def test_rejects_zero(self) -> None:
+        with pytest.raises(Exception):
+            PromptfooSettings(plugin_num_tests=0)
+
+    def test_rejects_negative(self) -> None:
+        with pytest.raises(Exception):
+            PromptfooSettings(plugin_num_tests=-1)
+
+
 class TestDefaultEmail:
     def test_default_email_value(self) -> None:
         assert PromptfooSettings().default_email == "tools@tekdatum.com"
@@ -268,6 +294,11 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("OUTPUT_PATH", "/env/output")
         settings = PromptfooSettings()
         assert settings.output_path == "/env/output"
+
+    def test_target_label_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TARGET_LABEL", "my-custom-api")
+        settings = PromptfooSettings()
+        assert settings.target_label == "my-custom-api"
 
 
 class TestMultiturnDefaults:

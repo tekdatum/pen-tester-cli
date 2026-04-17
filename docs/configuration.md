@@ -21,6 +21,7 @@ All variables are prefixed with `PENTESTER_`.
 | `PENTESTER_PYRIT__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Pyrit auditor. `None` means no limit. |
 | `PENTESTER_INSPECT__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Inspect AI auditor. `None` means no limit. |
 | `PENTESTER_PROMPTFOO__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Promptfoo auditor. `None` means no limit. |
+| `PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS` | `int \| None` | `None` | Override the `numTests` value on every plugin in generated configuration files. `None` keeps the original value from the config file. |
 
 **`TargetType` values:**
 
