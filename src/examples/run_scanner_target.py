@@ -30,7 +30,6 @@ Then run:
 import asyncio
 import logging
 
-from pyrit.memory import CentralMemory
 from pyrit.models import Message, MessagePiece
 from pyrit.setup import initialize_pyrit_async
 
@@ -72,9 +71,7 @@ async def main() -> None:
             for rpiece in msg.message_pieces:
                 logger.info("Response: %s", rpiece.converted_value)
 
-    memory = CentralMemory.get_memory_instance()
-    all_pieces = memory.get_all_prompt_pieces()
-    logger.info("Total pieces stored in memory: %d", len(all_pieces))
+    logger.info("Run complete.")
 
 
 if __name__ == "__main__":
