@@ -440,6 +440,50 @@ tests:
 
 > **Note:** If `json_dot_target` has only one segment (e.g., just `"body"`), the stripped path is empty and the auditor falls through to Mode 3.
 
+## Test Volume Controls
+
+Four settings govern how many test files are generated and how many attacks are evaluated. Generation and evaluation are independent stages — the generation settings (`MAX_TEST_FILES`, `PLUGINS_PER_FILE`, `PLUGIN_NUM_TESTS`) determine the YAML content written to disk; the evaluation setting (`MAX_TESTS`) caps how many of those attacks promptfoo actually executes. Changing `MAX_TESTS` never alters the generated files.
+
+Setting `PENTESTER_PROMPTFOO__MAX_TEST_FILES=X` tells the auditor to create at most X test YAML files during the generation stage. Within each file, `PENTESTER_PROMPTFOO__PLUGINS_PER_FILE=P` bundles P plugins together, so the total number of files is `ceil(total_plugins / P)` capped at X. If `PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS=T` is set, every plugin's `numTests` is overridden to T. After `promptfoo redteam generate` expands the config, each file contains approximately `P × T × S` adversarial prompts, where S is the number of strategies defined in the base config (~11 by default). The exact count is approximate because the generation subprocess may not produce exactly T cases for every plugin–strategy combination. Once generation is complete, the evaluation stage runs `promptfoo eval` against each of those X files. `PENTESTER_PROMPTFOO__MAX_TESTS=M` (mapped to the `-n` flag) caps the number of attacks actually executed per file to M — regardless of how many test cases the file contains.
+
+```mermaid
+flowchart TD
+    BaseConfig["promptfooconfig.yaml\nN plugins total\n(each has numTests defined)"]
+
+    subgraph GenerationStage["Generation Stage — _write_plugin_configs() + promptfoo redteam generate"]
+        direction TB
+        Partition["PENTESTER_PROMPTFOO__PLUGINS_PER_FILE = P\nPartition N plugins into groups of P\n→ ceil(N / P) groups"]
+        Limit["PENTESTER_PROMPTFOO__MAX_TEST_FILES = X\nKeep only first X groups\n→ X YAML files created"]
+        Override["PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS = T\nOverride numTests → T per plugin\n→ P plugins × T tests × S strategies per file"]
+        ConfigsDir["configurations/\ntest_1.yaml ... test_X.yaml\nX files × P plugins × T tests each"]
+        RedteamGen["promptfoo redteam generate\n(subprocess per file)\nExpands each plugin × strategy into ~T adversarial cases"]
+        LLMDir["llm_as_judge_assert/\ntest_1.yaml ... test_X.yaml\n≈ P × T × S adversarial prompts per file"]
+        Partition --> Limit --> Override --> ConfigsDir --> RedteamGen --> LLMDir
+    end
+
+    subgraph EvaluationStage["Evaluation Stage — promptfoo eval"]
+        direction TB
+        MaxTestsNote["PENTESTER_PROMPTFOO__MAX_TESTS = M  (-n M)\nCaps attacks evaluated per file to M\nDoes NOT affect generated file content"]
+        EvalRun["promptfoo eval -c test_N.yaml -n M\nFor each of the X files\n(up to PENTESTER_PROMPTFOO__FILES_PARALLEL in parallel)"]
+        ResultsDir["results/\ntest_1_result.jsonl ... test_X_result.jsonl\nUp to M results per file\nMax total across all files: X × M"]
+        MaxTestsNote --> EvalRun --> ResultsDir
+    end
+
+    BaseConfig --> GenerationStage
+    LLMDir --> EvaluationStage
+
+    style MaxTestsNote fill:#e74c3c,color:#fff
+```
+
+The table below summarises each setting's scope. S denotes the number of strategies in the base config (~11 by default):
+
+| Env Var | Stage | Controls | Example: X=10, P=2, T=50, S≈11, M=2000 |
+|---------|-------|----------|------------------------------------------|
+| `PENTESTER_PROMPTFOO__MAX_TEST_FILES` | Generation | Number of YAML files created | 10 YAMLs |
+| `PENTESTER_PROMPTFOO__PLUGINS_PER_FILE` | Generation | Plugins bundled per YAML | 2 plugins per file |
+| `PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS` | Generation | Test cases generated per plugin per strategy | 50 tests × 11 strategies × 2 plugins = ~1 100 prompts per file |
+| `PENTESTER_PROMPTFOO__MAX_TESTS` | **Evaluation only** | Attacks evaluated per `promptfoo eval` run | 2 000 attacks cap per file (safety ceiling; lower than ~1 100 here means all attacks run) |
+
 ## JSONL Result Files
 
 Each `promptfoo eval` run produces a JSONL file. Single-turn and multiturn evaluations produce structurally different records.
@@ -691,6 +735,8 @@ Promptfoo-specific settings use the `PENTESTER_PROMPTFOO__` prefix:
 | `PENTESTER_PROMPTFOO__MAX_TESTS` | `20000` | Max tests per eval run (`-n` flag) |
 | `PENTESTER_PROMPTFOO__PLUGINS_PER_FILE` | `1` | Plugins bundled per test YAML (1–5) |
 | `PENTESTER_PROMPTFOO__MAX_TEST_FILES` | `None` | Cap on generated test YAMLs; `None` means all |
+| `PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS` | `None` | Override `numTests` per plugin in generated configs; `None` uses the base config value |
+| `PENTESTER_PROMPTFOO__MAX_ATTACKS` | `None` | Overall attack limit across all eval runs; `None` means unlimited |
 | `PENTESTER_PROMPTFOO__REPLACE_EXISTING_FILE` | `false` | Force regenerate existing files |
 | `PENTESTER_PROMPTFOO__ASSERTION_WRAPPER_PATH` | `None` | Path to custom assertion Python file. When set, enables [Mode 1](#mode-1-python-wrapper-assertion_wrapper_path-set). When `None`, uses JavaScript assertions (Mode 2 or 3) |
 | `PENTESTER_PROMPTFOO__ENABLE_MULTITURN` | `false` | Enable multiturn evaluation pass |
