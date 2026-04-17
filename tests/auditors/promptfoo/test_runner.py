@@ -110,6 +110,18 @@ class TestRunEval:
         command = self.mock_run.call_args[0][0]
         assert "-n" in command and command[command.index("-n") + 1] == "42"
 
+    def test_concurrency_override_replaces_self_concurrency_in_command(self) -> None:
+        _make_runner(concurrency=5).run_eval(Path("/test/my_test.yaml"), concurrency=99)
+
+        command = self.mock_run.call_args[0][0]
+        assert "-j" in command and command[command.index("-j") + 1] == "99"
+
+    def test_falls_back_to_self_concurrency_when_no_override(self) -> None:
+        _make_runner(concurrency=12).run_eval(Path("/test/my_test.yaml"))
+
+        command = self.mock_run.call_args[0][0]
+        assert "-j" in command and command[command.index("-j") + 1] == "12"
+
 
 class TestRunRedteamGenerate:
     @pytest.fixture(autouse=True)
@@ -187,6 +199,17 @@ class TestRunAll:
 
         mock_eval.assert_not_called()
         assert results == []
+
+    def test_passes_concurrency_override_to_run_eval(self) -> None:
+        runner = _make_runner()
+        files = [Path("/test/a.yaml")]
+
+        with patch.object(
+            runner, "run_eval", return_value=(True, "a.yaml", "ok")
+        ) as mock_eval:
+            runner.run_all(files, concurrency=77)
+
+        mock_eval.assert_called_once_with(files[0], 77)
 
 
 class TestEnsureEmailConfigured:

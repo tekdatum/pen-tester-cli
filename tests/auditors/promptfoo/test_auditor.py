@@ -745,6 +745,49 @@ class TestRestoreLlmApiKeys:
 
 
 # ---------------------------------------------------------------------------
+# TestEvaluateSingleTurn — concurrency routing
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluateSingleTurn:
+    def test_semantic_fence_passes_semantic_fence_concurrency(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        files = [Path("/a.yaml")]
+        with (
+            patch.object(auditor, "_unset_llm_api_keys"),
+            patch.object(auditor, "_restore_llm_api_keys"),
+            patch.object(auditor, "_run_eval_pass", return_value=[]) as mock_pass,
+        ):
+            auditor._evaluate_single_turn(files)
+
+        mock_pass.assert_called_once_with(
+            files, concurrency=auditor.settings.semantic_fence_concurrency
+        )
+
+    def test_llm_passes_internal_concurrency(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        files = [Path("/a.yaml")]
+        with patch.object(auditor, "_run_eval_pass", return_value=[]) as mock_pass:
+            auditor._evaluate_single_turn(files)
+
+        mock_pass.assert_called_once_with(
+            files, concurrency=auditor.settings.internal_concurrency
+        )
+
+    def test_skips_eval_when_no_files_for_semantic_fence(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        with patch.object(auditor, "_run_eval_pass") as mock_pass:
+            auditor._evaluate_single_turn([])
+        mock_pass.assert_not_called()
+
+    def test_skips_eval_when_no_files_for_llm(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        with patch.object(auditor, "_run_eval_pass") as mock_pass:
+            auditor._evaluate_single_turn([])
+        mock_pass.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Test Audit Pipeline orchestration
 # ---------------------------------------------------------------------------
 
@@ -780,7 +823,9 @@ class TestAudit:
         mock_gen.assert_called_once()
         mock_clean.assert_called_once()
         mock_prep.assert_called_once()
-        mock_run.assert_called_once_with(files)
+        mock_run.assert_called_once_with(
+            files, concurrency=auditor.settings.semantic_fence_concurrency
+        )
         mock_proc.assert_called_once_with(runner_output)
         mock_build.assert_called_once()
         mock_gen_probes.assert_called_once()
