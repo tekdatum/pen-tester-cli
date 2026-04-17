@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -27,6 +27,19 @@ class _FakePromptChatTarget:
 
 _pyrit_prompt_target_mod.PromptChatTarget = _FakePromptChatTarget
 
+
+def _make_tqdm_stub() -> MagicMock:
+    stub = MagicMock(name="tqdm")
+    stub.tqdm = lambda iterable, **_kwargs: iterable
+    return stub
+
+
+def _make_setup_stub() -> MagicMock:
+    stub = MagicMock(name="pyrit.setup")
+    stub.initialize_pyrit_async = AsyncMock()
+    return stub
+
+
 for _name, _stub in [
     ("pyrit", MagicMock(name="pyrit")),
     ("pyrit.models", _pyrit_models_mod),
@@ -40,7 +53,7 @@ for _name, _stub in [
         MagicMock(name="pyrit.executor.attack.multi_turn"),
     ),
     ("pyrit.memory", MagicMock(name="pyrit.memory")),
-    ("pyrit.setup", MagicMock(name="pyrit.setup")),
+    ("pyrit.setup", _make_setup_stub()),
     ("pyrit.score", MagicMock(name="pyrit.score")),
     ("pyrit.score.true_false", MagicMock(name="pyrit.score.true_false")),
     (
@@ -48,7 +61,7 @@ for _name, _stub in [
         MagicMock(name="pyrit.score.true_false.self_ask_true_false_scorer"),
     ),
     ("pyrit.models.attack_result", MagicMock(name="pyrit.models.attack_result")),
-    ("tqdm", MagicMock(name="tqdm")),
+    ("tqdm", _make_tqdm_stub()),
 ]:
     sys.modules.setdefault(_name, _stub)
 
@@ -99,7 +112,7 @@ def _make_response_piece(text: str = "response") -> MagicMock:
 
 
 def _run(coro):  # type: ignore[no-untyped-def]
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------

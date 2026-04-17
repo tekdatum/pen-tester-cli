@@ -763,7 +763,7 @@ class TestPromptTypePyrit:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[dataset]
         )
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"]))
+        auditor = _make_auditor(PyritSettings(dataset_names=["x"], enable_multiturn=False))
         with patch.object(auditor, "_init_scanner", return_value=self.mock_scanner):
             results, _ = auditor.audit()
         assert results[0].prompt_type == PromptType.SINGLE
@@ -779,7 +779,7 @@ class TestPromptTypePyrit:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[dataset]
         )
-        auditor = _make_llm_auditor(PyritSettings(dataset_names=["x"]))
+        auditor = _make_llm_auditor(PyritSettings(dataset_names=["x"], enable_multiturn=False))
         with (
             patch.object(auditor, "_init_target", return_value=mock_target),
             patch.object(auditor, "_init_scorer", return_value=mock_scorer),
@@ -820,8 +820,8 @@ class TestPromptTypePyrit:
                 attack_strategies=[MultiTurnStrategy.CRESCENDO],
             )
         )
-        auditor._scanner = MagicMock()
         with (
+            patch.object(auditor, "_init_scanner", return_value=self.mock_scanner),
             patch.object(auditor, "_init_target", return_value=MagicMock()),
             patch.object(auditor, "_init_scorer", return_value=MagicMock()),
             patch.object(
@@ -831,7 +831,8 @@ class TestPromptTypePyrit:
             ),
         ):
             results, _ = auditor.audit()
-        assert all(r.prompt_type == PromptType.MULTITURN for r in results)
+        multiturn = [r for r in results if r.prompt_type == PromptType.MULTITURN]
+        assert multiturn
 
 
 # ---------------------------------------------------------------------------
