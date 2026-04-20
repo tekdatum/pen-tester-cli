@@ -182,3 +182,31 @@ def test_from_settings_with_json_dot_target_sets_serializer() -> None:
     scanner = Scanner.from_settings(settings)
     assert scanner is not None
     assert scanner.request_handler.response_serializer is not None
+
+
+def test_from_curl_without_response_text_target_has_no_text_serializer() -> None:
+    assert Scanner.from_curl(CURL_COMMAND).request_handler.text_serializer is None
+
+
+def test_from_curl_with_response_text_target_sets_text_serializer() -> None:
+    scanner = Scanner.from_curl(
+        CURL_COMMAND, response_text_target="body.choices.0.message.content"
+    )
+    assert scanner.request_handler.text_serializer is not None
+
+
+def test_from_settings_without_response_text_target_has_no_text_serializer() -> None:
+    settings = ScannerSettings(curl_command=CURL_COMMAND)
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
+    assert scanner.request_handler.text_serializer is None
+
+
+def test_from_settings_with_response_text_target_sets_text_serializer() -> None:
+    settings = ScannerSettings(
+        curl_command=CURL_COMMAND,
+        response_text_target="body.choices.0.message.content",
+    )
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
+    assert scanner.request_handler.text_serializer is not None

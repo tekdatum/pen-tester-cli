@@ -223,15 +223,18 @@ class TestWritePluginConfigs:
         existing_file = configs_dir / "test_1.yaml"
         existing_file.write_text("placeholder")
 
-        cm = _make_config_manager(_make_settings(plugins_per_file=1, replace_existing_file=False))
+        cm = _make_config_manager(
+            _make_settings(plugins_per_file=1, replace_existing_file=False)
+        )
 
         existing_config = copy.deepcopy(_FAKE_CONFIG)
-        existing_config["redteam"]["plugins"] = ["harmful:hate", "harmful:xss"]  # 2 plugins
+        existing_config["redteam"]["plugins"] = [
+            "harmful:hate",
+            "harmful:xss",
+        ]  # 2 plugins
 
         with (
-            patch(
-                "pentester.auditors.promptfoo.config_manager.logger"
-            ) as mock_logger,
+            patch("pentester.auditors.promptfoo.config_manager.logger") as mock_logger,
             patch(
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load",
                 return_value=existing_config,
@@ -250,15 +253,17 @@ class TestWritePluginConfigs:
         existing_file = configs_dir / "test_1.yaml"
         existing_file.write_text("placeholder")
 
-        cm = _make_config_manager(_make_settings(plugins_per_file=1, replace_existing_file=False))
+        cm = _make_config_manager(
+            _make_settings(plugins_per_file=1, replace_existing_file=False)
+        )
 
         existing_config = copy.deepcopy(_FAKE_CONFIG)
-        existing_config["redteam"]["plugins"] = ["harmful:hate"]  # matches plugins_per_file=1
+        existing_config["redteam"]["plugins"] = [
+            "harmful:hate"
+        ]  # matches plugins_per_file=1
 
         with (
-            patch(
-                "pentester.auditors.promptfoo.config_manager.logger"
-            ) as mock_logger,
+            patch("pentester.auditors.promptfoo.config_manager.logger") as mock_logger,
             patch(
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load",
                 return_value=existing_config,
@@ -280,11 +285,11 @@ class TestWritePluginConfigs:
         s_no_replace = _make_settings(replace_existing_file=False)
         existing_file.write_text("placeholder")
         on_disk = copy.deepcopy(_FAKE_CONFIG)
-        on_disk["redteam"]["plugins"] = ["harmful:hate"]  # 1 plugin matches default plugins_per_file
+        on_disk["redteam"]["plugins"] = [
+            "harmful:hate"
+        ]  # 1 plugin matches default plugins_per_file
         with (
-            patch(
-                "pentester.auditors.promptfoo.config_manager.yaml.dump"
-            ) as mock_dump,
+            patch("pentester.auditors.promptfoo.config_manager.yaml.dump") as mock_dump,
             patch(
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load",
                 return_value=on_disk,
@@ -405,7 +410,10 @@ class TestWritePluginConfigsNumTests:
 
         cm = _make_config_manager(
             _make_settings(plugin_num_tests=10),
-            config={**_FAKE_CONFIG, "redteam": {**_FAKE_CONFIG["redteam"], "plugins": plugins}},
+            config={
+                **_FAKE_CONFIG,
+                "redteam": {**_FAKE_CONFIG["redteam"], "plugins": plugins},
+            },
         )
         configs_dir = tmp_path / "configurations"
         configs_dir.mkdir()
@@ -447,7 +455,9 @@ class TestWritePluginConfigsNumTests:
         with patch(
             "pentester.auditors.promptfoo.config_manager.yaml.dump"
         ) as mock_dump:
-            cm.write_plugin_configs([{"id": "harmful:hate", "numTests": 100}], configs_dir)
+            cm.write_plugin_configs(
+                [{"id": "harmful:hate", "numTests": 100}], configs_dir
+            )
 
         written_plugins = mock_dump.call_args_list[0][0][0]["redteam"]["plugins"]
         assert written_plugins[0]["numTests"] == 100
@@ -638,9 +648,7 @@ class TestRemoveCloudOnlyTests:
         with open(llm_dir / "test_1.yaml", "w") as f:
             yaml.dump(config, f)
 
-        with patch(
-            "pentester.auditors.promptfoo.config_manager.logger"
-        ) as mock_logger:
+        with patch("pentester.auditors.promptfoo.config_manager.logger") as mock_logger:
             cm.remove_cloud_only_tests(llm_dir)
 
         mock_logger.info.assert_any_call(
@@ -697,7 +705,10 @@ class TestConfigureProviderInTestFiles:
 
         cm = _make_config_manager()
         provider_id = "https"
-        provider = {"id": "https", "config": {"url": "https://new.com", "method": "POST"}}
+        provider = {
+            "id": "https",
+            "config": {"url": "https://new.com", "method": "POST"},
+        }
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
@@ -735,7 +746,10 @@ class TestConfigureProviderInTestFiles:
 
         cm = _make_config_manager(_make_settings(target_label="helpdesk-agent"))
         provider_id = "https"
-        provider = {"id": "https", "config": {"url": "https://api.example.com", "method": "POST"}}
+        provider = {
+            "id": "https",
+            "config": {"url": "https://api.example.com", "method": "POST"},
+        }
 
         cfg_dir = tmp_path / "configurations"
         cfg_dir.mkdir()
@@ -755,7 +769,9 @@ class TestConfigureProviderInTestFiles:
 
 class TestBuildAssertionBlock:
     def test_returns_python_when_wrapper_path_set(self) -> None:
-        cm = _make_config_manager(_make_settings(assertion_wrapper_path="/my/assert.py"))
+        cm = _make_config_manager(
+            _make_settings(assertion_wrapper_path="/my/assert.py")
+        )
         block = cm._build_assertion_block()
         assert len(block) == 1
         assert block[0]["type"] == "python"
@@ -824,7 +840,9 @@ class TestCleanConfig:
             cm.clean_config(Path("/test.yaml"), tmp_path / "output")
 
     def test_cleans_and_writes_config_correctly(self, tmp_path: Path) -> None:
-        cm = _make_config_manager(_make_settings(assertion_wrapper_path="/my/assert.py"))
+        cm = _make_config_manager(
+            _make_settings(assertion_wrapper_path="/my/assert.py")
+        )
         output = tmp_path / "output"
         output.mkdir()
         (output / "test.yaml").write_text("old")
@@ -835,9 +853,7 @@ class TestCleanConfig:
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load",
                 return_value=copy.deepcopy(_FAKE_CONFIG),
             ),
-            patch(
-                "pentester.auditors.promptfoo.config_manager.yaml.dump"
-            ) as mock_dump,
+            patch("pentester.auditors.promptfoo.config_manager.yaml.dump") as mock_dump,
         ):
             cm.clean_config(Path("/test.yaml"), output)
 
@@ -858,9 +874,7 @@ class TestCleanConfig:
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load",
                 return_value=copy.deepcopy(_FAKE_CONFIG),
             ),
-            patch(
-                "pentester.auditors.promptfoo.config_manager.yaml.dump"
-            ) as mock_dump,
+            patch("pentester.auditors.promptfoo.config_manager.yaml.dump") as mock_dump,
         ):
             cm.clean_config(Path("/test.yaml"), output)
 
@@ -886,9 +900,7 @@ class TestCleanConfig:
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load",
                 return_value=copy.deepcopy(_FAKE_CONFIG),
             ),
-            patch(
-                "pentester.auditors.promptfoo.config_manager.yaml.dump"
-            ) as mock_dump,
+            patch("pentester.auditors.promptfoo.config_manager.yaml.dump") as mock_dump,
         ):
             cm.clean_config(Path("/test.yaml"), output)
 
@@ -904,16 +916,16 @@ class TestCleanConfig:
         (output / "test.yaml").write_text("old")
 
         # For SEMANTIC_FENCE, clean_config rewrites regardless of replace_existing_file
-        cm_no_replace = _make_config_manager(_make_settings(replace_existing_file=False))
+        cm_no_replace = _make_config_manager(
+            _make_settings(replace_existing_file=False)
+        )
         with (
             patch("builtins.open", mock_open(read_data="")),
             patch(
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load",
                 return_value=copy.deepcopy(_FAKE_CONFIG),
             ),
-            patch(
-                "pentester.auditors.promptfoo.config_manager.yaml.dump"
-            ) as mock_dump,
+            patch("pentester.auditors.promptfoo.config_manager.yaml.dump") as mock_dump,
         ):
             cm_no_replace.clean_config(Path("/test.yaml"), output)
             mock_dump.assert_called()

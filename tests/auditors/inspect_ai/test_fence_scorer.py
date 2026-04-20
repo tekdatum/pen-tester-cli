@@ -63,7 +63,9 @@ class TestFenceScorerAPI:
         except RuntimeError as exc:
             assert str(exc) == "content moderation refusal"
 
-    def test_score_raises_fallback_message_when_bypassed_key_missing_and_no_output_error(self) -> None:
+    def test_score_raises_fallback_when_bypassed_key_missing_and_no_output_error(
+        self,
+    ) -> None:
         api = _make_fence_api()
         state = _make_state()
         state.output.metadata = {}

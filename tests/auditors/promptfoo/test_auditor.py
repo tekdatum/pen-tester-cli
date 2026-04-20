@@ -14,11 +14,9 @@ from pentester.auditors.models.probe_result import ProbeResult
 from pentester.auditors.promptfoo.auditor import PromptfooAuditor
 from pentester.auditors.promptfoo.runner import PromptfooRunner
 from pentester.config.auditors.promptfoo_settings import (
-    KNOWN_MULTITURN_STRATEGIES,
     PromptfooSettings,
 )
 from pentester.config.settings import TargetType
-from pentester.enums.auditor_key import AuditorKey
 from pentester.enums.prompt_type import PromptType
 from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
 from pentester.scanners.response_serializers.json_dot_serializer import (
@@ -220,9 +218,7 @@ class TestRunRedteamGenerateForConfigs:
 class TestGenerateTestsFiles:
     def test_orchestrates_plugin_writing_and_generation(self) -> None:
         auditor = _make_auditor()
-        with patch.object(
-            auditor, "_run_redteam_generate_for_configs"
-        ) as mock_gen:
+        with patch.object(auditor, "_run_redteam_generate_for_configs") as mock_gen:
             auditor.generate_tests_files()
 
         auditor.config_manager.write_plugin_configs.assert_called_once()
