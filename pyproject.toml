@@ -67,7 +67,8 @@ exclude = [
     "docs/",
     "venv/",
     "pentester_env/",
-    "engine_sdk/"
+    "engine_sdk/",
+    "src/handlers/"
 ]
 
 [[tool.mypy.overrides]]
