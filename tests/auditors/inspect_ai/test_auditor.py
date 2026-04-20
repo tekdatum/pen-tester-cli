@@ -825,7 +825,16 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "agentharm",
+            "fortress_adversarial",
+            "make_me_pay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+        ]
 
     def test_makemesay_not_in_fence_evals(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
@@ -836,7 +845,18 @@ class TestDefaultEvalsForTarget:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
-        assert evals == ["strong_reject", "b3", "fortress_adversarial", "agentharm", "AgentDojo", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber", "makemesay"]
+        assert evals == [
+            "strong_reject",
+            "b3",
+            "fortress_adversarial",
+            "agentharm",
+            "AgentDojo",
+            "make_me_pay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+            "makemesay",
+        ]
 
     def test_settings_evals_override_takes_precedence(self) -> None:
         auditor = InspectAIAuditor(
@@ -851,7 +871,16 @@ class TestDefaultEvalsForTarget:
         )
         auditor.target_type = TargetType.SEMANTIC_FENCE
         effective = auditor._settings.evals or auditor._default_evals_for_target()
-        assert effective == ["strong_reject", "b3", "agentharm", "fortress_adversarial", "make_me_pay", "wmdp_bio", "wmdp_chem", "wmdp_cyber"]
+        assert effective == [
+            "strong_reject",
+            "b3",
+            "agentharm",
+            "fortress_adversarial",
+            "make_me_pay",
+            "wmdp_bio",
+            "wmdp_chem",
+            "wmdp_cyber",
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -872,7 +901,10 @@ class TestModelRolesFor:
         auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm)
         auditor.target_type = TargetType.LLM
         roles = auditor._model_roles_for("makemesay")
-        assert roles == {"manipulator": "anthropic/claude-opus-4-6", "judge": "anthropic/claude-opus-4-6"}
+        assert roles == {
+            "manipulator": "anthropic/claude-opus-4-6",
+            "judge": "anthropic/claude-opus-4-6",
+        }
 
     def test_other_eval_returns_none(self) -> None:
         llm = _make_llm(LLMProvider.OPENAI, "gpt-4o")
