@@ -659,7 +659,10 @@ class TestAuditLLM:
                 auditor, "_init_objective_generator", return_value=self.mock_generator
             ),
             patch.object(auditor, "_evaluate", return_value=score),
-            patch("pentester.auditors.garak.auditor.ThresholdEvaluator", mock_evaluator_class),
+            patch(
+                "pentester.auditors.garak.auditor.ThresholdEvaluator",
+                mock_evaluator_class,
+            ),
         ):
             results, _ = auditor.audit()
             return results

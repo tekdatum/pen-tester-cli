@@ -1,4 +1,3 @@
-
 import pytest
 
 from pentester.scanners.exceptions import CurlParseException
