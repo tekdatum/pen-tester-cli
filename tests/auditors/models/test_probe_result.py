@@ -107,6 +107,20 @@ class TestFormattedPrompt:
         assert r.formatted_prompt == 'say "hello"'
 
 
+class TestFormattedPromptMd:
+    def test_pipe_is_escaped(self) -> None:
+        r = _make_result(prompt="step 1 | step 2 | step 3")
+        assert r.formatted_prompt_md == "step 1 \\| step 2 \\| step 3"
+
+    def test_no_pipe_is_unchanged(self) -> None:
+        r = _make_result(prompt="hello world")
+        assert r.formatted_prompt_md == "hello world"
+
+    def test_unicode_and_pipe_both_handled(self) -> None:
+        r = _make_result(prompt="caf\u00e9 | enjoy")
+        assert r.formatted_prompt_md == "caf\\xe9 \\| enjoy"
+
+
 def test_duration_defaults_to_none() -> None:
     assert _make_result().duration is None
 
