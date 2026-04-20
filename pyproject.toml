@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pentester" # the project and lib name
+name = "pentester_test" # the project and lib name
 version = "0.0.3"
 description = "Pentester CLI"
 readme = "README.md"
@@ -35,6 +35,15 @@ pentester = "pentester.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"] # the source code
+
+[tool.setuptools.package-data]
+pentester = [
+    "config/auditor_files/**/*.yaml",
+    "config/auditor_files/**/*.txt",
+    "reporting/generators/mako/**/*.html",
+    "reporting/generators/mako/**/*.csv",
+    "reporting/generators/mako/**/*.md"
+]
 
 
 # PyTest CONFIGURATION
