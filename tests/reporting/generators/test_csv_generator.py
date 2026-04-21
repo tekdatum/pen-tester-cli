@@ -106,3 +106,47 @@ class TestDetailsTemplate:
         )
         csv = CsvGenerator().generate_detail_report([probe], {}, {}).decode()
         assert "safe response" in csv
+
+
+class TestCsvInjectionPrevention:
+    def test_formula_prefix_in_prompt_is_neutralized(self) -> None:
+        csv = (
+            CsvGenerator()
+            .generate_detail_report([_probe(prompt="=EVIL()")], {}, {})
+            .decode()
+        )
+        assert '"\t=EVIL()"' in csv
+
+    def test_formula_prefix_in_judge_reason_is_neutralized(self) -> None:
+        probe = ProbeResult(
+            auditor="injector",
+            attack_category="prompt",
+            attack_type="injection",
+            prompt="test",
+            response="ok",
+            bypassed=False,
+            score=0.0,
+            metadata={"judge_reason": "=FORMULA"},
+        )
+        csv = CsvGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert '"\t=FORMULA"' in csv
+
+    def test_auditor_field_is_quoted(self) -> None:
+        csv = CsvGenerator().generate_detail_report([_probe()], {}, {}).decode()
+        data_row = csv.splitlines()[1]
+        assert data_row.startswith('"injector"')
+
+    def test_newline_in_judge_reason_does_not_add_extra_rows(self) -> None:
+        probe = ProbeResult(
+            auditor="injector",
+            attack_category="prompt",
+            attack_type="injection",
+            prompt="test",
+            response="ok",
+            bypassed=False,
+            score=0.0,
+            metadata={"judge_reason": "line1\nline2"},
+        )
+        csv = CsvGenerator().generate_detail_report([probe], {}, {}).decode()
+        data_rows = [line for line in csv.splitlines() if line and line != csv.splitlines()[0]]
+        assert len(data_rows) == 1

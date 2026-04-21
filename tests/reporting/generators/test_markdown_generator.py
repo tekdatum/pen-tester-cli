@@ -176,3 +176,32 @@ class TestDetailsTemplate:
         md = MarkdownGenerator().generate_detail_report([blocked], {}, {}).decode()
         blocked_section = md.split("## Blocked Prompts")[1].split("## Error Prompts")[0]
         assert "safe response detected" in blocked_section
+
+
+class TestMarkdownInjectionPrevention:
+    def test_pipe_in_prompt_is_escaped_in_output(self) -> None:
+        probe = _probe(bypassed=True, prompt="say | this")
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "say \\| this" in md
+
+    def test_bold_syntax_in_prompt_is_escaped(self) -> None:
+        probe = _probe(bypassed=True, prompt="**bold**")
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "\\*\\*bold\\*\\*" in md
+
+    def test_html_tag_in_prompt_is_escaped(self) -> None:
+        probe = _probe(bypassed=True, prompt="<script>evil()</script>")
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "<script>" not in md
+        assert "\\<script\\>" in md
+
+    def test_pipe_in_judge_reason_is_escaped_in_output(self) -> None:
+        probe = _probe(bypassed=True, metadata={"judge_reason": "a | b"})
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        assert "a \\| b" in md
+
+    def test_pipe_in_error_is_escaped_in_output(self) -> None:
+        probe = _probe(metadata={"error": "HTTP | 500"})
+        md = MarkdownGenerator().generate_detail_report([probe], {}, {}).decode()
+        _, error_section = md.split("## Error Prompts")
+        assert "HTTP \\| 500" in error_section
