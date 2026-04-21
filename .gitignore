@@ -20,3 +20,4 @@ pentester.log
 output/
 logs/
 .claude/CLAUDE.md
+src/pentester_test.egg-info/

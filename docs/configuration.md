@@ -13,7 +13,8 @@ All variables are prefixed with `PENTESTER_`.
 | `PENTESTER_TARGET_TYPE` | `TargetType` | `SEMANTIC_FENCE` | Category of the target being scanned |
 | `PENTESTER_AUDITORS` | `list[str]` | `[]` | Comma-separated list of auditors to run (e.g. `garak,pyrit`). When empty, all available auditors run. |
 | `PENTESTER_SCANNER__CURL_COMMAND` | `str \| None` | `None` | curl command string used to target the model |
-| `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract value from response |
+| `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract a value from the response and cast to `bool` for `bypassed` |
+| `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `str \| None` | `None` | dot-notation path to extract the LLM reply text from the response body. Required when using `ScannerGenerator` (garak LLM mode) or `ScannerTarget` (PyRIT multi-turn). Example: `body.choices.0.message.content` |
 | `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written |
 | `PENTESTER_REPORTING__GENERATOR_KEYS` | `str` | `pdf,csv,html,markdown` | Comma-separated list of report formats to generate |
 | `PENTESTER_GARAK__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Garak auditor. `None` means no limit. |

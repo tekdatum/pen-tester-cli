@@ -7,7 +7,8 @@ the real garak package.
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from contextlib import contextmanager
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -59,6 +60,14 @@ def _make_settings(
     return PentesterSettings(**kwargs)
 
 
+@contextmanager
+def _patch_scanner(factory):  # type: ignore[no-untyped-def]
+    with patch.object(
+        type(factory), "scanner", new_callable=PropertyMock, return_value=MagicMock()
+    ):
+        yield
+
+
 def _make_probe_result() -> ProbeResult:
     return ProbeResult(
         auditor="test",
@@ -95,6 +104,7 @@ class TestExecute:
     def test_calls_get_available_auditors_when_no_settings_auditors(self) -> None:
         orch = Orchestrator(_make_settings())
         with (
+            _patch_scanner(orch._auditor_factory),
             patch.object(
                 orch._auditor_factory, "get_available_auditors", return_value=[]
             ) as mock_available,
@@ -106,6 +116,7 @@ class TestExecute:
     def test_uses_settings_auditors_when_present(self) -> None:
         orch = Orchestrator(_make_settings(auditors=["garak"]))
         with (
+            _patch_scanner(orch._auditor_factory),
             patch.object(
                 orch._auditor_factory, "get_available_auditors"
             ) as mock_available,
@@ -125,13 +136,65 @@ class TestExecute:
 
 
 class TestRunAndReport:
+    def test_preflight_called_when_scanner_present(self) -> None:
+        orch = Orchestrator(_make_settings())
+        mock_scanner = MagicMock()
+        mock_auditor = MagicMock()
+        mock_auditor.audit_n_track.return_value = MagicMock(results=[])
+        with (
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=mock_scanner,
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            orch._run_and_report([mock_auditor])
+            mock_scanner.preflight.assert_called_once()
+
+    def test_raises_when_no_scanner(self) -> None:
+        orch = Orchestrator(_make_settings())
+        with (
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            with pytest.raises(RuntimeError, match="No scanner configured"):
+                orch._run_and_report([])
+
+    def test_auditors_not_run_if_preflight_raises(self) -> None:
+        orch = Orchestrator(_make_settings())
+        mock_scanner = MagicMock()
+        mock_scanner.preflight.side_effect = RuntimeError("fail")
+        mock_auditor = MagicMock()
+        with (
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=mock_scanner,
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            with pytest.raises(RuntimeError):
+                orch._run_and_report([mock_auditor])
+            mock_auditor.audit_n_track.assert_not_called()
+
     def test_calls_audit_n_track_on_each_auditor(self) -> None:
         orch = Orchestrator(_make_settings())
         auditor_a = MagicMock()
         auditor_a.audit_n_track.return_value = MagicMock(results=[])
         auditor_b = MagicMock()
         auditor_b.audit_n_track.return_value = MagicMock(results=[])
-        with patch.object(orch._reporting, "generate"):
+        with (
+            _patch_scanner(orch._auditor_factory),
+            patch.object(orch._reporting, "generate"),
+        ):
             orch._run_and_report([auditor_a, auditor_b])
             auditor_a.audit_n_track.assert_called_once()
             auditor_b.audit_n_track.assert_called_once()
@@ -140,7 +203,10 @@ class TestRunAndReport:
         orch = Orchestrator(_make_settings())
         auditor_a = MagicMock()
         auditor_b = MagicMock()
-        with patch.object(orch._reporting, "generate") as mock_generate:
+        with (
+            _patch_scanner(orch._auditor_factory),
+            patch.object(orch._reporting, "generate") as mock_generate,
+        ):
             orch._run_and_report([auditor_a, auditor_b])
             called = mock_generate.call_args.kwargs["auditor_results"]
             assert auditor_a.audit_n_track.return_value in called
@@ -148,19 +214,28 @@ class TestRunAndReport:
 
     def test_passes_output_dir_path_to_generate(self) -> None:
         orch = Orchestrator(_make_settings(output_dir_path="/tmp/out/"))
-        with patch.object(orch._reporting, "generate") as mock_generate:
+        with (
+            _patch_scanner(orch._auditor_factory),
+            patch.object(orch._reporting, "generate") as mock_generate,
+        ):
             orch._run_and_report([])
             assert mock_generate.call_args.kwargs["output_dir_path"] == "/tmp/out/"
 
     def test_passes_parsed_generator_keys_to_generate(self) -> None:
         orch = Orchestrator(_make_settings(generator_keys="pdf,csv"))
-        with patch.object(orch._reporting, "generate") as mock_generate:
+        with (
+            _patch_scanner(orch._auditor_factory),
+            patch.object(orch._reporting, "generate") as mock_generate,
+        ):
             orch._run_and_report([])
             assert mock_generate.call_args.kwargs["generator_keys"] == ["pdf", "csv"]
 
     def test_empty_auditors_calls_generate_with_empty_data(self) -> None:
         orch = Orchestrator(_make_settings())
-        with patch.object(orch._reporting, "generate") as mock_generate:
+        with (
+            _patch_scanner(orch._auditor_factory),
+            patch.object(orch._reporting, "generate") as mock_generate,
+        ):
             orch._run_and_report([])
             assert mock_generate.call_args.kwargs["auditor_results"] == []
 
@@ -172,6 +247,7 @@ class TestExecuteTimer:
     def test_execute_returns_tuple(self) -> None:
         orch = Orchestrator(_make_settings())
         with (
+            _patch_scanner(orch._auditor_factory),
             patch.object(
                 orch._auditor_factory, "get_available_auditors", return_value=[]
             ),
@@ -184,6 +260,7 @@ class TestExecuteTimer:
     def test_execute_first_element_is_none(self) -> None:
         orch = Orchestrator(_make_settings())
         with (
+            _patch_scanner(orch._auditor_factory),
             patch.object(
                 orch._auditor_factory, "get_available_auditors", return_value=[]
             ),
@@ -195,6 +272,7 @@ class TestExecuteTimer:
     def test_execute_duration_is_non_negative(self) -> None:
         orch = Orchestrator(_make_settings())
         with (
+            _patch_scanner(orch._auditor_factory),
             patch.object(
                 orch._auditor_factory, "get_available_auditors", return_value=[]
             ),

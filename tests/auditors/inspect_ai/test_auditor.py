@@ -821,7 +821,7 @@ class TestAudit:
 
 
 class TestDefaultEvalsForTarget:
-    def test_fence_returns_only_four_evals(self) -> None:
+    def test_fence_evals_exclude_makemesay(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.SEMANTIC_FENCE
         evals = auditor._default_evals_for_target()
@@ -831,13 +831,17 @@ class TestDefaultEvalsForTarget:
             "agentharm",
             "fortress_adversarial",
             "make_me_pay",
-            "makemesay",
             "wmdp_bio",
             "wmdp_chem",
             "wmdp_cyber",
         ]
 
-    def test_llm_returns_all_six_evals(self) -> None:
+    def test_makemesay_not_in_fence_evals(self) -> None:
+        auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        assert "makemesay" not in auditor._default_evals_for_target()
+
+    def test_llm_returns_all_evals_including_makemesay(self) -> None:
         auditor = InspectAIAuditor(settings=InspectSettings(), scanner=MagicMock())
         auditor.target_type = TargetType.LLM
         evals = auditor._default_evals_for_target()
@@ -873,11 +877,52 @@ class TestDefaultEvalsForTarget:
             "agentharm",
             "fortress_adversarial",
             "make_me_pay",
-            "makemesay",
             "wmdp_bio",
             "wmdp_chem",
             "wmdp_cyber",
         ]
+
+
+# ---------------------------------------------------------------------------
+# TestModelRolesFor
+# ---------------------------------------------------------------------------
+
+
+class TestModelRolesFor:
+    def test_make_me_pay_returns_mark_role(self) -> None:
+        llm = _make_llm(LLMProvider.OPENAI, "gpt-4o")
+        auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm)
+        auditor.target_type = TargetType.LLM
+        roles = auditor._model_roles_for("make_me_pay")
+        assert roles == {"mark": "openai/gpt-4o"}
+
+    def test_makemesay_returns_manipulator_and_judge_roles(self) -> None:
+        llm = _make_llm(LLMProvider.ANTHROPIC, "claude-opus-4-6")
+        auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm)
+        auditor.target_type = TargetType.LLM
+        roles = auditor._model_roles_for("makemesay")
+        assert roles == {
+            "manipulator": "anthropic/claude-opus-4-6",
+            "judge": "anthropic/claude-opus-4-6",
+        }
+
+    def test_other_eval_returns_none(self) -> None:
+        llm = _make_llm(LLMProvider.OPENAI, "gpt-4o")
+        auditor = InspectAIAuditor(settings=InspectSettings(), llm=llm)
+        auditor.target_type = TargetType.LLM
+        assert auditor._model_roles_for("b3") is None
+        assert auditor._model_roles_for("strong_reject") is None
+        assert auditor._model_roles_for("agentharm") is None
+
+    def test_makemesay_returns_none_values_when_no_llm_configured(self) -> None:
+        auditor = _make_auditor()  # no llm model
+        roles = auditor._model_roles_for("makemesay")
+        assert roles == {"manipulator": None, "judge": None}
+
+    def test_make_me_pay_returns_none_value_when_no_llm_configured(self) -> None:
+        auditor = _make_auditor()  # no llm model
+        roles = auditor._model_roles_for("make_me_pay")
+        assert roles == {"mark": None}
 
     def test_empty_settings_evals_uses_llm_defaults(self) -> None:
         auditor = InspectAIAuditor(

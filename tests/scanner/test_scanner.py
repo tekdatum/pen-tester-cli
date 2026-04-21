@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from pentester.config.scanner import ScannerSettings
 from pentester.scanners.exceptions import ScanFileException
 from pentester.scanners.scanner import Scanner
@@ -52,6 +52,40 @@ def test_scan_duration_is_non_negative() -> None:
     handler = MagicMock(spec=RequestHandler)
     handler.request.return_value = TargetResponse(response="ok", bypassed=None)
     assert Scanner(handler).scan(PROMPT).duration >= 0
+
+
+# ── Scanner.preflight ─────────────────────────────────────────────────────────
+
+
+class TestPreflight:
+    def test_calls_scan_with_preflight(self) -> None:
+        handler = MagicMock(spec=RequestHandler)
+        handler.request.return_value = TargetResponse(response="ok", bypassed=None)
+        Scanner(handler).preflight()
+        handler.request.assert_called_once_with("This is a preflight test")
+
+    def test_propagates_exception_on_failure(self) -> None:
+        handler = MagicMock(spec=RequestHandler)
+        handler.request.side_effect = RuntimeError("connection refused")
+        with pytest.raises(RuntimeError, match="connection refused"):
+            Scanner(handler).preflight()
+
+    def test_logs_success_on_ok(self) -> None:
+        handler = MagicMock(spec=RequestHandler)
+        handler.request.return_value = TargetResponse(response="ok", bypassed=None)
+        with patch("pentester.scanners.scanner.logger") as mock_logger:
+            Scanner(handler).preflight()
+        mock_logger.info.assert_called_once()
+        assert "preflight successful" in mock_logger.info.call_args[0][0]
+
+    def test_logs_error_on_failure(self) -> None:
+        handler = MagicMock(spec=RequestHandler)
+        handler.request.side_effect = RuntimeError("timeout")
+        with patch("pentester.scanners.scanner.logger") as mock_logger:
+            with pytest.raises(RuntimeError):
+                Scanner(handler).preflight()
+        mock_logger.error.assert_called_once()
+        assert "preflight failed" in mock_logger.error.call_args[0][0]
 
 
 # ── Scanner.from_curl ─────────────────────────────────────────────────────────
@@ -148,3 +182,31 @@ def test_from_settings_with_json_dot_target_sets_serializer() -> None:
     scanner = Scanner.from_settings(settings)
     assert scanner is not None
     assert scanner.request_handler.response_serializer is not None
+
+
+def test_from_curl_without_response_text_target_has_no_text_serializer() -> None:
+    assert Scanner.from_curl(CURL_COMMAND).request_handler.text_serializer is None
+
+
+def test_from_curl_with_response_text_target_sets_text_serializer() -> None:
+    scanner = Scanner.from_curl(
+        CURL_COMMAND, response_text_target="body.choices.0.message.content"
+    )
+    assert scanner.request_handler.text_serializer is not None
+
+
+def test_from_settings_without_response_text_target_has_no_text_serializer() -> None:
+    settings = ScannerSettings(curl_command=CURL_COMMAND)
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
+    assert scanner.request_handler.text_serializer is None
+
+
+def test_from_settings_with_response_text_target_sets_text_serializer() -> None:
+    settings = ScannerSettings(
+        curl_command=CURL_COMMAND,
+        response_text_target="body.choices.0.message.content",
+    )
+    scanner = Scanner.from_settings(settings)
+    assert scanner is not None
+    assert scanner.request_handler.text_serializer is not None

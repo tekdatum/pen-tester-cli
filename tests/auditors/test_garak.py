@@ -31,6 +31,8 @@ _garak_generators_mod = MagicMock(name="garak.generators")
 _garak_generators_base_mod = MagicMock(name="garak.generators.base")
 _garak_generators_litellm_mod = MagicMock(name="garak.generators.litellm")
 _garak_generators_openai_mod = MagicMock(name="garak.generators.openai")
+_garak_evaluators_mod = MagicMock(name="garak.evaluators")
+_garak_evaluators_base_mod = MagicMock(name="garak.evaluators.base")
 _garak_mod = MagicMock(name="garak")
 
 
@@ -49,6 +51,8 @@ for _name, _stub in [
     ("garak.generators.base", _garak_generators_base_mod),
     ("garak.generators.litellm", _garak_generators_litellm_mod),
     ("garak.generators.openai", _garak_generators_openai_mod),
+    ("garak.evaluators", _garak_evaluators_mod),
+    ("garak.evaluators.base", _garak_evaluators_base_mod),
     ("tqdm", _tqdm_mod),
 ]:
     sys.modules.setdefault(_name, _stub)
@@ -63,6 +67,8 @@ _garak_attempt_mod = sys.modules["garak.attempt"]
 _garak_generators_base_mod = sys.modules["garak.generators.base"]
 _garak_generators_litellm_mod = sys.modules["garak.generators.litellm"]
 _garak_generators_openai_mod = sys.modules["garak.generators.openai"]
+_garak_evaluators_mod = sys.modules["garak.evaluators"]
+_garak_evaluators_base_mod = sys.modules["garak.evaluators.base"]
 
 # Python's import machinery does not set submodule attributes on a parent that
 # is already a MagicMock in sys.modules.  Bind them explicitly so that
@@ -71,6 +77,8 @@ _garak_generators_openai_mod = sys.modules["garak.generators.openai"]
 _garak_mod._config = _garak_config_mod
 _garak_mod._plugins = _garak_plugins_mod
 _garak_mod.command = _garak_command_mod
+_garak_mod.evaluators = _garak_evaluators_mod
+_garak_evaluators_mod.base = _garak_evaluators_base_mod
 
 from pentester.auditors.garak.auditor import GarakAuditor  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
@@ -125,7 +133,7 @@ def _make_probe(probename: str, prompts: list[str]) -> MagicMock:
 
 
 def _make_scan_result(
-    response: str = "HTTP/1.1 200 OK\n\n{}",
+    response: str = "{}",
     bypassed: bool | None = True,
     score: float | None = 0.9,
 ) -> MagicMock:
@@ -421,11 +429,9 @@ class TestAudit:
         assert results[0].prompt == "injected text"
 
     def test_result_response_from_scanner(self) -> None:
-        self.mock_scanner.scan.return_value = _make_scan_result(
-            response="HTTP/1.1 200 OK\n\nbody"
-        )
+        self.mock_scanner.scan.return_value = _make_scan_result(response="body")
         results = self._audit_with([_make_probe("probes.dan.Dan1", ["p"])])
-        assert results[0].response == "HTTP/1.1 200 OK\n\nbody"
+        assert results[0].response == "body"
 
     def test_result_bypassed_true_when_scanner_returns_true(self) -> None:
         self.mock_scanner.scan.return_value = _make_scan_result(bypassed=True)
@@ -560,7 +566,7 @@ class TestInitObjectiveGenerator:
     def test_no_model_raises(self) -> None:
         auditor = _make_auditor()
         auditor.target_type = TargetType.LLM
-        with pytest.raises(ValueError, match="No LLM model configured"):
+        with pytest.raises(ValueError, match="No scanner or LLM model configured"):
             auditor._init_objective_generator()
 
 
@@ -643,6 +649,9 @@ class TestAuditLLM:
 
     def _audit_with(self, probes: list, score: float = 0.8) -> list[ProbeResult]:
         auditor = _make_llm_auditor()
+        mock_evaluator = MagicMock()
+        mock_evaluator.test.side_effect = lambda s: s <= 0.5
+        mock_evaluator_class = MagicMock(return_value=mock_evaluator)
         with (
             patch.object(auditor, "_init_garak"),
             patch.object(auditor, "_load_probes", return_value=probes),
@@ -650,6 +659,10 @@ class TestAuditLLM:
                 auditor, "_init_objective_generator", return_value=self.mock_generator
             ),
             patch.object(auditor, "_evaluate", return_value=score),
+            patch(
+                "pentester.auditors.garak.auditor.ThresholdEvaluator",
+                mock_evaluator_class,
+            ),
         ):
             results, _ = auditor.audit()
             return results
