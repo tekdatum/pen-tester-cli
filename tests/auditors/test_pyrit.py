@@ -763,7 +763,9 @@ class TestPromptTypePyrit:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[dataset]
         )
-        auditor = _make_auditor(PyritSettings(dataset_names=["x"], enable_multiturn=False))
+        auditor = _make_auditor(
+            PyritSettings(dataset_names=["x"], enable_multiturn=False)
+        )
         with patch.object(auditor, "_init_scanner", return_value=self.mock_scanner):
             results, _ = auditor.audit()
         assert results[0].prompt_type == PromptType.SINGLE
@@ -779,7 +781,9 @@ class TestPromptTypePyrit:
         _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
             return_value=[dataset]
         )
-        auditor = _make_llm_auditor(PyritSettings(dataset_names=["x"], enable_multiturn=False))
+        auditor = _make_llm_auditor(
+            PyritSettings(dataset_names=["x"], enable_multiturn=False)
+        )
         with (
             patch.object(auditor, "_init_target", return_value=mock_target),
             patch.object(auditor, "_init_scorer", return_value=mock_scorer),

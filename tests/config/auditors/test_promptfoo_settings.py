@@ -13,7 +13,7 @@ from pentester.enums.promptfoo_strategy import PromptfooMultiturnStrategy
 class TestDefaults:
     def test_config_path_default(self) -> None:
         settings = PromptfooSettings()
-        assert settings.config_path == "./pentester/config/auditor_files/promptfoo"
+        assert settings.config_path == "pentester.config.auditor_files.promptfoo"
 
     def test_assertion_wrapper_path_default(self) -> None:
         settings = PromptfooSettings()
