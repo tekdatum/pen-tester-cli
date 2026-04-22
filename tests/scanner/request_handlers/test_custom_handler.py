@@ -1,3 +1,4 @@
+import json
 import pytest
 from pentester.scanners.models.handler_response import HandlerResponse
 from pentester.scanners.models.target_response import TargetResponse
@@ -72,6 +73,32 @@ def test_from_handler_failed_maps_to_bypassed_true() -> None:
 def test_from_handler_propagates_response_text() -> None:
     result = Scanner.from_handler(_PassingHandler()).scan(PROMPT)
     assert result.response == "blocked"
+
+
+# ── promptfoo_call_api ────────────────────────────────────────────────────────
+
+
+class TestPromptfooCallApi:
+    def test_returns_dict_with_output_key(self) -> None:
+        result = _PassingHandler.promptfoo_call_api(PROMPT, {}, {})
+        assert "output" in result
+
+    def test_output_is_a_json_string(self) -> None:
+        result = _PassingHandler.promptfoo_call_api(PROMPT, {}, {})
+        # Must be a string so JS `JSON.parse(output)` works in promptfoo assertions
+        assert isinstance(result["output"], str)
+
+    def test_output_json_contains_passed_field(self) -> None:
+        # promptfoo_call_api always uses __subclasses__()[0]; test that the
+        # field is present and boolean rather than testing a specific value.
+        result = _PassingHandler.promptfoo_call_api(PROMPT, {}, {})
+        parsed = json.loads(result["output"])
+        assert isinstance(parsed["passed"], bool)
+
+    def test_output_json_contains_response_text(self) -> None:
+        result = _PassingHandler.promptfoo_call_api(PROMPT, {}, {})
+        parsed = json.loads(result["output"])
+        assert parsed["response"] == "blocked"
 
 
 def test_from_handler_calls_request_with_prompt() -> None:

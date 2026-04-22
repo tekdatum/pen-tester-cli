@@ -29,7 +29,11 @@ class TestDefaults:
 
     def test_internal_concurrency_default(self) -> None:
         settings = PromptfooSettings()
-        assert settings.internal_concurrency == 4
+        assert settings.internal_concurrency == 30
+
+    def test_semantic_fence_concurrency_default(self) -> None:
+        settings = PromptfooSettings()
+        assert settings.semantic_fence_concurrency == 100
 
     def test_max_tests_default(self) -> None:
         settings = PromptfooSettings()

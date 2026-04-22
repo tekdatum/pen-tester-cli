@@ -790,12 +790,12 @@ class TestBuildAssertionBlock:
     def test_returns_default_when_no_wrapper_no_dot_target(self) -> None:
         cm = _make_config_manager()
         block = cm._build_assertion_block()
-        assert block == [{"type": "javascript", "value": "output.passed"}]
+        assert block == [{"type": "javascript", "value": "JSON.parse(output).passed"}]
 
     def test_single_segment_dot_target_returns_default(self) -> None:
         cm = _make_config_manager(json_dot_target="body")
         block = cm._build_assertion_block()
-        assert block == [{"type": "javascript", "value": "output.passed"}]
+        assert block == [{"type": "javascript", "value": "JSON.parse(output).passed"}]
 
     def test_headers_dot_target_strips_first_segment(self) -> None:
         cm = _make_config_manager(json_dot_target="headers.x-valid")
@@ -906,7 +906,7 @@ class TestCleanConfig:
 
         written = mock_dump.call_args[0][0]
         for test in written["tests"]:
-            assert test["assert"] == [{"type": "javascript", "value": "output.passed"}]
+            assert test["assert"] == [{"type": "javascript", "value": "JSON.parse(output).passed"}]
 
     def test_handles_existing_files_based_on_replace_setting(
         self, tmp_path: Path
