@@ -532,6 +532,87 @@ class TestWritePluginConfigsMultiturn:
 
 
 # ---------------------------------------------------------------------------
+# TestWritePluginConfigsAttackerOverride
+# ---------------------------------------------------------------------------
+
+
+class TestWritePluginConfigsAttackerOverride:
+    def test_single_turn_provider_overridden_when_attack_model_set(
+        self, tmp_path: Path
+    ) -> None:
+        cm = _make_config_manager(
+            _make_settings(attack_generation_model="openai:gpt-4o-mini")
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch(
+            "pentester.auditors.promptfoo.config_manager.yaml.dump"
+        ) as mock_dump:
+            cm.write_plugin_configs(["harmful:hate"], configs_dir)
+
+        first_config = mock_dump.call_args_list[0][0][0]
+        assert first_config["redteam"]["provider"] == "openai:gpt-4o-mini"
+
+    def test_multiturn_provider_overridden_when_attack_model_set(
+        self, tmp_path: Path
+    ) -> None:
+        cm = _make_config_manager(
+            _make_settings(
+                attack_generation_model="openai:gpt-4o-mini",
+                enable_multiturn=True,
+            ),
+            target_type=TargetType.LLM,
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch(
+            "pentester.auditors.promptfoo.config_manager.yaml.dump"
+        ) as mock_dump:
+            cm.write_plugin_configs(["harmful:hate"], configs_dir)
+
+        assert mock_dump.call_count == 2
+        single_turn = mock_dump.call_args_list[0][0][0]
+        multiturn = mock_dump.call_args_list[1][0][0]
+        assert single_turn["redteam"]["provider"] == "openai:gpt-4o-mini"
+        assert multiturn["redteam"]["provider"] == "openai:gpt-4o-mini"
+
+    def test_provider_untouched_when_attack_model_none(self, tmp_path: Path) -> None:
+        config_with_provider = copy.deepcopy(_FAKE_CONFIG)
+        config_with_provider["redteam"]["provider"] = "openai:template-default"
+        cm = _make_config_manager(
+            _make_settings(attack_generation_model=None),
+            config=config_with_provider,
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch(
+            "pentester.auditors.promptfoo.config_manager.yaml.dump"
+        ) as mock_dump:
+            cm.write_plugin_configs(["harmful:hate"], configs_dir)
+
+        first_config = mock_dump.call_args_list[0][0][0]
+        assert first_config["redteam"]["provider"] == "openai:template-default"
+
+    def test_original_config_not_mutated(self, tmp_path: Path) -> None:
+        config_with_provider = copy.deepcopy(_FAKE_CONFIG)
+        config_with_provider["redteam"]["provider"] = "openai:original"
+        cm = _make_config_manager(
+            _make_settings(attack_generation_model="openai:override"),
+            config=config_with_provider,
+        )
+        configs_dir = tmp_path / "configurations"
+        configs_dir.mkdir()
+
+        with patch("pentester.auditors.promptfoo.config_manager.yaml.dump"):
+            cm.write_plugin_configs(["harmful:hate"], configs_dir)
+
+        assert cm.config["redteam"]["provider"] == "openai:original"
+
+
+# ---------------------------------------------------------------------------
 # TestRemoveCloudOnlyTests
 # ---------------------------------------------------------------------------
 
@@ -656,6 +737,127 @@ class TestRemoveCloudOnlyTests:
             2,
             "test_1.yaml",
         )
+
+
+# ---------------------------------------------------------------------------
+# TestRewriteRedteamProviderInTestFiles
+# ---------------------------------------------------------------------------
+
+
+class TestRewriteRedteamProviderInTestFiles:
+    def _write_yaml(self, path: Path, payload: dict[str, Any]) -> None:
+        import yaml as _yaml
+
+        with open(path, "w") as f:
+            _yaml.dump(payload, f)
+
+    def test_rewrites_all_yaml_files_when_judge_model_set(
+        self, tmp_path: Path
+    ) -> None:
+        import yaml
+
+        cm = _make_config_manager(_make_settings(judge_model="openai:gpt-4o"))
+        configs_dir = tmp_path / "llm_assert"
+        configs_dir.mkdir()
+
+        for name in ["test_1.yaml", "multiturn_test_1.yaml"]:
+            self._write_yaml(
+                configs_dir / name,
+                {
+                    "prompts": ["p"],
+                    "providers": None,
+                    "redteam": {"provider": "openai:original"},
+                    "defaultTest": [],
+                    "tests": [],
+                    "commandLineOptions": [],
+                    "metadata": {},
+                },
+            )
+
+        cm.rewrite_redteam_provider_in_test_files(configs_dir)
+
+        for name in ["test_1.yaml", "multiturn_test_1.yaml"]:
+            with open(configs_dir / name) as f:
+                result = yaml.safe_load(f)
+            assert result["redteam"]["provider"] == "openai:gpt-4o"
+
+    def test_no_op_when_judge_model_is_none(self, tmp_path: Path) -> None:
+        cm = _make_config_manager(_make_settings(judge_model=None))
+        configs_dir = tmp_path / "llm_assert"
+        configs_dir.mkdir()
+
+        # Even if a file exists in the directory, no IO should happen.
+        (configs_dir / "test_1.yaml").write_text("dummy")
+
+        with (
+            patch(
+                "pentester.auditors.promptfoo.config_manager.yaml.safe_load"
+            ) as mock_safe_load,
+            patch(
+                "pentester.auditors.promptfoo.config_manager.yaml.dump"
+            ) as mock_dump,
+        ):
+            cm.rewrite_redteam_provider_in_test_files(configs_dir)
+
+        mock_safe_load.assert_not_called()
+        mock_dump.assert_not_called()
+
+    def test_skips_files_where_redteam_is_not_a_dict(self, tmp_path: Path) -> None:
+        cm = _make_config_manager(_make_settings(judge_model="openai:gpt-4o"))
+        configs_dir = tmp_path / "llm_assert"
+        configs_dir.mkdir()
+        # This is the realistic shape from generated YAMLs that don't carry
+        # a redteam dict — load_config defaults missing redteam to [].
+        self._write_yaml(
+            configs_dir / "test_1.yaml",
+            {
+                "prompts": ["p"],
+                "providers": None,
+                "redteam": [],
+                "defaultTest": [],
+                "tests": [],
+                "commandLineOptions": [],
+                "metadata": {},
+            },
+        )
+
+        with patch(
+            "pentester.auditors.promptfoo.config_manager.yaml.dump"
+        ) as mock_dump:
+            cm.rewrite_redteam_provider_in_test_files(configs_dir)
+
+        mock_dump.assert_not_called()
+
+    def test_preserves_other_redteam_keys(self, tmp_path: Path) -> None:
+        import yaml
+
+        cm = _make_config_manager(_make_settings(judge_model="openai:gpt-4o"))
+        configs_dir = tmp_path / "llm_assert"
+        configs_dir.mkdir()
+        self._write_yaml(
+            configs_dir / "test_1.yaml",
+            {
+                "prompts": ["p"],
+                "providers": None,
+                "redteam": {
+                    "provider": "openai:original",
+                    "plugins": [{"id": "harmful:hate"}],
+                    "strategies": [{"id": "basic"}],
+                },
+                "defaultTest": [],
+                "tests": [],
+                "commandLineOptions": [],
+                "metadata": {},
+            },
+        )
+
+        cm.rewrite_redteam_provider_in_test_files(configs_dir)
+
+        with open(configs_dir / "test_1.yaml") as f:
+            result = yaml.safe_load(f)
+        assert result["redteam"]["provider"] == "openai:gpt-4o"
+        assert result["redteam"]["plugins"] == [{"id": "harmful:hate"}]
+        assert result["redteam"]["strategies"] == [{"id": "basic"}]
 
 
 # ---------------------------------------------------------------------------

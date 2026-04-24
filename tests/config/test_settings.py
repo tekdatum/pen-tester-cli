@@ -176,6 +176,22 @@ class TestLLMEnvVarOverrides:
         assert settings.llm.model == "gpt-4o"
 
 
+class TestPromptfooModelEnvVarOverrides:
+    def test_attack_generation_model_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(
+            "PENTESTER_PROMPTFOO__ATTACK_GENERATION_MODEL", "openai:gpt-4o-mini"
+        )
+        settings = PentesterSettings()
+        assert settings.promptfoo.attack_generation_model == "openai:gpt-4o-mini"
+
+    def test_judge_model_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PENTESTER_PROMPTFOO__JUDGE_MODEL", "openai:gpt-4o")
+        settings = PentesterSettings()
+        assert settings.promptfoo.judge_model == "openai:gpt-4o"
+
+
 class TestMaxAttacks:
     def test_default_max_attacks_is_none(self) -> None:
         settings = PentesterSettings()

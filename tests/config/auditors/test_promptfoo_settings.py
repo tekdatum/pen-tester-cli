@@ -47,6 +47,12 @@ class TestDefaults:
         settings = PromptfooSettings()
         assert settings.target_label == "target-api"
 
+    def test_attack_generation_model_default_is_none(self) -> None:
+        assert PromptfooSettings().attack_generation_model is None
+
+    def test_judge_model_default_is_none(self) -> None:
+        assert PromptfooSettings().judge_model is None
+
 
 class TestComputedFields:
     def test_config_file_appends_yaml_filename(self) -> None:
@@ -450,3 +456,35 @@ class TestMultiturnEnvVars:
         monkeypatch.setenv("MAX_ATTACKS", "300")
         settings = PromptfooSettings()
         assert settings.max_attacks == 300
+
+
+class TestModelOverrides:
+    def test_set_attack_generation_model(self) -> None:
+        settings = PromptfooSettings(attack_generation_model="openai:gpt-4o-mini")
+        assert settings.attack_generation_model == "openai:gpt-4o-mini"
+
+    def test_set_judge_model(self) -> None:
+        settings = PromptfooSettings(judge_model="openai:gpt-4o")
+        assert settings.judge_model == "openai:gpt-4o"
+
+    def test_attack_generation_model_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ATTACK_GENERATION_MODEL", "openai:gpt-4o-mini")
+        settings = PromptfooSettings()
+        assert settings.attack_generation_model == "openai:gpt-4o-mini"
+
+    def test_judge_model_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("JUDGE_MODEL", "openai:gpt-4o")
+        settings = PromptfooSettings()
+        assert settings.judge_model == "openai:gpt-4o"
+
+    def test_attack_generation_model_accepts_any_string_verbatim(self) -> None:
+        settings = PromptfooSettings(
+            attack_generation_model="anthropic:claude-3-5-sonnet-latest"
+        )
+        assert settings.attack_generation_model == "anthropic:claude-3-5-sonnet-latest"
+
+    def test_judge_model_accepts_any_string_verbatim(self) -> None:
+        settings = PromptfooSettings(judge_model="anthropic:claude-3-opus")
+        assert settings.judge_model == "anthropic:claude-3-opus"
