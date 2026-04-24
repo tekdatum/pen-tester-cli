@@ -16,6 +16,7 @@ from pentester.auditors.promptfoo.runner import PromptfooRunner
 from pentester.config.auditors.promptfoo_settings import (
     PromptfooSettings,
 )
+from pentester.config.llm import LLMProvider, LLMSettings
 from pentester.config.settings import TargetType
 from pentester.enums.prompt_type import PromptType
 from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
@@ -88,6 +89,7 @@ def _make_auditor(
     settings: PromptfooSettings | None = None,
     scanner: object = None,
     target_type: TargetType = TargetType.SEMANTIC_FENCE,
+    llm_settings: LLMSettings | None = None,
 ) -> PromptfooAuditor:
     s = settings or _make_settings()
     mock_cm = MagicMock()
@@ -103,6 +105,7 @@ def _make_auditor(
             settings=s,
             scanner=scanner,
             target_type=target_type,
+            llm_settings=llm_settings,
         )
 
 
@@ -262,6 +265,155 @@ class TestGenerateTestsFiles:
             auditor.generate_tests_files()
 
         auditor.config_manager.remove_cloud_only_tests.assert_not_called()
+
+    def test_rewrite_redteam_provider_called_with_llm_assert_dir(self) -> None:
+        auditor = _make_auditor()
+        llm_assert_dir = auditor.settings.tests_path / "llm_as_judge_assert"
+
+        with patch.object(auditor, "_run_redteam_generate_for_configs"):
+            auditor.generate_tests_files()
+
+        auditor.config_manager.rewrite_redteam_provider_in_test_files.assert_called_once_with(
+            llm_assert_dir
+        )
+
+    def test_rewrite_redteam_provider_called_unconditionally(self) -> None:
+        # The auditor always makes the call; the method itself is the gate
+        # for the judge_model=None case. Keeps the auditor dumb.
+        auditor = _make_auditor(_make_settings(judge_model=None))
+        with patch.object(auditor, "_run_redteam_generate_for_configs"):
+            auditor.generate_tests_files()
+
+        auditor.config_manager.rewrite_redteam_provider_in_test_files.assert_called_once()
+
+    def test_rewrite_redteam_provider_called_after_redteam_generate(self) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "http"
+
+        configurations_dir = auditor.settings.tests_path / "configurations"
+        llm_assert_dir = auditor.settings.tests_path / "llm_as_judge_assert"
+
+        # Track call ordering across config_manager and auditor methods
+        from unittest.mock import call as mock_call
+
+        parent = MagicMock()
+        parent.attach_mock(
+            auditor.config_manager.write_plugin_configs, "write_plugin_configs"
+        )
+        parent.attach_mock(
+            auditor.config_manager.configure_provider_in_test_files,
+            "configure_provider_in_test_files",
+        )
+        parent.attach_mock(
+            auditor.config_manager.rewrite_redteam_provider_in_test_files,
+            "rewrite_redteam_provider_in_test_files",
+        )
+        parent.attach_mock(
+            auditor.config_manager.remove_cloud_only_tests, "remove_cloud_only_tests"
+        )
+
+        with patch.object(
+            auditor, "_run_redteam_generate_for_configs"
+        ) as mock_gen:
+            parent.attach_mock(mock_gen, "_run_redteam_generate_for_configs")
+            auditor.generate_tests_files()
+
+        expected_order = [
+            mock_call.write_plugin_configs(
+                _FAKE_CONFIG["redteam"]["plugins"], configurations_dir
+            ),
+            mock_call.configure_provider_in_test_files(
+                configurations_dir, auditor.providers[0], "http"
+            ),
+            mock_call._run_redteam_generate_for_configs(
+                configurations_dir, llm_assert_dir
+            ),
+            mock_call.configure_provider_in_test_files(
+                llm_assert_dir, auditor.providers[0], "http"
+            ),
+            mock_call.rewrite_redteam_provider_in_test_files(llm_assert_dir),
+        ]
+        assert parent.mock_calls == expected_order
+
+
+class TestProvidersFromLLMSettings:
+    def test_providers_set_from_llm_when_target_is_llm_and_model_present(self) -> None:
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="gpt-4o")
+        auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
+        assert auditor.providers == [{"id": "openai:gpt-4o"}]
+        assert auditor.config["providers"] == [{"id": "openai:gpt-4o"}]
+
+    def test_providers_use_scanner_when_target_is_semantic_fence(self) -> None:
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        parsed = MagicMock(
+            url="http://test.com",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            data='{"text":"$PROMPT"}',
+        )
+        handler._parse_command.return_value = parsed
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="gpt-4o")
+
+        auditor = _make_auditor(
+            target_type=TargetType.SEMANTIC_FENCE,
+            scanner=scanner,
+            llm_settings=llm,
+        )
+
+        # Scanner path was taken — providers reflect the scanner-derived URL
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"]["url"] == "http://test.com"
+
+    def test_providers_use_scanner_when_target_is_llm_but_model_empty(self) -> None:
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        parsed = MagicMock(
+            url="http://test.com",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            data='{"text":"$PROMPT"}',
+        )
+        handler._parse_command.return_value = parsed
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="")
+
+        auditor = _make_auditor(
+            target_type=TargetType.LLM,
+            scanner=scanner,
+            llm_settings=llm,
+        )
+
+        # Empty model means LLM path is skipped — falls back to scanner
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"]["url"] == "http://test.com"
+
+    def test_anthropic_provider_composes_correctly(self) -> None:
+        llm = LLMSettings(
+            provider=LLMProvider.ANTHROPIC, model="claude-3-5-sonnet-latest"
+        )
+        auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
+        assert auditor.providers == [
+            {"id": "anthropic:claude-3-5-sonnet-latest"}
+        ]
+
+    def test_warning_logged_when_target_is_llm_but_no_model_and_no_scanner(self) -> None:
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="")
+        with patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger:
+            _make_auditor(
+                target_type=TargetType.LLM,
+                scanner=None,
+                llm_settings=llm,
+            )
+        # The existing "no scanner" warning is emitted
+        warning_msgs = [
+            call.args[0] for call in mock_logger.warning.call_args_list
+        ]
+        assert any("No scanner provided" in m for m in warning_msgs)
 
 
 # ---------------------------------------------------------------------------

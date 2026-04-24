@@ -159,6 +159,28 @@ class TestScannerInjection:
         assert isinstance(kwargs["scanner"], Scanner)
 
 
+class TestLLMSettingsInjection:
+    def test_promptfoo_auditor_receives_llm_settings_from_factory(
+        self, _patch_promptfoo_auditor
+    ) -> None:
+        settings = _make_settings()
+        factory = AuditorFactory(settings)
+        factory.get_auditor("promptfoo")
+        _, kwargs = _patch_promptfoo_auditor.call_args
+        assert kwargs["llm_settings"] is settings.llm
+
+    def test_promptfoo_auditor_receives_target_type_from_factory(
+        self, _patch_promptfoo_auditor
+    ) -> None:
+        from pentester.enums.target_type import TargetType
+
+        settings = _make_settings()
+        factory = AuditorFactory(settings)
+        factory.get_auditor("promptfoo")
+        _, kwargs = _patch_promptfoo_auditor.call_args
+        assert kwargs["target_type"] == TargetType.SEMANTIC_FENCE
+
+
 # ---------------------------------------------------------------------------
 # scanner property
 # ---------------------------------------------------------------------------
