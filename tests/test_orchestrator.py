@@ -38,8 +38,10 @@ for _mod in (
 
 from pentester.auditors.auditor_factory import AuditorFactory  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
+from pentester.config.llm import LLMSettings  # noqa: E402
 from pentester.config.reporting import ReportingSettings  # noqa: E402
 from pentester.config.settings import PentesterSettings  # noqa: E402
+from pentester.enums.target_type import TargetType  # noqa: E402
 from pentester.orchestrator import Orchestrator  # noqa: E402
 from pentester.reporting.reporting import Reporting  # noqa: E402
 
@@ -166,6 +168,66 @@ class TestRunAndReport:
         ):
             with pytest.raises(RuntimeError, match="No scanner configured"):
                 orch._run_and_report([])
+
+    def test_raises_when_llm_target_has_no_scanner_and_no_model(self) -> None:
+        settings = PentesterSettings(
+            reporting=ReportingSettings(),
+            target_type=TargetType.LLM,
+            llm=LLMSettings(model=""),
+        )
+        orch = Orchestrator(settings)
+        with (
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            with pytest.raises(
+                RuntimeError, match="No scanner or LLM configuration found"
+            ):
+                orch._run_and_report([])
+
+    def test_does_not_raise_when_llm_target_has_no_scanner_but_model_set(
+        self,
+    ) -> None:
+        settings = PentesterSettings(
+            reporting=ReportingSettings(),
+            target_type=TargetType.LLM,
+            llm=LLMSettings(model="gpt-4"),
+        )
+        orch = Orchestrator(settings)
+        with (
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(orch._reporting, "generate"),
+        ):
+            orch._run_and_report([])
+
+    def test_llm_target_with_no_scanner_skips_preflight(self) -> None:
+        settings = PentesterSettings(
+            reporting=ReportingSettings(),
+            target_type=TargetType.LLM,
+            llm=LLMSettings(model="gpt-4"),
+        )
+        orch = Orchestrator(settings)
+        with (
+            patch.object(
+                type(orch._auditor_factory),
+                "scanner",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+            patch.object(orch._reporting, "generate") as mock_generate,
+        ):
+            orch._run_and_report([])
+            mock_generate.assert_called_once()
 
     def test_auditors_not_run_if_preflight_raises(self) -> None:
         orch = Orchestrator(_make_settings())
