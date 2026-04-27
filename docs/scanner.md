@@ -30,7 +30,7 @@ print(result.text)        # extracted LLM reply text, or None if response_text_t
 
 The curl command must include the `$PROMPT` variable, which is replaced by the prompt text at scan time.
 
-```
+```bash
 curl -X POST 'https://api.example.com/chat' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer TOKEN' \
@@ -85,7 +85,7 @@ print(result.text)   # "Hello! How can I help you today?"
 
 Or via settings:
 
-```bash
+```
 PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.choices.0.message.content
 ```
 
