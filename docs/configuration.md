@@ -17,11 +17,15 @@ All variables are prefixed with `PENTESTER_`.
 | `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `str \| None` | `None` | dot-notation path to extract the LLM reply text from the response body. Required when using `ScannerGenerator` (garak LLM mode) or `ScannerTarget` (PyRIT multi-turn). Example: `body.choices.0.message.content` |
 | `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written |
 | `PENTESTER_REPORTING__GENERATOR_KEYS` | `str` | `pdf,csv,html,markdown` | Comma-separated list of report formats to generate |
+| `PENTESTER_LLM__PROVIDER` | `LLMProvider` | `openai` | Provider namespace shared across auditors (`openai`, `anthropic`, `gemini`). For `target_type=LLM` audits, used to compose the promptfoo target `providers[0].id` as `{provider}:{model}`. |
+| `PENTESTER_LLM__MODEL` | `str` | `""` | Model name shared across auditors. Empty string means "use the auditor's template default". For `target_type=LLM` audits, the promptfoo target identifier is composed from `LLM__PROVIDER:LLM__MODEL`. |
 | `PENTESTER_GARAK__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Garak auditor. `None` means no limit. |
 | `PENTESTER_PYRIT__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Pyrit auditor. `None` means no limit. |
 | `PENTESTER_INSPECT__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Inspect AI auditor. `None` means no limit. |
 | `PENTESTER_PROMPTFOO__MAX_ATTACKS` | `int \| None` | `None` | Maximum number of attacks to run for the Promptfoo auditor. `None` means no limit. |
 | `PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS` | `int \| None` | `None` | Override the `numTests` value on every plugin in generated configuration files. `None` keeps the original value from the config file. |
+| `PENTESTER_PROMPTFOO__ATTACK_GENERATION_MODEL` | `str \| None` | `None` | Full `provider:model` string used verbatim to overwrite `redteam.provider` in YAMLs under `output/promptfoo/tests/configurations/`. Drives the model that `promptfoo redteam generate` uses to author adversarial prompts. Unset ⇒ keep template default. |
+| `PENTESTER_PROMPTFOO__JUDGE_MODEL` | `str \| None` | `None` | Full `provider:model` string used verbatim to overwrite `redteam.provider` in YAMLs under `output/promptfoo/tests/llm_as_judge_assert/` (post-generation rewrite). Drives the eval-time grader model. Unset ⇒ keep generator default. |
 
 **`TargetType` values:**
 
@@ -55,6 +59,30 @@ PENTESTER_TARGET_TYPE=SEMANTIC_FENCE
 ```
 
 Unknown variables are silently ignored, so it is safe to share `.env` files across multiple tools in the same environment.
+
+---
+
+### LLM model selection (Promptfoo)
+
+Promptfoo runs involve three distinct LLMs, each independently configurable:
+
+1. **Target LLM** — the model under test. Configured via the shared `PENTESTER_LLM__PROVIDER` + `PENTESTER_LLM__MODEL` env vars, but only applied when `PENTESTER_TARGET_TYPE=LLM`. For HTTP/curl targets (`SEMANTIC_FENCE`), the target is derived from the scanner instead and these vars are ignored by the promptfoo target wiring.
+2. **Attack-generation LLM** — used by `promptfoo redteam generate` to craft adversarial prompts. Configured via `PENTESTER_PROMPTFOO__ATTACK_GENERATION_MODEL` (full `provider:model` string). Rewrites `redteam.provider` in `output/promptfoo/tests/configurations/*.yaml`.
+3. **Judge LLM** — used at eval time to grade responses. Configured via `PENTESTER_PROMPTFOO__JUDGE_MODEL` (full `provider:model` string). Rewrites `redteam.provider` in `output/promptfoo/tests/llm_as_judge_assert/*.yaml` after `promptfoo redteam generate` finishes.
+
+Any unset variable preserves the value baked into the promptfoo template (`promptfooconfig.yaml`) — fully backward compatible with prior versions.
+
+Example `.env` for a Claude-target audit graded by GPT-4o:
+
+```bash
+PENTESTER_TARGET_TYPE=LLM
+PENTESTER_LLM__PROVIDER=anthropic
+PENTESTER_LLM__MODEL=claude-3-5-sonnet-latest
+PENTESTER_PROMPTFOO__ATTACK_GENERATION_MODEL=openai:gpt-4o-mini
+PENTESTER_PROMPTFOO__JUDGE_MODEL=openai:gpt-4o
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
 ---
 

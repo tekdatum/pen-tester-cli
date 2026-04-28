@@ -46,8 +46,6 @@ class TestRunEval:
     @pytest.fixture(autouse=True)
     def _patch_subprocess(self) -> Generator[None]:
         self.mock_result = MagicMock()
-        self.mock_result.stdout = "eval output"
-        self.mock_result.stderr = ""
         with patch(
             "pentester.auditors.promptfoo.runner.subprocess.run",
             return_value=self.mock_result,
@@ -55,26 +53,24 @@ class TestRunEval:
             yield
 
     def test_returns_expected_values_on_success(self) -> None:
-        success, name, output = _make_runner().run_eval(Path("/test/config.yaml"))
+        success, name = _make_runner().run_eval(Path("/test/config.yaml"))
 
         assert success is True
         assert name == "config.yaml"
-        assert output == "eval output"
 
     def test_returns_success_on_non_zero_exit_code(self) -> None:
         self.mock_result.returncode = 1
-        success, name, output = _make_runner().run_eval(Path("/test/config.yaml"))
+        success, name = _make_runner().run_eval(Path("/test/config.yaml"))
 
         assert success is True
         assert name == "config.yaml"
-        assert output == "eval output"
 
     def test_returns_false_on_os_error(self) -> None:
         self.mock_run.side_effect = OSError("promptfoo not found")
-        success, _, output = _make_runner().run_eval(Path("/test/config.yaml"))
+        success, name = _make_runner().run_eval(Path("/test/config.yaml"))
 
         assert success is False
-        assert output == "promptfoo not found"
+        assert name == "config.yaml"
 
     def test_builds_correct_subprocess_command(self) -> None:
         _make_runner(concurrency=12).run_eval(Path("/test/my_test.yaml"))
@@ -96,13 +92,15 @@ class TestRunEval:
 
         # Verify boolean flags
         assert "--no-cache" in command
-        assert "--no-progress-bar" in command
         assert "--no-table" in command
+        # Streaming mode: --no-progress-bar must not be passed so promptfoo's
+        # progress bar streams through to the parent terminal.
+        assert "--no-progress-bar" not in command
 
-        # Verify subprocess parameters — check=True is no longer used
+        # Verify subprocess parameters — streaming mode: no capture, no text
         assert "check" not in kwargs
-        assert kwargs["capture_output"] is True
-        assert kwargs["text"] is True
+        assert "capture_output" not in kwargs
+        assert "text" not in kwargs
 
     def test_max_tests_flag_uses_configured_value(self) -> None:
         _make_runner(max_tests=42).run_eval(Path("/test/my_test.yaml"))
@@ -180,16 +178,16 @@ class TestRunAll:
 
         # Mocking side_effect allows us to return different results per file
         # This is done to ensure data maps correctly
-        mock_returns = [(True, "a.yaml", "ok"), (False, "b.yaml", "error")]
+        mock_returns = [(True, "a.yaml"), (False, "b.yaml")]
         with patch.object(runner, "run_eval", side_effect=mock_returns) as mock_eval:
             results = runner.run_all(files)
 
         assert mock_eval.call_count == 2
         assert len(results) == 2
 
-        # Verify the structure of the returned tuples: (Path, Success, Name, Output)
-        assert results[0] == (files[0], True, "a.yaml", "ok")
-        assert results[1] == (files[1], False, "b.yaml", "error")
+        # Verify the structure of the returned tuples: (Path, Success, Name)
+        assert results[0] == (files[0], True, "a.yaml")
+        assert results[1] == (files[1], False, "b.yaml")
 
     def test_handles_empty_input(self) -> None:
         runner = _make_runner()
@@ -205,7 +203,7 @@ class TestRunAll:
         files = [Path("/test/a.yaml")]
 
         with patch.object(
-            runner, "run_eval", return_value=(True, "a.yaml", "ok")
+            runner, "run_eval", return_value=(True, "a.yaml")
         ) as mock_eval:
             runner.run_all(files, concurrency=77)
 

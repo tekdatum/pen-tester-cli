@@ -16,6 +16,7 @@ from pentester.auditors.promptfoo.runner import PromptfooRunner
 from pentester.config.auditors.promptfoo_settings import (
     PromptfooSettings,
 )
+from pentester.config.llm import LLMProvider, LLMSettings
 from pentester.config.settings import TargetType
 from pentester.enums.prompt_type import PromptType
 from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
@@ -88,6 +89,7 @@ def _make_auditor(
     settings: PromptfooSettings | None = None,
     scanner: object = None,
     target_type: TargetType = TargetType.SEMANTIC_FENCE,
+    llm_settings: LLMSettings | None = None,
 ) -> PromptfooAuditor:
     s = settings or _make_settings()
     mock_cm = MagicMock()
@@ -103,6 +105,7 @@ def _make_auditor(
             settings=s,
             scanner=scanner,
             target_type=target_type,
+            llm_settings=llm_settings,
         )
 
 
@@ -214,6 +217,32 @@ class TestRunRedteamGenerateForConfigs:
         call_args = auditor.runner.run_redteam_generate.call_args
         assert call_args[0][1] == llm_dir / "test_2.yaml"
 
+    def test_wipes_llm_assert_dir_when_replace_existing_file_is_true(
+        self, tmp_path: Path
+    ) -> None:
+        configs_dir = tmp_path / "configurations"
+        llm_dir = tmp_path / "llm_assert"
+        configs_dir.mkdir()
+        llm_dir.mkdir()
+
+        (configs_dir / "test_1.yaml").write_text("data")
+        # Stale files from a prior, larger run that no longer have a
+        # matching configuration. Without an upfront wipe, these would
+        # leak into the audit via _prepare_audit_files' glob.
+        (llm_dir / "test_1.yaml").write_text("stale")
+        (llm_dir / "test_2.yaml").write_text("stale")
+        (llm_dir / "test_99.yaml").write_text("stale")
+
+        auditor = _make_auditor(_make_settings(replace_existing_file=True))
+        auditor.runner = MagicMock()
+
+        auditor._run_redteam_generate_for_configs(configs_dir, llm_dir)
+
+        assert list(llm_dir.glob("*.yaml")) == []
+        auditor.runner.run_redteam_generate.assert_called_once_with(
+            configs_dir / "test_1.yaml", llm_dir / "test_1.yaml"
+        )
+
 
 class TestGenerateTestsFiles:
     def test_orchestrates_plugin_writing_and_generation(self) -> None:
@@ -262,6 +291,155 @@ class TestGenerateTestsFiles:
             auditor.generate_tests_files()
 
         auditor.config_manager.remove_cloud_only_tests.assert_not_called()
+
+    def test_rewrite_redteam_provider_called_with_llm_assert_dir(self) -> None:
+        auditor = _make_auditor()
+        llm_assert_dir = auditor.settings.tests_path / "llm_as_judge_assert"
+
+        with patch.object(auditor, "_run_redteam_generate_for_configs"):
+            auditor.generate_tests_files()
+
+        auditor.config_manager.rewrite_redteam_provider_in_test_files.assert_called_once_with(
+            llm_assert_dir
+        )
+
+    def test_rewrite_redteam_provider_called_unconditionally(self) -> None:
+        # The auditor always makes the call; the method itself is the gate
+        # for the judge_model=None case. Keeps the auditor dumb.
+        auditor = _make_auditor(_make_settings(judge_model=None))
+        with patch.object(auditor, "_run_redteam_generate_for_configs"):
+            auditor.generate_tests_files()
+
+        auditor.config_manager.rewrite_redteam_provider_in_test_files.assert_called_once()
+
+    def test_rewrite_redteam_provider_called_after_redteam_generate(self) -> None:
+        auditor = _make_auditor()
+        auditor._scanner = MagicMock()
+        auditor.provider_id = "http"
+
+        configurations_dir = auditor.settings.tests_path / "configurations"
+        llm_assert_dir = auditor.settings.tests_path / "llm_as_judge_assert"
+
+        # Track call ordering across config_manager and auditor methods
+        from unittest.mock import call as mock_call
+
+        parent = MagicMock()
+        parent.attach_mock(
+            auditor.config_manager.write_plugin_configs, "write_plugin_configs"
+        )
+        parent.attach_mock(
+            auditor.config_manager.configure_provider_in_test_files,
+            "configure_provider_in_test_files",
+        )
+        parent.attach_mock(
+            auditor.config_manager.rewrite_redteam_provider_in_test_files,
+            "rewrite_redteam_provider_in_test_files",
+        )
+        parent.attach_mock(
+            auditor.config_manager.remove_cloud_only_tests, "remove_cloud_only_tests"
+        )
+
+        with patch.object(
+            auditor, "_run_redteam_generate_for_configs"
+        ) as mock_gen:
+            parent.attach_mock(mock_gen, "_run_redteam_generate_for_configs")
+            auditor.generate_tests_files()
+
+        expected_order = [
+            mock_call.write_plugin_configs(
+                _FAKE_CONFIG["redteam"]["plugins"], configurations_dir
+            ),
+            mock_call.configure_provider_in_test_files(
+                configurations_dir, auditor.providers[0], "http"
+            ),
+            mock_call._run_redteam_generate_for_configs(
+                configurations_dir, llm_assert_dir
+            ),
+            mock_call.configure_provider_in_test_files(
+                llm_assert_dir, auditor.providers[0], "http"
+            ),
+            mock_call.rewrite_redteam_provider_in_test_files(llm_assert_dir),
+        ]
+        assert parent.mock_calls == expected_order
+
+
+class TestProvidersFromLLMSettings:
+    def test_providers_set_from_llm_when_target_is_llm_and_model_present(self) -> None:
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="gpt-4o")
+        auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
+        assert auditor.providers == [{"id": "openai:gpt-4o"}]
+        assert auditor.config["providers"] == [{"id": "openai:gpt-4o"}]
+
+    def test_providers_use_scanner_when_target_is_semantic_fence(self) -> None:
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        parsed = MagicMock(
+            url="http://test.com",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            data='{"text":"$PROMPT"}',
+        )
+        handler._parse_command.return_value = parsed
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="gpt-4o")
+
+        auditor = _make_auditor(
+            target_type=TargetType.SEMANTIC_FENCE,
+            scanner=scanner,
+            llm_settings=llm,
+        )
+
+        # Scanner path was taken — providers reflect the scanner-derived URL
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"]["url"] == "http://test.com"
+
+    def test_providers_use_scanner_when_target_is_llm_but_model_empty(self) -> None:
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        parsed = MagicMock(
+            url="http://test.com",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            data='{"text":"$PROMPT"}',
+        )
+        handler._parse_command.return_value = parsed
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="")
+
+        auditor = _make_auditor(
+            target_type=TargetType.LLM,
+            scanner=scanner,
+            llm_settings=llm,
+        )
+
+        # Empty model means LLM path is skipped — falls back to scanner
+        assert auditor.providers[0]["id"] == "http"
+        assert auditor.providers[0]["config"]["url"] == "http://test.com"
+
+    def test_anthropic_provider_composes_correctly(self) -> None:
+        llm = LLMSettings(
+            provider=LLMProvider.ANTHROPIC, model="claude-3-5-sonnet-latest"
+        )
+        auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
+        assert auditor.providers == [
+            {"id": "anthropic:claude-3-5-sonnet-latest"}
+        ]
+
+    def test_warning_logged_when_target_is_llm_but_no_model_and_no_scanner(self) -> None:
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="")
+        with patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger:
+            _make_auditor(
+                target_type=TargetType.LLM,
+                scanner=None,
+                llm_settings=llm,
+            )
+        # The existing "no scanner" warning is emitted
+        warning_msgs = [
+            call.args[0] for call in mock_logger.warning.call_args_list
+        ]
+        assert any("No scanner provided" in m for m in warning_msgs)
 
 
 # ---------------------------------------------------------------------------
@@ -505,9 +683,9 @@ class TestProcessEvalResults:
         auditor.collector = MagicMock()
         auditor.config_manager.load_config.return_value = {"tests": [1, 2]}
         results = [
-            (Path("/a.yaml"), True, "a.yaml", "ok"),
-            (Path("/b.yaml"), False, "b.yaml", "error"),
-            (Path("/c.yaml"), True, "c.yaml", "ok"),
+            (Path("/a.yaml"), True, "a.yaml"),
+            (Path("/b.yaml"), False, "b.yaml"),
+            (Path("/c.yaml"), True, "c.yaml"),
         ]
 
         auditor._process_eval_results(results)
@@ -643,6 +821,142 @@ class TestGenerateProbeResults:
         results = auditor._generate_probe_results()
 
         assert results[0].prompt_type == PromptType.SINGLE
+
+    # ── NaN sanitization (regression: pandas converts missing JSON keys
+    # to NaN floats; metadata must hold Python None, not nan, or downstream
+    # markdown/csv formatters crash on `nan or "" == nan`) ──────────────────
+
+    def test_judge_reason_nan_becomes_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(grading_reason=float("nan"))
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.metadata["judge_reason"] is None
+        assert result.markdown_formatted_judge_reason == ""
+
+    def test_error_nan_is_not_treated_as_error(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(error=float("nan"))
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.metadata["error"] is None
+        assert result.is_error is False
+
+    def test_http_status_nan_becomes_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(http_status=float("nan"))
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.metadata["http_status"] is None
+
+    def test_latency_ms_nan_becomes_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(latency_ms=float("nan"))
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.metadata["latency_ms"] is None
+
+    def test_duration_nan_becomes_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(duration=float("nan"))
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.metadata["duration"] is None
+
+    def test_cached_nan_becomes_none(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(cached=float("nan"))
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.metadata["cached"] is None
+
+    def test_plugin_id_nan_falls_back_to_default_attack_type(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(plugin_id=float("nan"))
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.attack_type == "promptfoo"
+
+    def test_accept_score_nan_falls_back_to_zero(self) -> None:
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(
+            grading_score=None, accept_score=float("nan")
+        )
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.score == 0.0
+
+    def test_provider_error_row_renders_markdown_without_crash(self) -> None:
+        """Regression: a row mirroring the actual failure mode (provider error
+        before grading, so ``gradingResult`` is missing → ``grading_reason`` is
+        NaN) must build a probe whose markdown formatters do not crash."""
+        auditor = _make_auditor()
+        auditor.results_df = self._make_results_df(
+            grading_reason=float("nan"),
+            grading_score=float("nan"),
+            http_status=float("nan"),
+            latency_ms=float("nan"),
+            error="provider failed",
+            success=False,
+        )
+
+        result = auditor._generate_probe_results()[0]
+
+        assert result.markdown_formatted_judge_reason == ""
+        assert "provider failed" in result.markdown_formatted_error
+        assert result.is_error is True
+
+    def test_multiturn_row_nan_metadata_sanitized(self) -> None:
+        """NaN values in a multi-turn row must be cleaned for every exploded turn."""
+        row: dict = {
+            "reason_code": None,
+            "prompt": "p",
+            "api_response": {"data": "r"},
+            "valid": True,
+            "accept_score": 0.0,
+            "http_status": float("nan"),
+            "duration": float("nan"),
+            "latency_ms": float("nan"),
+            "cached": float("nan"),
+            "strategy_id": "crescendo",
+            "plugin_id": float("nan"),
+            "error": float("nan"),
+            "success": False,
+            "grading_score": None,
+            "grading_reason": None,
+            "multiturn_messages": [
+                {"role": "user", "content": "u1"},
+                {"role": "assistant", "content": "a1"},
+                {"role": "user", "content": "u2"},
+                {"role": "assistant", "content": "a2"},
+            ],
+            "successful_attacks": [{"turn": 1}],
+            "stored_grader_result": {"pass": False, "reason": "leaked"},
+        }
+        auditor = _make_auditor()
+        auditor.results_df = pd.DataFrame([row])
+
+        results = auditor._generate_probe_results()
+
+        assert len(results) == 2
+        for turn in results:
+            assert turn.metadata["http_status"] is None
+            assert turn.metadata["duration"] is None
+            assert turn.metadata["latency_ms"] is None
+            assert turn.metadata["cached"] is None
+            assert turn.metadata["error"] is None
+            assert turn.is_error is False
+            assert turn.attack_type == "promptfoo"
+            # Markdown rendering must not crash on these probes.
+            assert turn.markdown_formatted_error == ""
 
 
 # ---------------------------------------------------------------------------
@@ -792,7 +1106,7 @@ class TestAudit:
     def test_executes_full_audit_pipeline(self) -> None:
         auditor = _make_auditor()
         files = [Path("/a.yaml")]
-        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+        runner_output = [(Path("/a.yaml"), True, "a.yaml")]
         expected_df = pd.DataFrame({"col": [1]})
         expected_probes = [MagicMock(spec=ProbeResult)]
 
@@ -849,8 +1163,8 @@ class TestAudit:
     def test_builds_dataframe_and_logs_errors_when_all_evals_failed(self) -> None:
         auditor = _make_auditor()
         all_failed = [
-            (Path("/a.yaml"), False, "a.yaml", "error A"),
-            (Path("/b.yaml"), False, "b.yaml", "error B"),
+            (Path("/a.yaml"), False, "a.yaml"),
+            (Path("/b.yaml"), False, "b.yaml"),
         ]
         expected_df = pd.DataFrame({"col": [1]})
         error_probe = MagicMock(spec=ProbeResult)
@@ -894,7 +1208,7 @@ class TestAudit:
     def test_no_error_logs_when_all_evals_failed_but_no_error_probes(self) -> None:
         auditor = _make_auditor()
         all_failed = [
-            (Path("/a.yaml"), False, "a.yaml", "error A"),
+            (Path("/a.yaml"), False, "a.yaml"),
         ]
         non_error_probe = MagicMock(spec=ProbeResult)
         non_error_probe.is_error = False
@@ -924,8 +1238,8 @@ class TestAudit:
     def test_calls_build_dataframe_when_at_least_one_eval_succeeded(self) -> None:
         auditor = _make_auditor()
         mixed_results = [
-            (Path("/a.yaml"), True, "a.yaml", "ok"),
-            (Path("/b.yaml"), False, "b.yaml", "error B"),
+            (Path("/a.yaml"), True, "a.yaml"),
+            (Path("/b.yaml"), False, "b.yaml"),
         ]
         expected_df = pd.DataFrame({"col": [1]})
         expected_probes = [MagicMock(spec=ProbeResult)]
