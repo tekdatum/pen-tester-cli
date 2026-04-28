@@ -683,9 +683,9 @@ class TestProcessEvalResults:
         auditor.collector = MagicMock()
         auditor.config_manager.load_config.return_value = {"tests": [1, 2]}
         results = [
-            (Path("/a.yaml"), True, "a.yaml", "ok"),
-            (Path("/b.yaml"), False, "b.yaml", "error"),
-            (Path("/c.yaml"), True, "c.yaml", "ok"),
+            (Path("/a.yaml"), True, "a.yaml"),
+            (Path("/b.yaml"), False, "b.yaml"),
+            (Path("/c.yaml"), True, "c.yaml"),
         ]
 
         auditor._process_eval_results(results)
@@ -1106,7 +1106,7 @@ class TestAudit:
     def test_executes_full_audit_pipeline(self) -> None:
         auditor = _make_auditor()
         files = [Path("/a.yaml")]
-        runner_output = [(Path("/a.yaml"), True, "a.yaml", "ok")]
+        runner_output = [(Path("/a.yaml"), True, "a.yaml")]
         expected_df = pd.DataFrame({"col": [1]})
         expected_probes = [MagicMock(spec=ProbeResult)]
 
@@ -1163,8 +1163,8 @@ class TestAudit:
     def test_builds_dataframe_and_logs_errors_when_all_evals_failed(self) -> None:
         auditor = _make_auditor()
         all_failed = [
-            (Path("/a.yaml"), False, "a.yaml", "error A"),
-            (Path("/b.yaml"), False, "b.yaml", "error B"),
+            (Path("/a.yaml"), False, "a.yaml"),
+            (Path("/b.yaml"), False, "b.yaml"),
         ]
         expected_df = pd.DataFrame({"col": [1]})
         error_probe = MagicMock(spec=ProbeResult)
@@ -1208,7 +1208,7 @@ class TestAudit:
     def test_no_error_logs_when_all_evals_failed_but_no_error_probes(self) -> None:
         auditor = _make_auditor()
         all_failed = [
-            (Path("/a.yaml"), False, "a.yaml", "error A"),
+            (Path("/a.yaml"), False, "a.yaml"),
         ]
         non_error_probe = MagicMock(spec=ProbeResult)
         non_error_probe.is_error = False
@@ -1238,8 +1238,8 @@ class TestAudit:
     def test_calls_build_dataframe_when_at_least_one_eval_succeeded(self) -> None:
         auditor = _make_auditor()
         mixed_results = [
-            (Path("/a.yaml"), True, "a.yaml", "ok"),
-            (Path("/b.yaml"), False, "b.yaml", "error B"),
+            (Path("/a.yaml"), True, "a.yaml"),
+            (Path("/b.yaml"), False, "b.yaml"),
         ]
         expected_df = pd.DataFrame({"col": [1]})
         expected_probes = [MagicMock(spec=ProbeResult)]
