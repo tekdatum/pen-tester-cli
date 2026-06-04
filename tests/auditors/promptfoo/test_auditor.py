@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import os
 from collections.abc import Generator
 from pathlib import Path
@@ -11,7 +12,10 @@ import pandas as pd
 import pytest
 
 from pentester.auditors.models.probe_result import ProbeResult
-from pentester.auditors.promptfoo.auditor import PromptfooAuditor
+from pentester.auditors.promptfoo.auditor import (
+    _LLM_API_KEY_ENV_VARS,
+    PromptfooAuditor,
+)
 from pentester.auditors.promptfoo.runner import PromptfooRunner
 from pentester.config.auditors.promptfoo_settings import (
     PromptfooSettings,
@@ -1035,6 +1039,32 @@ class TestValidatePreconditions:
             auditor._unset_llm_api_keys()
             assert auditor._saved_llm_keys == {}
 
+    def test_unset_logs_count_not_env_var_names(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        auditor = _make_auditor(target_type=TargetType.SEMANTIC_FENCE)
+        # Ensure records reach caplog's root handler even if setup_logging
+        # (which sets propagate=False) ran earlier in the session.
+        monkeypatch.setattr(logging.getLogger("pentester"), "propagate", True)
+        caplog.set_level(logging.INFO, logger="pentester.auditors.promptfoo.auditor")
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch.dict(
+                os.environ,
+                {"OPENAI_API_KEY": "sk-test", "ANTHROPIC_API_KEY": "sk-ant"},
+                clear=True,
+            ),
+        ):
+            auditor._unset_llm_api_keys()
+
+        assert "Temporarily unset 2 LLM API key env var(s)" in caplog.text
+        for env_var_name in _LLM_API_KEY_ENV_VARS:
+            assert env_var_name not in caplog.text
+        assert "sk-test" not in caplog.text
+        assert "sk-ant" not in caplog.text
+
 
 class TestRestoreLlmApiKeys:
     def test_restores_saved_keys_to_environment(self) -> None:
@@ -1052,6 +1082,25 @@ class TestRestoreLlmApiKeys:
         with patch.dict(os.environ, {}, clear=True):
             auditor._restore_llm_api_keys()  # should not raise
             assert auditor._saved_llm_keys == {}
+
+    def test_restore_logs_count_not_env_var_names(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        auditor = _make_auditor()
+        auditor._saved_llm_keys = {"OPENAI_API_KEY": "sk-restored"}
+        # Ensure records reach caplog's root handler even if setup_logging
+        # (which sets propagate=False) ran earlier in the session.
+        monkeypatch.setattr(logging.getLogger("pentester"), "propagate", True)
+        caplog.set_level(logging.INFO, logger="pentester.auditors.promptfoo.auditor")
+        with patch.dict(os.environ, {}, clear=True):
+            auditor._restore_llm_api_keys()
+
+        assert "Restored 1 LLM API key env var(s) to the environment." in caplog.text
+        for env_var_name in _LLM_API_KEY_ENV_VARS:
+            assert env_var_name not in caplog.text
+        assert "sk-restored" not in caplog.text
 
 
 # ---------------------------------------------------------------------------
