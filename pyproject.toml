@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pentester_test" # the project and lib name
+name = "crocotester" # the project and lib name
 version = "0.0.1"
 description = "Pentester CLI"
 readme = "README.md"
