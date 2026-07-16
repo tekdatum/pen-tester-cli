@@ -751,9 +751,7 @@ class TestRewriteRedteamProviderInTestFiles:
         with open(path, "w") as f:
             _yaml.dump(payload, f)
 
-    def test_rewrites_all_yaml_files_when_judge_model_set(
-        self, tmp_path: Path
-    ) -> None:
+    def test_rewrites_all_yaml_files_when_judge_model_set(self, tmp_path: Path) -> None:
         import yaml
 
         cm = _make_config_manager(_make_settings(judge_model="openai:gpt-4o"))
@@ -793,9 +791,7 @@ class TestRewriteRedteamProviderInTestFiles:
             patch(
                 "pentester.auditors.promptfoo.config_manager.yaml.safe_load"
             ) as mock_safe_load,
-            patch(
-                "pentester.auditors.promptfoo.config_manager.yaml.dump"
-            ) as mock_dump,
+            patch("pentester.auditors.promptfoo.config_manager.yaml.dump") as mock_dump,
         ):
             cm.rewrite_redteam_provider_in_test_files(configs_dir)
 
@@ -1108,7 +1104,9 @@ class TestCleanConfig:
 
         written = mock_dump.call_args[0][0]
         for test in written["tests"]:
-            assert test["assert"] == [{"type": "javascript", "value": "JSON.parse(output).passed"}]
+            assert test["assert"] == [
+                {"type": "javascript", "value": "JSON.parse(output).passed"}
+            ]
 
     def test_handles_existing_files_based_on_replace_setting(
         self, tmp_path: Path

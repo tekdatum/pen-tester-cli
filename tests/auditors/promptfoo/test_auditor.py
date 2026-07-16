@@ -343,9 +343,7 @@ class TestGenerateTestsFiles:
             auditor.config_manager.remove_cloud_only_tests, "remove_cloud_only_tests"
         )
 
-        with patch.object(
-            auditor, "_run_redteam_generate_for_configs"
-        ) as mock_gen:
+        with patch.object(auditor, "_run_redteam_generate_for_configs") as mock_gen:
             parent.attach_mock(mock_gen, "_run_redteam_generate_for_configs")
             auditor.generate_tests_files()
 
@@ -427,11 +425,11 @@ class TestProvidersFromLLMSettings:
             provider=LLMProvider.ANTHROPIC, model="claude-3-5-sonnet-latest"
         )
         auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
-        assert auditor.providers == [
-            {"id": "anthropic:claude-3-5-sonnet-latest"}
-        ]
+        assert auditor.providers == [{"id": "anthropic:claude-3-5-sonnet-latest"}]
 
-    def test_warning_logged_when_target_is_llm_but_no_model_and_no_scanner(self) -> None:
+    def test_warning_logged_when_target_is_llm_but_no_model_and_no_scanner(
+        self,
+    ) -> None:
         llm = LLMSettings(provider=LLMProvider.OPENAI, model="")
         with patch("pentester.auditors.promptfoo.auditor.logger") as mock_logger:
             _make_auditor(
@@ -440,9 +438,7 @@ class TestProvidersFromLLMSettings:
                 llm_settings=llm,
             )
         # The existing "no scanner" warning is emitted
-        warning_msgs = [
-            call.args[0] for call in mock_logger.warning.call_args_list
-        ]
+        warning_msgs = [call.args[0] for call in mock_logger.warning.call_args_list]
         assert any("No scanner provided" in m for m in warning_msgs)
 
 
