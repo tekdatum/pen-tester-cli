@@ -148,5 +148,7 @@ class TestCsvInjectionPrevention:
             metadata={"judge_reason": "line1\nline2"},
         )
         csv = CsvGenerator().generate_detail_report([probe], {}, {}).decode()
-        data_rows = [line for line in csv.splitlines() if line and line != csv.splitlines()[0]]
+        data_rows = [
+            line for line in csv.splitlines() if line and line != csv.splitlines()[0]
+        ]
         assert len(data_rows) == 1
