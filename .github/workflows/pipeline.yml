@@ -1,19 +1,24 @@
 name: CI - Linter, format and tests
 on:
   push:
-  pull_request:
     branches:
-      - 'feature/**'
-      - 'bugfix/**'
+      - main
+      - develop
+  pull_request:
+
+permissions:
+  contents: read        # actions/checkout
+  checks: write         # publish-unit-test-result-action check runs
+  pull-requests: write  # publish-unit-test-result-action PR comments
 
 jobs:
   qa_and_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -37,13 +42,13 @@ jobs:
         run: pytest --cov=pentester --junitxml=pytest.xml --cov-report=xml:coverage.xml --cov-fail-under=90
 
       - name: Surface Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040 # v2.23.0
         if: always()
         with:
           files: pytest.xml
 
       - name: Add Coverage PR Comment
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
         with:
           filename: coverage.xml
           badge: true
