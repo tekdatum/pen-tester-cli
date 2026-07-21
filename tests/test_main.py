@@ -226,3 +226,33 @@ class TestAuditorsCLI:
         assert result.exit_code == 0
         mock_orchestrator.execute.assert_called_once()
         mock_orchestrator.execute_auditors.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TestLoadDotenv
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDotenv:
+    def test_loads_env_local_and_env(self) -> None:
+        runner = click.testing.CliRunner()
+        with (
+            patch("pentester.main.Orchestrator") as mock_orchestrator_cls,
+            patch("pentester.main.load_dotenv") as mock_load_dotenv,
+        ):
+            mock_orchestrator_cls.return_value.execute.return_value = None
+            result = runner.invoke(main, [])
+        assert result.exit_code == 0
+        mock_load_dotenv.assert_any_call(".env.local", override=False)
+        mock_load_dotenv.assert_any_call(".env", override=False)
+
+    def test_env_local_loaded_before_env(self) -> None:
+        runner = click.testing.CliRunner()
+        with (
+            patch("pentester.main.Orchestrator") as mock_orchestrator_cls,
+            patch("pentester.main.load_dotenv") as mock_load_dotenv,
+        ):
+            mock_orchestrator_cls.return_value.execute.return_value = None
+            runner.invoke(main, [])
+        loaded_paths = [call.args[0] for call in mock_load_dotenv.call_args_list]
+        assert loaded_paths == [".env.local", ".env"]
