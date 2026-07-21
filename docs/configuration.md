@@ -15,7 +15,7 @@ All variables are prefixed with `PENTESTER_`.
 | `PENTESTER_SCANNER__CURL_COMMAND` | `str \| None` | `None` | curl command string used to target the model |
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract a value from the response and cast to `bool` for `bypassed` |
 | `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `str \| None` | `None` | dot-notation path to extract the LLM reply text from the response body. Required when using `ScannerGenerator` (garak LLM mode) or `ScannerTarget` (PyRIT multi-turn). Example: `body.choices.0.message.content` |
-| `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written |
+| `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written. Also the base for the promptfoo auditor's working files (`<dir>/promptfoo/`) unless `PENTESTER_PROMPTFOO__OUTPUT_PATH` is set explicitly. |
 | `PENTESTER_REPORTING__GENERATOR_KEYS` | `str` | `pdf,csv,html,markdown` | Comma-separated list of report formats to generate |
 | `PENTESTER_LLM__PROVIDER` | `LLMProvider` | `openai` | Provider namespace shared across auditors (`openai`, `anthropic`, `gemini`, `deepseek`). For `target_type=LLM` audits, used to compose the promptfoo target `providers[0].id` as `{provider}:{model}`. |
 | `PENTESTER_LLM__MODEL` | `str` | `""` | Model name shared across auditors. Empty string means "use the auditor's template default". For `target_type=LLM` audits, the promptfoo target identifier is composed from `LLM__PROVIDER:LLM__MODEL`. |

@@ -729,7 +729,7 @@ Promptfoo-specific settings use the `PENTESTER_PROMPTFOO__` prefix:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PENTESTER_PROMPTFOO__CONFIG_PATH` | `./pentester/config/auditor_files/promptfoo` | Path to promptfoo config directory |
-| `PENTESTER_PROMPTFOO__OUTPUT_PATH` | `./output/promptfoo` | Path for runtime-generated files (`tests/`, `results/`) |
+| `PENTESTER_PROMPTFOO__OUTPUT_PATH` | *(derived)* | Path for runtime-generated files (`tests/`, `results/`). Defaults to `<PENTESTER_REPORTING__OUTPUT_DIR_PATH>/promptfoo` (i.e. `./output/promptfoo`); set explicitly to override. |
 | `PENTESTER_PROMPTFOO__FILES_PARALLEL` | `5` | Max concurrent YAML evaluations |
 | `PENTESTER_PROMPTFOO__INTERNAL_CONCURRENCY` | `4` | Promptfoo `-j` flag per evaluation |
 | `PENTESTER_PROMPTFOO__MAX_TESTS` | `20000` | Max tests per eval run (`-n` flag) |

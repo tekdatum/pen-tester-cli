@@ -273,7 +273,7 @@ OPENAI_API_KEY=sk-...
 
 | Variable | Default | Description |
 |---|---|---|
-| `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `./output/` | Directory where report files are written |
+| `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `./output/` | Directory where report files are written. Also the base for the promptfoo auditor's working files (`<dir>/promptfoo/`) unless `PENTESTER_PROMPTFOO__OUTPUT_PATH` is set explicitly. |
 | `PENTESTER_REPORTING__GENERATOR_KEYS` | `html,markdown,csv,pdf` | Comma-separated list of report formats to generate |
 
 ### LLM judge
@@ -322,6 +322,7 @@ OPENAI_API_KEY=sk-...
 
 | Variable | Default | Description |
 |---|---|---|
+| `PENTESTER_PROMPTFOO__OUTPUT_PATH` | *(derived)* | Working dir for generated `tests/` and `results/`. Defaults to `<PENTESTER_REPORTING__OUTPUT_DIR_PATH>/promptfoo`; set explicitly to override. |
 | `PENTESTER_PROMPTFOO__MAX_ATTACKS` | `None` | Attack cap for Promptfoo. Overrides `PENTESTER_MAX_ATTACKS`. |
 | `PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS` | `None` | Override `numTests` on every plugin in generated config files |
 | `PENTESTER_PROMPTFOO__ENABLE_MULTITURN` | `false` | Enable multi-turn attack strategies |
