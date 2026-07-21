@@ -13,7 +13,7 @@ By the end you will have:
 > **The mental model in one line:** an *auditor* generates attack prompts → the tool
 > sends each one to *your target* → it checks whether the attack got through → it
 > writes a report. If you want the full picture first, read
-> [Core Concepts](./concepts.md). Otherwise, keep going — it'll make sense as we go.
+> [Core Concepts](./02-concepts.md). Otherwise, keep going — it'll make sense as we go.
 
 ---
 
@@ -24,7 +24,7 @@ By the end you will have:
 | **Python 3.11+** | The tool targets 3.11 and up. | `python --version` |
 | **pip** | To install the package. | `pip --version` |
 | **A reachable target** | Something to attack — an HTTP endpoint you can hit with `curl`. | see [Step 2](#step-2-describe-your-target) |
-| *(optional)* An LLM API key | Only if your target is a raw LLM, or you use auditors that grade replies with a judge model. | [Core Concepts → The judge](./concepts.md#the-judge-is-not-the-target) |
+| *(optional)* An LLM API key | Only if your target is a raw LLM, or you use auditors that grade replies with a judge model. | [Core Concepts → The judge](./02-concepts.md#the-judge-is-not-the-target) |
 
 You do **not** need an API key for the first scan below — a semantic-fence scan reads
 its result straight from the target's response.
@@ -34,7 +34,7 @@ its result straight from the target's response.
 ## Step 1 — Install
 
 ```bash
-pip install pentester
+pip install crocotester
 ```
 
 Confirm the CLI is on your path:
@@ -43,8 +43,9 @@ Confirm the CLI is on your path:
 pentester --help
 ```
 
-You should see the list of options. If `pentester` isn't found, see
-[Troubleshooting → command not found](./troubleshooting.md#pentester-command-not-found).
+You should see the list of options. If `pentester` isn't found, your virtual
+environment probably isn't activated — reactivate it, or run the tool as a module with
+`python -m pentester`.
 
 ---
 
@@ -78,7 +79,7 @@ about is `body.valid`. We pass that as `--json-dot-target "body.valid"`.
 
 > `body.*` reaches into the JSON body; `headers.*` reaches into response headers.
 > This dotted path is how the tool turns a raw response into a yes/no "bypassed"
-> answer. More in [Core Concepts → Detecting a bypass](./concepts.md#detecting-a-bypass).
+> answer. More in [Core Concepts → Detecting a bypass](./02-concepts.md#detecting-a-bypass).
 
 ---
 
@@ -107,7 +108,7 @@ What each flag does:
 > **Heads-up: the first garak run is slow.** garak runs inside its own isolated Python
 > environment, which the tool builds on first use (folder `pentester_garak_env/`). This
 > is a one-time step and can take a few minutes. Later runs reuse it and start fast.
-> Why the isolation? See [Core Concepts → Isolation](./concepts.md#isolation-why-garak-has-its-own-environment).
+> Why the isolation? See [Core Concepts → Isolation](./02-concepts.md#isolation-why-garak-has-its-own-environment).
 
 Progress is logged to your terminal as the scan runs.
 
@@ -166,12 +167,13 @@ it. That's what you're hunting for.
 
 You've run a scan. Now:
 
-- **Understand what just happened** → [Core Concepts](./concepts.md). Especially the
+- **Understand what just happened** → [Core Concepts](./02-concepts.md). Especially the
   difference between a *semantic fence* and an *LLM* target — it decides how bypass is
   detected.
-- **Do it for real** → [A Full Run](./full-run.md) runs all four auditors against both
+- **Do it for real** → [A Full Run](./03-full-run.md) runs all four auditors against both
   a fence and an LLM, and covers judge-model setup.
-- **Something broke?** → [Troubleshooting](./troubleshooting.md).
+- **Grab a ready-made config** → [Configuration Recipes](./04-env-examples.md) —
+  complete, copy-pasteable `.env.local` files for every scenario.
 
 ---
 

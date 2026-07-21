@@ -1,11 +1,11 @@
 # A Full Run
 
-[Getting Started](./getting-started.md) ran one auditor with a hard cap. This guide
+[Getting Started](./01-getting-started.md) ran one auditor with a hard cap. This guide
 runs the tool the way you would for a real assessment: **all four auditors**, against
 **both kinds of target**, producing **every report format** — then reads the output
 properly.
 
-It assumes you've read [Core Concepts](./concepts.md). If a term here is unfamiliar
+It assumes you've read [Core Concepts](./02-concepts.md). If a term here is unfamiliar
 (scanner, target type, judge, bypass), that's the page to check.
 
 ---
@@ -54,13 +54,13 @@ OPENAI_API_KEY=sk-...
 Every variable here has a matching CLI flag; the full mapping is in
 [Configuration](../configuration.md).
 
-> **Want a ready-made file for your scenario?** [Configuration Recipes](./env-examples.md)
-> has complete, copy-pasteable `.env.local` files for a fence smoke test, an LLM target,
-> the full promptfoo knob set, PyRIT multi-turn, custom handlers, and more.
+> **Want a ready-made file for your scenario?** [Configuration Recipes](./04-env-examples.md)
+> has complete, copy-pasteable `.env.local` files: a fence smoke test, an LLM target, and
+> a master file with every auditor and setting.
 
 > **Watch the value formats.** In a `.env` file, *list* settings must be JSON arrays
 > (`PENTESTER_AUDITORS=["garak","pyrit"]`), not comma-separated — that form only works
-> on the `--auditors` flag. Details in [Configuration Recipes](./env-examples.md#how-values-are-formatted-read-this-first).
+> on the `--auditors` flag. Details in [Configuration Recipes](./04-env-examples.md#how-values-are-formatted-read-this-first).
 
 ---
 
@@ -85,8 +85,7 @@ four**. Here's what to expect from each, and where it can trip up:
 > **Promptfoo prerequisites.** The `promptfoo` auditor shells out to a `promptfoo`
 > command that ships with the pip dependency, and its red-team generation reaches a
 > remote service, so that run needs **network access**. Promptfoo also asks for a
-> registration email; the tool sets a default automatically. If promptfoo errors,
-> check [Troubleshooting → promptfoo](./troubleshooting.md#promptfoo-fails-or-hangs).
+> registration email; the tool sets a default automatically.
 
 Before any auditor runs, the tool **pre-flights the scanner** — it verifies the target
 is reachable. If your curl command is wrong or the endpoint is down, you'll get a clear
@@ -129,7 +128,7 @@ Some auditors (garak's LLM-via-scanner mode, PyRIT multi-turn) require it.
 
 **b) Provide the judge.** The `PENTESTER_LLM__*` values and API key from step 1 are the
 judge — the model that decides whether a reply is a jailbreak. (Re-read
-[The judge is not the target](./concepts.md#the-judge-is-not-the-target) if that split
+[The judge is not the target](./02-concepts.md#the-judge-is-not-the-target) if that split
 feels fuzzy.)
 
 Run it:
@@ -242,5 +241,4 @@ read the results. From here:
 - Refine scope for your target using the levers in [step 5](#5-tune-scope-and-cost).
 - Go deep on a specific framework: [garak](../auditors/garak.md) ·
   [PyRIT](../auditors/pyrit.md) · [Inspect AI](../auditors/inspect_ai.md) ·
-  [Promptfoo](../promptfoo.md).
-- Hit a wall? [Troubleshooting](./troubleshooting.md).
+  [Promptfoo](../auditors/promptfoo.md).

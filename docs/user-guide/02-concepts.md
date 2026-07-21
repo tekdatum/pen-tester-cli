@@ -164,7 +164,7 @@ Each auditor has per-auditor knobs (which probes/datasets/benchmarks, its own
 `MAX_ATTACKS` cap that overrides the global one, multi-turn toggles). Those live in
 the per-auditor reference docs: [garak](../auditors/garak.md),
 [PyRIT](../auditors/pyrit.md), [Inspect AI](../auditors/inspect_ai.md),
-[Promptfoo](../promptfoo.md).
+[Promptfoo](../auditors/promptfoo.md).
 
 ---
 
@@ -215,4 +215,4 @@ the `PENTESTER_LLM__*` + key), the **scanner** reaches an OpenAI-style endpoint,
 **auditors** generate the attacks, and two report formats come out. That's the whole
 model.
 
-Next: [A Full Run](./full-run.md) exercises all of this against real targets.
+Next: [A Full Run](./03-full-run.md) exercises all of this against real targets.

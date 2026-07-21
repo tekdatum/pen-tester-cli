@@ -15,14 +15,13 @@ Read them in this order the first time. After that, treat them as a menu.
 
 | # | Guide | Read it when you want to… | Time |
 |---|---|---|---|
-| 1 | [Getting Started](./getting-started.md) | Install the tool and run your very first scan end to end. | ~10 min |
-| 2 | [Core Concepts](./concepts.md) | Build the mental model: how a scan actually flows, and the two decisions you always have to make. | ~10 min |
-| 3 | [A Full Run](./full-run.md) | Run every auditor against a real target — a semantic fence and an LLM — and read the reports. | ~30 min |
-| 4 | [Configuration Recipes](./env-examples.md) | Grab a complete, copy-pasteable `.env.local` for your exact scenario (incl. every promptfoo key). | as needed |
-| 5 | [Troubleshooting](./troubleshooting.md) | Fix a scan that errored, hung, or produced empty reports. | as needed |
+| 1 | [Getting Started](./01-getting-started.md) | Install the tool and run your very first scan end to end. | ~10 min |
+| 2 | [Core Concepts](./02-concepts.md) | Build the mental model: how a scan actually flows, and the two decisions you always have to make. | ~10 min |
+| 3 | [A Full Run](./03-full-run.md) | Run every auditor against a real target — a semantic fence and an LLM — and read the reports. | ~30 min |
+| 4 | [Configuration Recipes](./04-env-examples.md) | Grab a complete, copy-pasteable `.env.local` for your exact scenario. | as needed |
 
-> **New here?** Do [Getting Started](./getting-started.md) first, run one small scan,
-> *then* read [Core Concepts](./concepts.md). The concepts land better once you've
+> **New here?** Do [Getting Started](./01-getting-started.md) first, run one small scan,
+> *then* read [Core Concepts](./02-concepts.md). The concepts land better once you've
 > seen a real report.
 
 ---
@@ -37,7 +36,7 @@ which ones got through. To run a scan you only ever decide two things:
 2. **How do I know an attack succeeded?** — read a field from the target's JSON
    response (a *semantic fence*), or let a judge model grade the reply (an *LLM*).
 
-Everything else has a default. [Core Concepts](./concepts.md) unpacks both decisions.
+Everything else has a default. [Core Concepts](./02-concepts.md) unpacks both decisions.
 
 ---
 
@@ -49,4 +48,4 @@ When a guide sends you looking for detail, these are the reference pages:
 - [Scanner](../scanner.md) — how requests reach your target
 - [Reporting](../reporting.md) — report formats and layout
 - [Environment setup](../environment.md) — building a dev virtual environment
-- Per-auditor detail: [garak](../auditors/garak.md) · [PyRIT](../auditors/pyrit.md) · [Inspect AI](../auditors/inspect_ai.md) · [Promptfoo](../promptfoo.md) · [Venv isolation](../auditors/venv.md)
+- Per-auditor detail: [garak](../auditors/garak.md) · [PyRIT](../auditors/pyrit.md) · [Inspect AI](../auditors/inspect_ai.md) · [Promptfoo](../auditors/promptfoo.md) · [Venv isolation](../auditors/venv.md)
