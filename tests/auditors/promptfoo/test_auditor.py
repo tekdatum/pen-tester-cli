@@ -427,6 +427,11 @@ class TestProvidersFromLLMSettings:
         auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
         assert auditor.providers == [{"id": "anthropic:claude-3-5-sonnet-latest"}]
 
+    def test_deepseek_provider_composes_correctly(self) -> None:
+        llm = LLMSettings(provider=LLMProvider.DEEPSEEK, model="deepseek-chat")
+        auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
+        assert auditor.providers == [{"id": "deepseek:deepseek-chat"}]
+
     def test_warning_logged_when_target_is_llm_but_no_model_and_no_scanner(
         self,
     ) -> None:
@@ -999,6 +1004,11 @@ class TestValidatePreconditions:
     def test_llm_passes_when_any_known_key_is_set(self) -> None:
         auditor = _make_auditor(target_type=TargetType.LLM)
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True):
+            auditor._validate_preconditions()  # should not raise
+
+    def test_llm_passes_when_deepseek_key_is_set(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-ds-test"}, clear=True):
             auditor._validate_preconditions()  # should not raise
 
     def test_llm_raises_when_no_key_is_set(self) -> None:
