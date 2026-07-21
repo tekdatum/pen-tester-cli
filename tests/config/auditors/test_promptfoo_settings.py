@@ -39,9 +39,9 @@ class TestDefaults:
         settings = PromptfooSettings()
         assert settings.max_tests == 20000
 
-    def test_output_path_default(self) -> None:
+    def test_output_path_default_is_none(self) -> None:
         settings = PromptfooSettings()
-        assert settings.output_path == "./output/promptfoo"
+        assert settings.output_path is None
 
     def test_target_label_default(self) -> None:
         settings = PromptfooSettings()
