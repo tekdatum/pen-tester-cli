@@ -81,17 +81,14 @@ class TestStringRepresentation:
         provider = _make_provider(url="http://my-api.com", method="GET", timeout=9999)
         output = str(provider)
 
-        expected_labels = [
-            "URL:",
-            "METHOD:",
-            "HEADERS:",
-            "TIMEOUT:",
-            "BODY_TEMPLATE:",
-            "RESPONSE_PARSER:",
-        ]
-        for label in expected_labels:
-            assert label in output
+        # Parse "LABEL: value" lines and compare values exactly rather than
+        # via substring checks, which are weaker and trip CodeQL's
+        # incomplete-url-substring-sanitization heuristic.
+        parsed = dict(line.split(": ", 1) for line in output.splitlines())
 
-        assert "http://my-api.com" in output
-        assert "GET" in output
-        assert "9999" in output
+        assert parsed["URL"] == "http://my-api.com"
+        assert parsed["METHOD"] == "GET"
+        assert parsed["HEADERS"] == "{}"
+        assert parsed["TIMEOUT"] == "9999"
+        assert parsed["BODY_TEMPLATE"] == "{{prompt}}"
+        assert parsed["RESPONSE_PARSER"] == "None"
