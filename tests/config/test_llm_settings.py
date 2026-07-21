@@ -40,6 +40,9 @@ class TestDirectInit:
     def test_set_provider_by_string_value(self) -> None:
         assert LLMSettings(provider="gemini").provider == LLMProvider.GEMINI
 
+    def test_set_provider_deepseek_by_string_value(self) -> None:
+        assert LLMSettings(provider="deepseek").provider == LLMProvider.DEEPSEEK
+
 
 class TestLLMProviderEnum:
     @pytest.mark.parametrize("member", list(LLMProvider))
@@ -54,3 +57,6 @@ class TestLLMProviderEnum:
 
     def test_gemini_value(self) -> None:
         assert LLMProvider.GEMINI == "gemini"
+
+    def test_deepseek_value(self) -> None:
+        assert LLMProvider.DEEPSEEK == "deepseek"
