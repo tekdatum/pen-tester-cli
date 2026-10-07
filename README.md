@@ -186,7 +186,7 @@ Some auditors need an LLM to judge whether a target's response constitutes a byp
 Configure the judge via `PENTESTER_LLM__*` env vars:
 
 ```bash
-PENTESTER_LLM__PROVIDER=openai   # openai | anthropic | gemini
+PENTESTER_LLM__PROVIDER=openai   # openai | anthropic | gemini | deepseek
 PENTESTER_LLM__MODEL=gpt-4o-mini
 OPENAI_API_KEY=sk-...
 ```
@@ -196,6 +196,7 @@ OPENAI_API_KEY=sk-...
 | `openai` | `OPENAI_API_KEY` |
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `gemini` | `GEMINI_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
 
 ---
 
@@ -272,18 +273,19 @@ OPENAI_API_KEY=sk-...
 
 | Variable | Default | Description |
 |---|---|---|
-| `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `./output/` | Directory where report files are written |
+| `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `./output/` | Directory where report files are written. Also the base for the promptfoo auditor's working files (`<dir>/promptfoo/`) unless `PENTESTER_PROMPTFOO__OUTPUT_PATH` is set explicitly. |
 | `PENTESTER_REPORTING__GENERATOR_KEYS` | `html,markdown,csv,pdf` | Comma-separated list of report formats to generate |
 
 ### LLM judge
 
 | Variable | Default | Description |
 |---|---|---|
-| `PENTESTER_LLM__PROVIDER` | `openai` | LLM provider for the judge: `openai`, `anthropic`, or `gemini` |
+| `PENTESTER_LLM__PROVIDER` | `openai` | LLM provider for the judge: `openai`, `anthropic`, `gemini`, or `deepseek` |
 | `PENTESTER_LLM__MODEL` | `""` | Model name without provider prefix (e.g. `gpt-4o-mini`) |
 | `OPENAI_API_KEY` | — | Required when `PENTESTER_LLM__PROVIDER=openai` |
 | `ANTHROPIC_API_KEY` | — | Required when `PENTESTER_LLM__PROVIDER=anthropic` |
 | `GEMINI_API_KEY` | — | Required when `PENTESTER_LLM__PROVIDER=gemini` |
+| `DEEPSEEK_API_KEY` | — | Required when `PENTESTER_LLM__PROVIDER=deepseek` |
 
 ### Garak
 
@@ -320,6 +322,7 @@ OPENAI_API_KEY=sk-...
 
 | Variable | Default | Description |
 |---|---|---|
+| `PENTESTER_PROMPTFOO__OUTPUT_PATH` | *(derived)* | Working dir for generated `tests/` and `results/`. Defaults to `<PENTESTER_REPORTING__OUTPUT_DIR_PATH>/promptfoo`; set explicitly to override. |
 | `PENTESTER_PROMPTFOO__MAX_ATTACKS` | `None` | Attack cap for Promptfoo. Overrides `PENTESTER_MAX_ATTACKS`. |
 | `PENTESTER_PROMPTFOO__PLUGIN_NUM_TESTS` | `None` | Override `numTests` on every plugin in generated config files |
 | `PENTESTER_PROMPTFOO__ENABLE_MULTITURN` | `false` | Enable multi-turn attack strategies |

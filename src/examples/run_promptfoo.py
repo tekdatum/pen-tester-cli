@@ -9,7 +9,7 @@ Configure the remaining options via environment variables or a .env file before 
     PENTESTER_PROMPTFOO__REPLACE_EXISTING_FILE=False
     PENTESTER_PROMPTFOO__FILES_PARALLEL=5
     PENTESTER_PROMPTFOO__INTERNAL_CONCURRENCY=4
-    PENTESTER_PROMPTFOO__MAX_TESTS=20000
+    PENTESTER_PROMPTFOO__MAX_ATTACKS=20000  # total attacks across audit; omit for all
     PENTESTER_PROMPTFOO__PLUGINS_PER_FILE=1   # plugins bundled per test YAML (1-5)
     PENTESTER_PROMPTFOO__MAX_TEST_FILES=5 # cap on generated test YAMLs (omit for all)
     PENTESTER_PROMPTFOO__OUTPUT_PATH=./output/promptfoo
@@ -45,7 +45,7 @@ print(f"  assertion_wrapper_path:   {settings.promptfoo.assertion_wrapper_path}"
 print(f"  replace_existing_file:    {settings.promptfoo.replace_existing_file}")
 print(f"  files_parallel:           {settings.promptfoo.files_parallel}")
 print(f"  internal_concurrency:     {settings.promptfoo.internal_concurrency}")
-print(f"  max_tests:                {settings.promptfoo.max_tests}")
+print(f"  max_attacks:              {settings.promptfoo.max_attacks}")
 print(f"  plugins_per_file:         {settings.promptfoo.plugins_per_file}")
 print(f"  max_test_files:           {settings.promptfoo.max_test_files}")
 print(f"  output_path:              {settings.promptfoo.output_path}")

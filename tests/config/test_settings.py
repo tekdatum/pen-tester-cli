@@ -192,6 +192,43 @@ class TestPromptfooModelEnvVarOverrides:
         assert settings.promptfoo.judge_model == "openai:gpt-4o"
 
 
+class TestPromptfooOutputPathDerivation:
+    def test_defaults_to_reporting_dir_subdir(self) -> None:
+        settings = PentesterSettings()
+        assert Path(settings.promptfoo.output_path) == Path("./output/promptfoo")
+
+    def test_derives_from_reporting_output_dir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_REPORTING__OUTPUT_DIR_PATH", "/custom/reports")
+        settings = PentesterSettings()
+        assert Path(settings.promptfoo.output_path) == Path("/custom/reports/promptfoo")
+
+    def test_derived_path_flows_to_results_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_REPORTING__OUTPUT_DIR_PATH", "/custom/reports")
+        settings = PentesterSettings()
+        assert settings.promptfoo.results_path == Path(
+            "/custom/reports/promptfoo/results"
+        )
+
+    def test_explicit_output_path_overrides_reporting(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_REPORTING__OUTPUT_DIR_PATH", "/custom/reports")
+        monkeypatch.setenv("PENTESTER_PROMPTFOO__OUTPUT_PATH", "/explicit/pf")
+        settings = PentesterSettings()
+        assert settings.promptfoo.output_path == "/explicit/pf"
+
+    def test_explicit_output_path_flows_to_results_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PENTESTER_PROMPTFOO__OUTPUT_PATH", "/explicit/pf")
+        settings = PentesterSettings()
+        assert settings.promptfoo.results_path == Path("/explicit/pf/results")
+
+
 class TestMaxAttacks:
     def test_default_max_attacks_is_none(self) -> None:
         settings = PentesterSettings()

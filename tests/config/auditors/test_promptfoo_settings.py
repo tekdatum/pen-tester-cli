@@ -35,13 +35,9 @@ class TestDefaults:
         settings = PromptfooSettings()
         assert settings.semantic_fence_concurrency == 100
 
-    def test_max_tests_default(self) -> None:
+    def test_output_path_default_is_none(self) -> None:
         settings = PromptfooSettings()
-        assert settings.max_tests == 20000
-
-    def test_output_path_default(self) -> None:
-        settings = PromptfooSettings()
-        assert settings.output_path == "./output/promptfoo"
+        assert settings.output_path is None
 
     def test_target_label_default(self) -> None:
         settings = PromptfooSettings()
@@ -148,10 +144,6 @@ class TestDirectInit:
         settings = PromptfooSettings(internal_concurrency=8)
         assert settings.internal_concurrency == 8
 
-    def test_set_max_tests(self) -> None:
-        settings = PromptfooSettings(max_tests=500)
-        assert settings.max_tests == 500
-
     def test_set_output_path(self) -> None:
         settings = PromptfooSettings(output_path="/my/output")
         assert settings.output_path == "/my/output"
@@ -226,6 +218,22 @@ class TestMaxAttacks:
     def test_accepts_none_explicitly(self) -> None:
         assert PromptfooSettings(max_attacks=None).max_attacks is None
 
+    def test_rejects_zero(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(max_attacks=0)
+
+    def test_rejects_negative(self) -> None:
+        with pytest.raises(ValidationError):
+            PromptfooSettings(max_attacks=-1)
+
+    def test_stray_max_tests_kwarg_is_ignored(self) -> None:
+        # After the max_tests -> max_attacks rename, a leftover max_tests is an
+        # unknown field. extra="ignore" must drop it silently (no crash) rather
+        # than raise, and it must not affect max_attacks.
+        settings = PromptfooSettings(max_tests=99)  # type: ignore[call-arg]
+        assert settings.max_attacks is None
+        assert not hasattr(settings, "max_tests")
+
 
 class TestPluginNumTests:
     def test_default_is_none(self) -> None:
@@ -294,11 +302,6 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("INTERNAL_CONCURRENCY", "16")
         settings = PromptfooSettings()
         assert settings.internal_concurrency == 16
-
-    def test_max_tests_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("MAX_TESTS", "100")
-        settings = PromptfooSettings()
-        assert settings.max_tests == 100
 
     def test_output_path_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OUTPUT_PATH", "/env/output")

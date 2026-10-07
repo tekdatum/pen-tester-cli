@@ -30,16 +30,11 @@ class TestInit:
         runner = PromptfooRunner(results_path=Path("/tmp"))
         assert runner.files_parallel == 5
         assert runner.concurrency == 4
-        assert runner.max_tests == 20000
         assert runner.default_email == "tools@tekdatum.com"
 
     def test_initializes_with_custom_default_email(self) -> None:
         runner = _make_runner(default_email="custom@example.com")
         assert runner.default_email == "custom@example.com"
-
-    def test_initializes_with_max_tests(self) -> None:
-        runner = _make_runner(max_tests=500)
-        assert runner.max_tests == 500
 
 
 class TestRunEval:
@@ -85,7 +80,8 @@ class TestRunEval:
             "-c" in command and command[command.index("-c") + 1] == "/test/my_test.yaml"
         )
         assert "-j" in command and command[command.index("-j") + 1] == "12"
-        assert "-n" in command and command[command.index("-n") + 1] == "20000"
+        # No n passed → no -n flag.
+        assert "-n" not in command
         assert "--output" in command
         assert "my_test_result" in command[command.index("--output") + 1]
         assert command[command.index("--output") + 1].endswith(".jsonl")
@@ -102,11 +98,17 @@ class TestRunEval:
         assert "capture_output" not in kwargs
         assert "text" not in kwargs
 
-    def test_max_tests_flag_uses_configured_value(self) -> None:
-        _make_runner(max_tests=42).run_eval(Path("/test/my_test.yaml"))
+    def test_n_flag_uses_passed_value(self) -> None:
+        _make_runner().run_eval(Path("/test/my_test.yaml"), n=42)
 
         command = self.mock_run.call_args[0][0]
         assert "-n" in command and command[command.index("-n") + 1] == "42"
+
+    def test_omits_n_flag_when_n_is_none(self) -> None:
+        _make_runner().run_eval(Path("/test/my_test.yaml"), n=None)
+
+        command = self.mock_run.call_args[0][0]
+        assert "-n" not in command
 
     def test_concurrency_override_replaces_self_concurrency_in_command(self) -> None:
         _make_runner(concurrency=5).run_eval(Path("/test/my_test.yaml"), concurrency=99)
@@ -207,7 +209,36 @@ class TestRunAll:
         ) as mock_eval:
             runner.run_all(files, concurrency=77)
 
-        mock_eval.assert_called_once_with(files[0], 77)
+        # caps=None → n is None; run_eval is called (file, concurrency, n).
+        mock_eval.assert_called_once_with(files[0], 77, None)
+
+    def test_passes_per_file_cap_as_n_to_run_eval(self) -> None:
+        runner = _make_runner()
+        files = [Path("/test/a.yaml"), Path("/test/b.yaml")]
+        caps = {files[0]: 3, files[1]: 5}
+
+        with patch.object(
+            runner, "run_eval", side_effect=[(True, "a.yaml"), (True, "b.yaml")]
+        ) as mock_eval:
+            runner.run_all(files, caps=caps)
+
+        # Each file gets its allocated -n budget as the third positional arg.
+        called_n = {call.args[0]: call.args[2] for call in mock_eval.call_args_list}
+        assert called_n == {files[0]: 3, files[1]: 5}
+
+    def test_skips_files_with_zero_cap(self) -> None:
+        runner = _make_runner()
+        files = [Path("/test/a.yaml"), Path("/test/b.yaml")]
+        caps = {files[0]: 2, files[1]: 0}
+
+        with patch.object(
+            runner, "run_eval", return_value=(True, "a.yaml")
+        ) as mock_eval:
+            results = runner.run_all(files, caps=caps)
+
+        # b.yaml has no budget → not evaluated, absent from results.
+        mock_eval.assert_called_once_with(files[0], None, 2)
+        assert [r[0] for r in results] == [files[0]]
 
 
 class TestEnsureEmailConfigured:

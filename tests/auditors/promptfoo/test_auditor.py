@@ -156,7 +156,6 @@ class TestInit:
         auditor = _make_auditor(scanner=mock_scanner)
         assert auditor._scanner is mock_scanner
 
-
 class TestEnsureDirectories:
     def test_creates_required_directories_with_correct_flags(self) -> None:
         mock_cm = MagicMock()
@@ -427,6 +426,40 @@ class TestProvidersFromLLMSettings:
         auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
         assert auditor.providers == [{"id": "anthropic:claude-3-5-sonnet-latest"}]
 
+    def test_deepseek_provider_composes_correctly(self) -> None:
+        llm = LLMSettings(provider=LLMProvider.DEEPSEEK, model="deepseek-chat")
+        auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
+        assert auditor.providers == [{"id": "deepseek:deepseek-chat"}]
+
+    def test_provider_id_set_from_llm_settings(self) -> None:
+        # Regression: the LLM path must set provider_id, not just providers.
+        # It previously set only self.providers, leaving self.provider_id unset.
+        llm = LLMSettings(provider=LLMProvider.OPENAI, model="gpt-4o")
+        auditor = _make_auditor(target_type=TargetType.LLM, llm_settings=llm)
+        assert auditor.provider_id == "openai:gpt-4o"
+
+    def test_llm_provider_id_flows_into_test_file_configuration(
+        self, tmp_path: Path
+    ) -> None:
+        # Regression: with an LLM target AND a scanner present (e.g. a custom
+        # handler), the guard in _configure_provider_in_test_files passes and it
+        # reads self.provider_id. When the LLM path failed to set it, this
+        # raised AttributeError before reaching the config manager.
+        llm = LLMSettings(provider=LLMProvider.DEEPSEEK, model="deepseek-chat")
+        auditor = _make_auditor(
+            target_type=TargetType.LLM,
+            scanner=MagicMock(),
+            llm_settings=llm,
+        )
+        cfg_dir = tmp_path / "configurations"
+        cfg_dir.mkdir()
+
+        auditor._configure_provider_in_test_files(cfg_dir)
+
+        auditor.config_manager.configure_provider_in_test_files.assert_called_once_with(
+            cfg_dir, auditor.providers[0], "deepseek:deepseek-chat"
+        )
+
     def test_warning_logged_when_target_is_llm_but_no_model_and_no_scanner(
         self,
     ) -> None:
@@ -677,6 +710,57 @@ class TestPrepareAuditFiles:
         assert files[0].parent == llm_dir
 
 
+class TestAllocateAttackBudget:
+    def test_returns_none_when_max_attacks_unset(self) -> None:
+        auditor = _make_auditor(_make_settings(max_attacks=None))
+        assert auditor._allocate_attack_budget([Path("/test_1.yaml")]) is None
+
+    def test_fills_first_n_across_files(self) -> None:
+        auditor = _make_auditor(_make_settings(max_attacks=5))
+        # Two files with 3 tests each; a budget of 5 fills the first fully and the
+        # second partially — inputs[:max_attacks] semantics spread across files.
+        auditor.config_manager.load_config.return_value = {"tests": [1, 2, 3]}
+
+        budget = auditor._allocate_attack_budget(
+            [Path("/test_1.yaml"), Path("/test_2.yaml")]
+        )
+
+        assert budget == {Path("/test_1.yaml"): 3, Path("/test_2.yaml"): 2}
+
+    def test_extra_files_get_zero_once_budget_exhausted(self) -> None:
+        auditor = _make_auditor(_make_settings(max_attacks=2))
+        auditor.config_manager.load_config.return_value = {"tests": [1, 2, 3]}
+
+        budget = auditor._allocate_attack_budget(
+            [Path("/test_1.yaml"), Path("/test_2.yaml")]
+        )
+
+        # First file absorbs the whole budget; the second is skippable (0).
+        assert budget == {Path("/test_1.yaml"): 2, Path("/test_2.yaml"): 0}
+
+    def test_total_allocation_never_exceeds_max_attacks(self) -> None:
+        auditor = _make_auditor(_make_settings(max_attacks=4))
+        auditor.config_manager.load_config.return_value = {"tests": [1, 2, 3]}
+
+        budget = auditor._allocate_attack_budget(
+            [Path("/test_1.yaml"), Path("/test_2.yaml"), Path("/test_3.yaml")]
+        )
+
+        assert sum(budget.values()) == 4
+
+    def test_single_turn_files_allocated_before_multiturn(self) -> None:
+        auditor = _make_auditor(_make_settings(max_attacks=3))
+        auditor.config_manager.load_config.return_value = {"tests": [1, 2, 3]}
+
+        budget = auditor._allocate_attack_budget(
+            [Path("/multiturn_test_1.yaml"), Path("/test_1.yaml")]
+        )
+
+        # Single-turn file wins the budget; the multiturn file is skipped.
+        assert budget[Path("/test_1.yaml")] == 3
+        assert budget[Path("/multiturn_test_1.yaml")] == 0
+
+
 class TestProcessEvalResults:
     def test_validates_successful_evaluations_only(self) -> None:
         auditor = _make_auditor()
@@ -693,6 +777,30 @@ class TestProcessEvalResults:
         # Only validates the 2 successful ones. Each yaml loaded had 2 tests.
         assert auditor.collector.validate.call_count == 2
         assert auditor.collector.validate.call_args_list[0][0][2] == 2
+
+    def test_validate_count_is_capped_by_allocated_budget(self) -> None:
+        auditor = _make_auditor()
+        auditor.collector = MagicMock()
+        auditor.config_manager.load_config.return_value = {"tests": [1, 2, 3]}
+        # This file was allocated 1 attack from the global budget.
+        auditor._attack_budget = {Path("/a.yaml"): 1}
+
+        auditor._process_eval_results([(Path("/a.yaml"), True, "a.yaml")])
+
+        # 3 generated tests, but only its allocated slice (1) is expected.
+        assert auditor.collector.validate.call_args[0][2] == 1
+
+    def test_validate_count_uncapped_when_no_budget(self) -> None:
+        auditor = _make_auditor(_make_settings(max_attacks=None))
+        auditor.collector = MagicMock()
+        auditor.config_manager.load_config.return_value = {"tests": [1, 2, 3]}
+        # No max_attacks → no budget allocated → uncapped.
+        assert auditor._attack_budget is None
+
+        auditor._process_eval_results([(Path("/a.yaml"), True, "a.yaml")])
+
+        # No cap → expect all generated tests.
+        assert auditor.collector.validate.call_args[0][2] == 3
 
 
 # ---------------------------------------------------------------------------
@@ -1001,6 +1109,11 @@ class TestValidatePreconditions:
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True):
             auditor._validate_preconditions()  # should not raise
 
+    def test_llm_passes_when_deepseek_key_is_set(self) -> None:
+        auditor = _make_auditor(target_type=TargetType.LLM)
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-ds-test"}, clear=True):
+            auditor._validate_preconditions()  # should not raise
+
     def test_llm_raises_when_no_key_is_set(self) -> None:
         auditor = _make_auditor(target_type=TargetType.LLM)
         with patch.dict(os.environ, {}, clear=True):
@@ -1179,7 +1292,7 @@ class TestAudit:
         mock_clean.assert_called_once()
         mock_prep.assert_called_once()
         mock_run.assert_called_once_with(
-            files, concurrency=auditor.settings.semantic_fence_concurrency
+            files, concurrency=auditor.settings.semantic_fence_concurrency, caps=None
         )
         mock_proc.assert_called_once_with(runner_output)
         mock_build.assert_called_once()
