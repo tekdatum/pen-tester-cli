@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -80,7 +81,7 @@ _garak_mod.command = _garak_command_mod
 _garak_mod.evaluators = _garak_evaluators_mod
 _garak_evaluators_mod.base = _garak_evaluators_base_mod
 
-from pentester.auditors.garak.auditor import GarakAuditor  # noqa: E402
+from pentester.auditors.garak.auditor import GarakAuditor, _Attack  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
@@ -866,3 +867,427 @@ class TestMaxAttacks:
     def test_max_attacks_is_readable_when_set(self) -> None:
         auditor = _make_auditor(settings=GarakSettings(max_attacks=50))
         assert auditor._settings.max_attacks == 50
+
+
+# ---------------------------------------------------------------------------
+# audit — target type dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestAuditDispatch:
+    def test_semantic_fence_without_scanner_raises(self) -> None:
+        auditor = _make_auditor()
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=[]),
+        ):
+            with pytest.raises(ValueError, match="No scanner configured"):
+                auditor.audit()
+
+    def test_unset_target_type_returns_no_results(self) -> None:
+        auditor = _make_auditor(scanner=MagicMock())
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(
+                auditor,
+                "_load_probes",
+                return_value=[_make_probe("probes.dan.Dan1", ["p"])],
+            ),
+        ):
+            results, _ = auditor.audit()
+        assert results == []
+
+    def test_fence_scanner_exception_returns_error_result(self) -> None:
+        mock_scanner = MagicMock()
+        mock_scanner.scan.side_effect = RuntimeError("connection refused")
+        auditor = _make_auditor(scanner=mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(
+                auditor,
+                "_load_probes",
+                return_value=[_make_probe("probes.dan.Dan1", ["p"])],
+            ),
+            patch("pentester.auditors.garak.auditor.logger"),
+        ):
+            results, _ = auditor.audit()
+        assert results[0].metadata == {"error": "True"}
+
+    def test_llm_none_response_yields_empty_text(self) -> None:
+        mock_generator = MagicMock()
+        mock_generator.generate.return_value = [None]
+        auditor = _make_llm_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(
+                auditor,
+                "_load_probes",
+                return_value=[_make_probe("probes.dan.Dan1", ["p"])],
+            ),
+            patch.object(
+                auditor, "_init_objective_generator", return_value=mock_generator
+            ),
+            patch.object(auditor, "_evaluate", return_value=0.0),
+        ):
+            results, _ = auditor.audit()
+        assert results[0].response == ""
+
+
+# ---------------------------------------------------------------------------
+# _build_attacks
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAttacks:
+    def test_flattens_probes_in_order(self) -> None:
+        p1 = _make_probe("probes.dan.Dan1", ["a", "b"])
+        p2 = _make_probe("probes.xss.Xss1", ["c"])
+        attacks = _make_llm_auditor()._build_attacks([p1, p2])
+        assert [(a.probe, a.prompt) for a in attacks] == [
+            (p1, "a"),
+            (p1, "b"),
+            (p2, "c"),
+        ]
+
+    def test_max_attacks_caps_each_probe(self) -> None:
+        probes = [
+            _make_probe("probes.dan.Dan1", ["a", "b", "c"]),
+            _make_probe("probes.xss.Xss1", ["d", "e", "f"]),
+        ]
+        auditor = _make_llm_auditor(settings=GarakSettings(max_attacks=2))
+        assert [a.prompt for a in auditor._build_attacks(probes)] == [
+            "a",
+            "b",
+            "d",
+            "e",
+        ]
+
+    def test_conversation_prompt_uses_first_turn_text(self) -> None:
+        conversation = MagicMock()
+        conversation.turns[0].content.text = "from conversation"
+        probe = _make_probe("probes.dan.Dan1", [conversation])
+        attacks = _make_llm_auditor()._build_attacks([probe])
+        assert attacks[0].prompt == "from conversation"
+
+    def test_llm_skips_blank_prompts(self) -> None:
+        probe = _make_probe("probes.dan.Dan1", ["", "  ", "real"])
+        attacks = _make_llm_auditor()._build_attacks([probe])
+        assert [a.prompt for a in attacks] == ["real"]
+
+    def test_semantic_fence_keeps_blank_prompts(self) -> None:
+        auditor = _make_auditor()
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        probe = _make_probe("probes.dan.Dan1", ["", "real"])
+        assert len(auditor._build_attacks([probe])) == 2
+
+
+# ---------------------------------------------------------------------------
+# _run_attacks — concurrency
+# ---------------------------------------------------------------------------
+
+
+def _make_attacks(*prompts: str) -> list[_Attack]:
+    probe = _make_probe("probes.dan.Dan1", list(prompts))
+    return [_Attack(probe=probe, prompt=p) for p in prompts]
+
+
+def _echo_build(attack: _Attack, response: str) -> ProbeResult:
+    return ProbeResult(
+        auditor="garak",
+        attack_category="dan",
+        attack_type="Dan1",
+        prompt=attack.prompt,
+        response=response,
+        bypassed=False,
+        score=None,
+    )
+
+
+def _make_parallel_auditor(parallel_attempts: int) -> GarakAuditor:
+    return _make_auditor(settings=GarakSettings(parallel_attempts=parallel_attempts))
+
+
+class TestRunAttacks:
+    def test_sends_every_attack(self) -> None:
+        send = MagicMock(return_value="r")
+        _make_parallel_auditor(3)._run_attacks(
+            _make_attacks("a", "b", "c"), send, _echo_build
+        )
+        assert sorted(c.args[0] for c in send.call_args_list) == ["a", "b", "c"]
+
+    def test_send_response_flows_into_build(self) -> None:
+        send = MagicMock(return_value="target reply")
+        results = _make_parallel_auditor(1)._run_attacks(
+            _make_attacks("a"), send, _echo_build
+        )
+        assert results[0].response == "target reply"
+
+    def test_uses_parallel_attempts_as_max_workers(self) -> None:
+        with patch(
+            "pentester.auditors.garak.auditor.ThreadPoolExecutor",
+            wraps=__import__("concurrent.futures").futures.ThreadPoolExecutor,
+        ) as mock_executor:
+            _make_parallel_auditor(4)._run_attacks(
+                _make_attacks("a"), MagicMock(return_value="r"), _echo_build
+            )
+        mock_executor.assert_called_once_with(max_workers=4)
+
+    def test_attacks_run_concurrently(self) -> None:
+        # Both sends must be in flight at the same time to pass the barrier;
+        # a sequential run would break it and produce ERROR results.
+        barrier = threading.Barrier(2, timeout=5)
+
+        def send(prompt: str) -> str:
+            barrier.wait()
+            return prompt
+
+        with patch("pentester.auditors.garak.auditor.logger"):
+            results = _make_parallel_auditor(2)._run_attacks(
+                _make_attacks("a", "b"), send, _echo_build
+            )
+        assert not any(r.is_error for r in results)
+
+    def test_single_worker_runs_sequentially(self) -> None:
+        lock = threading.Lock()
+        state = {"in_flight": 0, "peak": 0}
+
+        def send(prompt: str) -> str:
+            with lock:
+                state["in_flight"] += 1
+                state["peak"] = max(state["peak"], state["in_flight"])
+            with lock:
+                state["in_flight"] -= 1
+            return prompt
+
+        _make_parallel_auditor(1)._run_attacks(
+            _make_attacks("a", "b", "c"), send, _echo_build
+        )
+        assert state["peak"] == 1
+
+    def test_results_keep_input_order_when_completion_order_differs(self) -> None:
+        fast_done = threading.Event()
+
+        def send(prompt: str) -> str:
+            if prompt == "slow":
+                fast_done.wait(timeout=5)
+            else:
+                fast_done.set()
+            return prompt
+
+        results = _make_parallel_auditor(2)._run_attacks(
+            _make_attacks("slow", "fast"), send, _echo_build
+        )
+        assert [r.prompt for r in results] == ["slow", "fast"]
+
+    def test_build_runs_in_calling_thread(self) -> None:
+        build_threads: list[int] = []
+
+        def build(attack: _Attack, response: str) -> ProbeResult:
+            build_threads.append(threading.get_ident())
+            return _echo_build(attack, response)
+
+        _make_parallel_auditor(3)._run_attacks(
+            _make_attacks("a", "b", "c"), MagicMock(return_value="r"), build
+        )
+        assert set(build_threads) == {threading.get_ident()}
+
+    def test_send_exception_returns_error_result(self) -> None:
+        send = MagicMock(side_effect=RuntimeError("timeout"))
+        with patch("pentester.auditors.garak.auditor.logger"):
+            results = _make_parallel_auditor(2)._run_attacks(
+                _make_attacks("a"), send, _echo_build
+            )
+        assert results[0].response == "ERROR"
+
+    def test_send_exception_marks_metadata_error(self) -> None:
+        send = MagicMock(side_effect=RuntimeError("timeout"))
+        with patch("pentester.auditors.garak.auditor.logger"):
+            results = _make_parallel_auditor(2)._run_attacks(
+                _make_attacks("a"), send, _echo_build
+            )
+        assert results[0].metadata == {"error": "True"}
+
+    def test_send_exception_logs(self) -> None:
+        send = MagicMock(side_effect=RuntimeError("timeout"))
+        with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
+            _make_parallel_auditor(2)._run_attacks(
+                _make_attacks("a"), send, _echo_build
+            )
+        mock_logger.exception.assert_called_once()
+
+    def test_one_failure_does_not_drop_other_results(self) -> None:
+        def send(prompt: str) -> str:
+            if prompt == "bad":
+                raise RuntimeError("boom")
+            return prompt
+
+        with patch("pentester.auditors.garak.auditor.logger"):
+            results = _make_parallel_auditor(2)._run_attacks(
+                _make_attacks("good", "bad", "good2"), send, _echo_build
+            )
+        assert [r.is_error for r in results] == [False, True, False]
+
+    def test_build_exception_returns_error_result(self) -> None:
+        build = MagicMock(side_effect=RuntimeError("detector crashed"))
+        with patch("pentester.auditors.garak.auditor.logger"):
+            results = _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a"), MagicMock(return_value="r"), build
+            )
+        assert results[0].response == "ERROR"
+
+    def test_interrupt_cancels_queued_attacks(self) -> None:
+        release = threading.Event()
+
+        def send(prompt: str) -> str:
+            if prompt != "a":
+                release.wait(timeout=0.5)
+            return prompt
+
+        sends = MagicMock(side_effect=send)
+        build = MagicMock(side_effect=KeyboardInterrupt)
+        with pytest.raises(KeyboardInterrupt):
+            _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a", "b", "c", "d", "e"), sends, build
+            )
+        assert sends.call_count <= 2
+
+    def test_empty_attack_list_returns_empty(self) -> None:
+        assert (
+            _make_parallel_auditor(2)._run_attacks([], MagicMock(), _echo_build) == []
+        )
+
+
+# ---------------------------------------------------------------------------
+# _get_detector
+# ---------------------------------------------------------------------------
+
+
+class TestDetectorCache:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:  # type: ignore[override]
+        _garak_plugins_mod.load_plugin.reset_mock(side_effect=True, return_value=True)
+        detector = MagicMock()
+        detector.detect.return_value = [0.1]
+        _garak_plugins_mod.load_plugin.return_value = detector
+
+    def test_detector_loaded_once_across_evaluations(self) -> None:
+        probe = MagicMock()
+        probe.detector_specs = ["detectors.always.Fail"]
+        auditor = _make_llm_auditor()
+        auditor._evaluate(probe, "first", [])
+        auditor._evaluate(probe, "second", [])
+        _garak_plugins_mod.load_plugin.assert_called_once_with("detectors.always.Fail")
+
+    def test_returns_loaded_plugin(self) -> None:
+        result = _make_llm_auditor()._get_detector("detectors.always.Fail")
+        assert result is _garak_plugins_mod.load_plugin.return_value
+
+
+# ---------------------------------------------------------------------------
+# _init_objective_generator — scanner path
+# ---------------------------------------------------------------------------
+
+
+class TestInitObjectiveGeneratorScanner:
+    def test_scanner_wraps_in_scanner_generator(self) -> None:
+        mock_scanner = MagicMock()
+        with patch(
+            "pentester.auditors.garak.auditor.ScannerGenerator"
+        ) as mock_generator_cls:
+            _make_llm_auditor(scanner=mock_scanner)._init_objective_generator()
+        mock_generator_cls.assert_called_once_with(mock_scanner)
+
+
+# ---------------------------------------------------------------------------
+# audit — retries
+# ---------------------------------------------------------------------------
+
+
+class TestAuditRetries:
+    def _audit_fence(self, settings: GarakSettings) -> MagicMock:
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = _make_scan_result()
+        auditor = _make_auditor(settings=settings, scanner=mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(
+                auditor,
+                "_load_probes",
+                return_value=[_make_probe("probes.dan.Dan1", ["p"])],
+            ),
+            patch("pentester.auditors.garak.auditor.with_retries") as mock_retries,
+        ):
+            mock_retries.side_effect = lambda send, max_retries: send
+            auditor.audit()
+        return mock_retries
+
+    def test_send_wrapped_with_configured_max_retries(self) -> None:
+        mock_retries = self._audit_fence(GarakSettings(max_retries=5))
+        assert mock_retries.call_args.kwargs == {"max_retries": 5}
+
+    def test_fence_send_is_scanner_scan(self) -> None:
+        mock_scanner = MagicMock()
+        auditor = _make_auditor(scanner=mock_scanner)
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=[]),
+            patch("pentester.auditors.garak.auditor.with_retries") as mock_retries,
+        ):
+            auditor.audit()
+        assert mock_retries.call_args.args[0] == mock_scanner.scan
+
+    def test_wrapped_send_is_used_for_attacks(self) -> None:
+        wrapped = MagicMock(return_value=_make_scan_result())
+        auditor = _make_auditor(scanner=MagicMock())
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(
+                auditor,
+                "_load_probes",
+                return_value=[_make_probe("probes.dan.Dan1", ["p"])],
+            ),
+            patch(
+                "pentester.auditors.garak.auditor.with_retries", return_value=wrapped
+            ),
+        ):
+            auditor.audit()
+        wrapped.assert_called_once_with("p")
+
+
+# ---------------------------------------------------------------------------
+# _warn_on_errors
+# ---------------------------------------------------------------------------
+
+
+class TestWarnOnErrors:
+    def test_warns_when_any_attack_failed(self) -> None:
+        send = MagicMock(side_effect=RuntimeError("rate limited"))
+        with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
+            _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a", "b"), send, _echo_build
+            )
+        mock_logger.warning.assert_called_once()
+
+    def test_warning_reports_error_and_total_counts(self) -> None:
+        def send(prompt: str) -> str:
+            if prompt == "bad":
+                raise RuntimeError("rate limited")
+            return prompt
+
+        with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
+            _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("bad", "good", "good2"), send, _echo_build
+            )
+        assert mock_logger.warning.call_args.args[1:] == (1, 3)
+
+    def test_no_warning_when_all_attacks_succeed(self) -> None:
+        with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
+            _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a"), MagicMock(return_value="r"), _echo_build
+            )
+        mock_logger.warning.assert_not_called()
