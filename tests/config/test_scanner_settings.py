@@ -57,3 +57,23 @@ class TestDirectInit:
     def test_set_response_text_target(self) -> None:
         settings = ScannerSettings(response_text_target="body.content.0.text")
         assert settings.response_text_target == "body.content.0.text"
+
+
+class TestRequestTimeout:
+    def test_defaults_to_120_seconds(self) -> None:
+        assert ScannerSettings().request_timeout == 120.0
+
+    def test_set_request_timeout(self) -> None:
+        assert ScannerSettings(request_timeout=30).request_timeout == 30.0
+
+    def test_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("REQUEST_TIMEOUT", "45")
+        assert ScannerSettings().request_timeout == 45.0
+
+    def test_zero_rejected(self) -> None:
+        with pytest.raises(ValueError, match="request_timeout must be greater than 0"):
+            ScannerSettings(request_timeout=0)
+
+    def test_negative_rejected(self) -> None:
+        with pytest.raises(ValueError, match="request_timeout must be greater than 0"):
+            ScannerSettings(request_timeout=-1)
