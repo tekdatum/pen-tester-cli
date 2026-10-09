@@ -210,3 +210,34 @@ def test_from_settings_with_response_text_target_sets_text_serializer() -> None:
     scanner = Scanner.from_settings(settings)
     assert scanner is not None
     assert scanner.request_handler.text_serializer is not None
+
+
+# ── request timeout ───────────────────────────────────────────────────────────
+
+
+def test_from_curl_uses_default_timeout() -> None:
+    assert Scanner.from_curl(CURL_COMMAND).request_handler.timeout == 120.0
+
+
+def test_from_curl_passes_timeout_to_handler() -> None:
+    scanner = Scanner.from_curl(CURL_COMMAND, timeout=9.0)
+    assert scanner.request_handler.timeout == 9.0
+
+
+def test_from_curl_file_passes_timeout_to_handler(tmp_path) -> None:
+    f = tmp_path / "cmd.txt"
+    f.write_text(CURL_COMMAND)
+    scanner = Scanner.from_curl_file(str(f), timeout=9.0)
+    assert scanner.request_handler.timeout == 9.0
+
+
+def test_from_settings_curl_command_passes_request_timeout() -> None:
+    settings = ScannerSettings(curl_command=CURL_COMMAND, request_timeout=15.0)
+    assert Scanner.from_settings(settings).request_handler.timeout == 15.0
+
+
+def test_from_settings_curl_file_passes_request_timeout(tmp_path) -> None:
+    f = tmp_path / "cmd.txt"
+    f.write_text(CURL_COMMAND)
+    settings = ScannerSettings(curl_file=str(f), request_timeout=15.0)
+    assert Scanner.from_settings(settings).request_handler.timeout == 15.0

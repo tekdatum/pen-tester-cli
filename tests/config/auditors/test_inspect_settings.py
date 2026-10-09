@@ -19,6 +19,13 @@ class TestDefaults:
     def test_max_attacks_default_is_none(self) -> None:
         assert InspectSettings().max_attacks is None
 
+    def test_max_connections_default(self) -> None:
+        assert InspectSettings().max_connections == 10
+
+    def test_max_connections_below_one_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            InspectSettings(max_connections=0)
+
 
 class TestDirectInit:
     def test_set_evals(self) -> None:
@@ -51,3 +58,8 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("MAX_ATTACKS", "75")
         settings = InspectSettings()
         assert settings.max_attacks == 75
+
+    def test_max_connections_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MAX_CONNECTIONS", "24")
+        settings = InspectSettings()
+        assert settings.max_connections == 24
