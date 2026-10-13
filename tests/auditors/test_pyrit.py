@@ -88,6 +88,7 @@ _pyrit_models_mod = sys.modules["pyrit.models"]
 
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.auditors.pyrit.auditor import PyritAuditor as PyritProbe  # noqa: E402
+from pentester.auditors.pyrit.auditor import _run_coroutine  # noqa: E402
 from pentester.config.auditors.pyrit_settings import PyritSettings  # noqa: E402
 from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
@@ -1050,3 +1051,55 @@ class TestMaxConcurrency:
         assert peak == 3
         # one single-turn result, then multi-turn results in strategy order
         assert results[1:] == [s.value for s in strategies]
+
+
+# ---------------------------------------------------------------------------
+# audit() from inside a running event loop (Jupyter)
+# ---------------------------------------------------------------------------
+
+
+class TestRunCoroutine:
+    def test_runs_without_a_running_loop(self) -> None:
+        async def answer() -> int:
+            return 42
+
+        assert _run_coroutine(answer()) == 42
+
+    def test_runs_inside_a_running_loop_on_another_thread(self) -> None:
+        caller_thread = threading.get_ident()
+
+        async def where() -> int:
+            return threading.get_ident()
+
+        async def caller() -> int:
+            return _run_coroutine(where())
+
+        assert asyncio.run(caller()) != caller_thread
+
+    def test_propagates_exceptions_inside_a_running_loop(self) -> None:
+        async def boom() -> None:
+            raise ValueError("bad seed")
+
+        async def caller() -> None:
+            _run_coroutine(boom())
+
+        with pytest.raises(ValueError, match="bad seed"):
+            asyncio.run(caller())
+
+    def test_audit_works_inside_a_running_loop(self) -> None:
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[_make_dataset(seeds=[_make_seed("p1"), _make_seed("p2")])]
+        )
+        scanner = MagicMock()
+        scanner.scan.return_value = _make_scan_result()
+        auditor = _make_auditor(
+            PyritSettings(dataset_names=["x"], enable_multiturn=False)
+        )
+
+        async def notebook_cell() -> list[ProbeResult]:
+            with patch.object(auditor, "_init_scanner", return_value=scanner):
+                results, _ = auditor.audit()
+            return results
+
+        results = asyncio.run(notebook_cell())
+        assert [r.prompt for r in results] == ["p1", "p2"]
