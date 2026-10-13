@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -10,7 +11,9 @@ import pytest
 
 from pentester.auditors.inspect_ai.auditor import (
     InspectAIAuditor,
+    _default_deepseek_base_url,
     _inspect_model_string,
+    _normalize_model_string,
 )  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.inspect_settings import InspectSettings  # noqa: E402
@@ -116,6 +119,51 @@ class TestInspectModelString:
 
     def test_empty_model_returns_none(self) -> None:
         assert _inspect_model_string(_make_llm(LLMProvider.OPENAI, "")) is None
+
+    def test_deepseek_maps_to_openai_compatible_provider(self) -> None:
+        assert (
+            _inspect_model_string(_make_llm(LLMProvider.DEEPSEEK, "deepseek-flash"))
+            == "openai-api/deepseek/deepseek-flash"
+        )
+
+
+class TestNormalizeModelString:
+    def test_deepseek_shorthand_expands(self) -> None:
+        assert (
+            _normalize_model_string("deepseek/deepseek-flash")
+            == "openai-api/deepseek/deepseek-flash"
+        )
+
+    def test_full_deepseek_string_unchanged(self) -> None:
+        assert (
+            _normalize_model_string("openai-api/deepseek/deepseek-flash")
+            == "openai-api/deepseek/deepseek-flash"
+        )
+
+    def test_other_providers_unchanged(self) -> None:
+        assert _normalize_model_string("openai/gpt-4o") == "openai/gpt-4o"
+
+    def test_none_stays_none(self) -> None:
+        assert _normalize_model_string(None) is None
+
+
+class TestDefaultDeepseekBaseUrl:
+    def test_sets_base_url_for_deepseek_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        _default_deepseek_base_url(None, "openai-api/deepseek/deepseek-flash")
+        assert os.environ["DEEPSEEK_BASE_URL"] == "https://api.deepseek.com/v1"
+
+    def test_keeps_existing_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://proxy.example/v1")
+        _default_deepseek_base_url("openai-api/deepseek/deepseek-flash")
+        assert os.environ["DEEPSEEK_BASE_URL"] == "https://proxy.example/v1"
+
+    def test_ignores_other_providers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        _default_deepseek_base_url("openai/gpt-4o", None)
+        assert "DEEPSEEK_BASE_URL" not in os.environ
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +396,28 @@ class TestGetTask:
         ):
             auditor._get_task("strong_reject")
         factory.assert_called_once_with(judge_llm="openai/gpt-4o")
+
+    def test_strong_reject_expands_deepseek_judge_shorthand(self) -> None:
+        factory = MagicMock()
+        auditor = _make_auditor(judge_model="deepseek/deepseek-flash")
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
+            auditor._get_task("strong_reject")
+        factory.assert_called_once_with(judge_llm="openai-api/deepseek/deepseek-flash")
+
+    def test_strong_reject_falls_back_to_deepseek_llm(self) -> None:
+        factory = MagicMock()
+        llm = _make_llm(LLMProvider.DEEPSEEK, "deepseek-flash")
+        auditor = InspectAIAuditor(settings=InspectSettings(judge_model=None), llm=llm)
+        auditor.target_type = TargetType.LLM
+        with patch.dict(
+            "pentester.auditors.inspect_ai.auditor._EVAL_REGISTRY",
+            {"strong_reject": factory},
+        ):
+            auditor._get_task("strong_reject")
+        factory.assert_called_once_with(judge_llm="openai-api/deepseek/deepseek-flash")
 
     def test_strong_reject_passes_none_when_both_absent(self) -> None:
         factory = MagicMock()
@@ -1247,6 +1317,24 @@ class TestMaxAttacks:
         mock_eval = self._run_audit(auditor, [_make_sample()])
         _, kwargs = mock_eval.call_args
         assert kwargs["max_connections"] == 10
+
+    def test_deepseek_judge_sets_default_base_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        auditor = self._make_auditor_with_llm(
+            judge_model="deepseek/deepseek-flash", evals=["strong_reject"]
+        )
+        self._run_audit(auditor, [_make_sample()])
+        assert os.environ["DEEPSEEK_BASE_URL"] == "https://api.deepseek.com/v1"
+
+    def test_non_deepseek_run_leaves_base_url_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        auditor = self._make_auditor_with_llm(evals=["strong_reject"])
+        self._run_audit(auditor, [_make_sample()])
+        assert "DEEPSEEK_BASE_URL" not in os.environ
 
     def test_max_attacks_applied_per_eval(self) -> None:
         auditor = self._make_auditor_with_llm(
