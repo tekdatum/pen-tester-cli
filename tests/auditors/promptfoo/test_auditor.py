@@ -156,6 +156,7 @@ class TestInit:
         auditor = _make_auditor(scanner=mock_scanner)
         assert auditor._scanner is mock_scanner
 
+
 class TestEnsureDirectories:
     def test_creates_required_directories_with_correct_flags(self) -> None:
         mock_cm = MagicMock()
