@@ -13,7 +13,10 @@ Design notes
 
 from __future__ import annotations
 
+import asyncio
 import sys
+import threading
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -891,3 +894,159 @@ class TestMaxAttacks:
     def test_max_attacks_is_readable_when_set(self) -> None:
         auditor = _make_auditor(settings=PyritSettings(max_attacks=100))
         assert auditor._settings.max_attacks == 100
+
+
+# ---------------------------------------------------------------------------
+# max_concurrency
+# ---------------------------------------------------------------------------
+
+
+class _PeakCounter:
+    """Thread-safe count of calls in flight, remembering the peak."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.current = 0
+        self.peak = 0
+
+    def __enter__(self) -> None:
+        with self._lock:
+            self.current += 1
+            self.peak = max(self.peak, self.current)
+
+    def __exit__(self, *_exc: object) -> None:
+        with self._lock:
+            self.current -= 1
+
+
+class TestMaxConcurrency:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:
+        _pyrit_setup_mod.initialize_pyrit_async.reset_mock()
+        self.counter = _PeakCounter()
+
+    def _fence_audit(self, prompts: list[str], max_concurrency: int) -> list:
+        def scan(prompt: str) -> MagicMock:
+            with self.counter:
+                time.sleep(0.05)
+            if prompt == "boom":
+                raise RuntimeError("target down")
+            return _make_scan_result(response=f"reply to {prompt}")
+
+        scanner = MagicMock()
+        scanner.scan.side_effect = scan
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[_make_dataset(seeds=[_make_seed(p) for p in prompts])]
+        )
+        auditor = _make_auditor(
+            PyritSettings(
+                dataset_names=["x"],
+                enable_multiturn=False,
+                max_concurrency=max_concurrency,
+            )
+        )
+        with patch.object(auditor, "_init_scanner", return_value=scanner):
+            results, _ = auditor.audit()
+        return results
+
+    def test_fence_seeds_run_concurrently(self) -> None:
+        self._fence_audit([f"p{i}" for i in range(8)], max_concurrency=4)
+        assert self.counter.peak == 4
+
+    def test_default_runs_sequentially(self) -> None:
+        self._fence_audit([f"p{i}" for i in range(4)], max_concurrency=1)
+        assert self.counter.peak == 1
+
+    def test_results_keep_seed_order(self) -> None:
+        prompts = [f"p{i}" for i in range(8)]
+        results = self._fence_audit(prompts, max_concurrency=8)
+        assert [r.prompt for r in results] == prompts
+        assert [r.response for r in results] == [f"reply to {p}" for p in prompts]
+
+    def test_failed_seed_is_error_in_place(self) -> None:
+        results = self._fence_audit(["a", "boom", "c"], max_concurrency=3)
+        assert [r.response for r in results] == ["reply to a", "ERROR", "reply to c"]
+        assert results[1].metadata == {"error": "True"}
+
+    def test_llm_seeds_run_concurrently_and_keep_order(self) -> None:
+        in_flight = 0
+        peak = 0
+
+        async def send(*, message: MagicMock) -> list[MagicMock]:
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.01)
+            in_flight -= 1
+            return [_make_llm_response("reply")]
+
+        target = MagicMock()
+        target.send_prompt_async = send
+        scorer = MagicMock()
+        scorer.score_async = AsyncMock(return_value=[_make_score(False)])
+        prompts = [f"p{i}" for i in range(6)]
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[_make_dataset(seeds=[_make_seed(p) for p in prompts])]
+        )
+        auditor = _make_llm_auditor(
+            settings=PyritSettings(
+                dataset_names=["x"], enable_multiturn=False, max_concurrency=3
+            ),
+            llm_settings=LLMSettings(model="gpt-4o"),
+        )
+        with (
+            patch.object(auditor, "_init_target", return_value=target),
+            patch.object(auditor, "_init_scorer", return_value=scorer),
+        ):
+            results, _ = auditor.audit()
+        assert peak == 3
+        assert [r.prompt for r in results] == prompts
+
+    def test_multiturn_cases_run_concurrently_and_keep_order(self) -> None:
+        from pentester.enums.attack_strategy import MultiTurnStrategy
+
+        strategies = [
+            MultiTurnStrategy.CRESCENDO,
+            MultiTurnStrategy.RED_TEAMING,
+            MultiTurnStrategy.MULTI_PROMPT_SENDING,
+        ]
+        in_flight = 0
+        peak = 0
+
+        async def run_strategy(**kwargs: object) -> object:
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.01)
+            in_flight -= 1
+            return kwargs["strategy"]
+
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[_make_dataset(seeds=[_make_seed()])]
+        )
+        auditor = _make_auditor(
+            PyritSettings(
+                dataset_names=["x"],
+                enable_multiturn=True,
+                multiturn_objective="obj",
+                attack_strategies=strategies,
+                max_concurrency=3,
+            )
+        )
+        scanner = MagicMock()
+        scanner.scan.return_value = _make_scan_result()
+        with (
+            patch.object(auditor, "_init_scanner", return_value=scanner),
+            patch.object(auditor, "_init_target", return_value=MagicMock()),
+            patch.object(auditor, "_init_scorer", return_value=MagicMock()),
+            patch.object(auditor, "_run_strategy_async", new=run_strategy),
+            patch.object(
+                auditor,
+                "_build_probe_results",
+                side_effect=lambda result, attack_type, _cat: [attack_type],
+            ),
+        ):
+            results, _ = auditor.audit()
+        assert peak == 3
+        # one single-turn result, then multi-turn results in strategy order
+        assert results[1:] == [s.value for s in strategies]

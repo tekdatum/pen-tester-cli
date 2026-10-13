@@ -309,6 +309,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_PYRIT__TREE_DEPTH` | `5` | Tree depth (Tree of Attacks only) |
 | `PENTESTER_PYRIT__BRANCHING_FACTOR` | `2` | Branching factor (Tree of Attacks only) |
 | `PENTESTER_PYRIT__MAX_ATTACKS` | `None` | Attack cap for PyRIT. Overrides `PENTESTER_MAX_ATTACKS`. |
+| `PENTESTER_PYRIT__MAX_CONCURRENCY` | `1` | Seeds (single-turn) or dataset × strategy attacks (multi-turn) in flight at once. `1` runs sequentially. |
 
 ### Inspect AI
 
