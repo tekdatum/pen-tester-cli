@@ -142,6 +142,24 @@ PENTESTER_PYRIT__ENABLE_MULTITURN=false \
 python src/main.py
 ```
 
+### LLM target over curl, DeepSeek as judge
+
+PyRIT's `SelfAskTrueFalseScorer` uses `PENTESTER_LLM__PROVIDER`/`PENTESTER_LLM__MODEL`;
+`deepseek` reaches `https://api.deepseek.com/v1` with `DEEPSEEK_API_KEY`.
+
+```bash
+PENTESTER_TARGET_TYPE=LLM \
+PENTESTER_SCANNER__CURL_COMMAND='curl -X POST https://api.deepseek.com/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer <your-key>" --data-raw "{\"model\": \"deepseek-flash\", \"messages\": [{\"role\": \"user\", \"content\": $PROMPT}]}"' \
+PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.choices.0.message.content \
+PENTESTER_LLM__PROVIDER=deepseek \
+PENTESTER_LLM__MODEL=deepseek-flash \
+DEEPSEEK_API_KEY=<your-key> \
+PENTESTER_PYRIT__DATASET_NAMES='["xstest"]' \
+PENTESTER_PYRIT__MAX_ATTACKS=10 \
+PENTESTER_PYRIT__ENABLE_MULTITURN=false \
+python src/main.py
+```
+
 ### LLM — all strategies, LLM as both attacker and target
 
 ```bash

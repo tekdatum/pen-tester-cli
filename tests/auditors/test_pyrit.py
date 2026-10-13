@@ -105,6 +105,7 @@ def _fake_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +235,31 @@ class TestInitTarget:
             api_key="test-key",
         )
 
+    def test_deepseek_passes_deepseek_endpoint(self) -> None:
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="deepseek-flash", provider=LLMProvider.DEEPSEEK
+            )
+        )._init_target()
+        _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
+            model_name="deepseek-flash",
+            endpoint="https://api.deepseek.com/v1",
+            is_json_supported=True,
+            api_key="test-key",
+        )
+
+    def test_deepseek_without_api_key_omits_api_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("DEEPSEEK_API_KEY")
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="deepseek-flash", provider=LLMProvider.DEEPSEEK
+            )
+        )._init_target()
+        call_kwargs = _pyrit_prompt_target_mod.OpenAIChatTarget.call_args.kwargs
+        assert "api_key" not in call_kwargs
+
     def test_returns_openai_chat_target(self) -> None:
         result = _make_auditor(llm_settings=LLMSettings(model="gpt-4o"))._init_target()
         assert result is _pyrit_prompt_target_mod.OpenAIChatTarget.return_value
@@ -281,6 +307,19 @@ class TestInitScorer:
         _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
             model_name="gemini-1.5-flash",
             endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
+            is_json_supported=True,
+            api_key="test-key",
+        )
+
+    def test_scorer_passes_deepseek_endpoint_when_provider_deepseek(self) -> None:
+        _make_auditor(
+            llm_settings=LLMSettings(
+                model="deepseek-flash", provider=LLMProvider.DEEPSEEK
+            )
+        )._init_scorer()
+        _pyrit_prompt_target_mod.OpenAIChatTarget.assert_called_once_with(
+            model_name="deepseek-flash",
+            endpoint="https://api.deepseek.com/v1",
             is_json_supported=True,
             api_key="test-key",
         )

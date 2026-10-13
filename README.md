@@ -316,7 +316,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_INSPECT__EVALS` | `[]` (auto) | JSON array of eval keys to run (e.g. `["strong_reject","b3"]`). Empty = auto-select by target type. |
 | `PENTESTER_INSPECT__EPOCHS` | `1` | Number of times each sample is evaluated |
 | `PENTESTER_INSPECT__LIMIT` | `None` | Cap the number of samples per eval |
-| `PENTESTER_INSPECT__JUDGE_MODEL` | `None` | Explicit judge model override (e.g. `openai/gpt-4o`). Falls back to `PENTESTER_LLM__MODEL`. |
+| `PENTESTER_INSPECT__JUDGE_MODEL` | `None` | Explicit judge model override (e.g. `openai/gpt-4o`, or `deepseek/deepseek-flash` for DeepSeek). Falls back to `PENTESTER_LLM__MODEL`. |
 | `PENTESTER_INSPECT__MAX_ATTACKS` | `None` | Attack cap for Inspect AI. Overrides `PENTESTER_MAX_ATTACKS`. |
 | `PENTESTER_INSPECT__MAX_CONNECTIONS` | `10` | Inspect AI samples in flight at once (target plus judge calls). `10` is Inspect AI's default. |
 
