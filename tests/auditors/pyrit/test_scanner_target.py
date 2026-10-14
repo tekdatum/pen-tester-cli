@@ -79,10 +79,11 @@ def _make_piece(
     conversation_id: str = "cid-1",
     role: str = "user",
 ) -> MagicMock:
-    piece = MagicMock()
+    # spec mirrors pyrit 0.13's MessagePiece, which has api_role and no role.
+    piece = MagicMock(spec=["converted_value", "conversation_id", "api_role"])
     piece.converted_value = text
     piece.conversation_id = conversation_id
-    piece.role = role
+    piece.api_role = role
     return piece
 
 
@@ -126,6 +127,16 @@ class TestSendPromptAsync:
         target = ScannerTarget(scanner)
         _run(target.send_prompt_async(message=_make_message("my prompt")))
         scanner.scan.assert_called_once_with("user: my prompt")
+
+    def test_serializes_assistant_turn_with_its_api_role(self) -> None:
+        prior_msg = MagicMock()
+        prior_msg.message_pieces = [_make_piece("earlier reply", role="assistant")]
+
+        scanner = _make_scanner()
+        target = ScannerTarget(scanner)
+        target._memory.get_conversation.return_value = [prior_msg]
+        _run(target.send_prompt_async(message=_make_message("next")))
+        assert scanner.scan.call_args.args[0] == "assistant: earlier reply\nuser: next"
 
     def test_includes_prior_turns_in_serialized_text(self) -> None:
         prior_piece = _make_piece("first message", role="user")

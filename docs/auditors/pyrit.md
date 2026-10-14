@@ -90,6 +90,7 @@ Settings live in `PyritSettings` (env prefix `PENTESTER_PYRIT__`):
 | `dataset_names` | `[]` | PyRIT dataset names to load. Empty = all available datasets |
 | `max_seeds` | `None` | Maximum seeds per dataset (None = all) |
 | `enable_multiturn` | `True` | Whether to run multi-turn attack strategies after single-turn probes |
+| `max_concurrency` | `1` | Seeds (single-turn) or dataset × strategy attacks (multi-turn) in flight at once. `1` runs sequentially; results keep their order either way |
 | `attack_strategies` | `["multi_prompt_sending"]` | Strategies to run in the multi-turn phase. Empty = all strategies |
 | `multiturn_objective` | `""` | Goal statement used by RedTeaming, Crescendo, and TAP |
 | `max_turns` | `10` | Max conversation turns (RedTeaming, Crescendo) |
@@ -138,6 +139,25 @@ PENTESTER_LLM__MODEL=gpt-4o \
 OPENAI_API_KEY=<your-key> \
 PENTESTER_PYRIT__DATASET_NAMES='["xstest"]' \
 PENTESTER_PYRIT__MAX_SEEDS=10 \
+PENTESTER_PYRIT__ENABLE_MULTITURN=false \
+python src/main.py
+```
+
+### LLM target over curl, DeepSeek as judge
+
+PyRIT's `SelfAskTrueFalseScorer` uses `PENTESTER_LLM__PROVIDER`/`PENTESTER_LLM__MODEL`;
+`deepseek` reaches `https://api.deepseek.com/v1` with `DEEPSEEK_API_KEY`.
+
+```bash
+PENTESTER_TARGET_TYPE=LLM \
+PENTESTER_SCANNER__CURL_COMMAND='curl -X POST https://api.deepseek.com/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer <your-key>" --data-raw "{\"model\": \"deepseek-flash\", \"messages\": [{\"role\": \"user\", \"content\": $PROMPT}]}"' \
+PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.choices.0.message.content \
+PENTESTER_LLM__PROVIDER=deepseek \
+PENTESTER_LLM__MODEL=deepseek-flash \
+DEEPSEEK_API_KEY=<your-key> \
+PENTESTER_PYRIT__DATASET_NAMES='["xstest"]' \
+PENTESTER_PYRIT__MAX_ATTACKS=10 \
+PENTESTER_PYRIT__MAX_CONCURRENCY=8 \
 PENTESTER_PYRIT__ENABLE_MULTITURN=false \
 python src/main.py
 ```
