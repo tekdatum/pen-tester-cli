@@ -77,7 +77,7 @@ class MyServiceHandler(CustomHandler):
         response = my_client.send(text)
         return HandlerResponse(
             response=response.raw_text,
-            passed=response.was_blocked,  # True = bypassed, False = blocked
+            passed=not response.was_blocked,  # True = bypassed, False = blocked
         )
 ```
 

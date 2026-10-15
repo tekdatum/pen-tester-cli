@@ -109,11 +109,11 @@ class MyServiceHandler(CustomHandler):
         response = my_sdk_client.send(text)
         return HandlerResponse(
             response=response.text,
-            passed=response.was_blocked,
+            passed=not response.was_blocked,
         )
 ```
 
-`passed=True` means the service blocked the prompt (no bypass). `passed=False` means the prompt got through (bypass).
+`passed=True` means the prompt got through the service (bypass). `passed=False` means the service blocked it (no bypass).
 
 ### 2. Use it programmatically
 
