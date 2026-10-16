@@ -53,6 +53,7 @@ All options are optional. Defaults load from environment variables or a `.env` /
 | `--curl-command` | curl command used to probe the target; must include `$PROMPT` | `None` |
 | `--curl-file` | Path to a file containing the curl command (alternative to `--curl-command`) | `None` |
 | `--json-dot-target` | Dot-notation path to the response field that indicates bypass (e.g. `body.valid`) | `None` |
+| `--true-means` | What a true value at `--json-dot-target` means: `bypassed` or `blocked`. Required with `--json-dot-target` | `None` |
 | `--output-dir-path` | Directory where report files are written | `./output/` |
 | `--generator-keys` | Comma-separated list of report formats: `pdf`, `csv`, `html`, `markdown` | all four |
 | `--target-type` | Category of the target: `LLM` or `SEMANTIC_FENCE` | `SEMANTIC_FENCE` |
@@ -93,9 +94,17 @@ Run a scan by providing a curl command pointing at your target.
 
 The curl command **must** include the `$PROMPT` placeholder, which is replaced with each attack prompt at scan time. Use `--json-dot-target` to extract the field from the JSON response that indicates whether the attack bypassed the target (`body.*` and `headers.*` paths are supported).
 
+Fences disagree on what `true` means: some answer `valid: true` for a prompt they allowed, others `blocked: true` for one they stopped. Tell CrocoTester which with `--true-means`. It's required with `--json-dot-target`, and the run won't start without it, because guessing wrong would silently flip every verdict:
+
+| Fence answers | Use |
+|---|---|
+| `{"valid": true}` when the prompt is allowed | `--json-dot-target body.valid --true-means bypassed` |
+| `{"blocked": true}` when the prompt is stopped | `--json-dot-target body.blocked --true-means blocked` |
+
 ```bash
 pentester \
   --json-dot-target "body.valid" \
+  --true-means bypassed \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
@@ -112,7 +121,7 @@ curl -X POST 'https://api.example.com/chat' \
 ```
 
 ```bash
-pentester --curl-file ./curl_command.txt --json-dot-target "body.valid"
+pentester --curl-file ./curl_command.txt --json-dot-target "body.valid" --true-means bypassed
 ```
 
 ### 4. Specify report formats
@@ -124,6 +133,7 @@ pentester \
   --generator-keys html,pdf \
   --output-dir-path ./reports \
   --json-dot-target "body.valid" \
+  --true-means bypassed \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
@@ -135,6 +145,7 @@ Use `--auditors` with a comma-separated list to run only a subset:
 pentester \
   --auditors garak,pyrit \
   --json-dot-target "body.valid" \
+  --true-means bypassed \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
@@ -145,6 +156,7 @@ Use `PENTESTER_MAX_ATTACKS` to cap the number of attack prompts each auditor wil
 ```bash
 PENTESTER_MAX_ATTACKS=50 pentester \
   --json-dot-target "body.valid" \
+  --true-means bypassed \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \"$PROMPT\"}'"
 ```
 
@@ -165,7 +177,7 @@ See the full list of per-auditor attack cap variables in [Environment Variables]
 
 | `--target-type` | What it means |
 |---|---|
-| `SEMANTIC_FENCE` (default) | The target returns a structured response with a field indicating whether the prompt was blocked. Bypass is read directly from that field (e.g. via `--json-dot-target`). |
+| `SEMANTIC_FENCE` (default) | The target returns a structured response with a field indicating whether the prompt was blocked. Bypass is read directly from that field (`--json-dot-target`, with `--true-means` saying what `true` means). |
 | `LLM` | The target is a language model. The auditor sends the prompt and uses a judge model (or built-in detectors) to decide if the response is a bypass. |
 
 Use `--target-type LLM` when targeting a language model directly. In this mode the auditor sends prompts and evaluates responses with a judge model — no `--json-dot-target` needed. Requires [LLM keys](#llm-keys).
@@ -267,6 +279,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_SCANNER__CURL_COMMAND` | `None` | curl command string used to probe the target. Must include `"$PROMPT"`. |
 | `PENTESTER_SCANNER__CURL_FILE` | `None` | Path to a file containing the curl command (alternative to `CURL_COMMAND`) |
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `None` | Dot-notation path to the response field that indicates bypass (e.g. `body.valid`) |
+| `PENTESTER_SCANNER__TRUE_MEANS` | `None` | What a true value at `JSON_DOT_TARGET` means: `bypassed` or `blocked`. Required with `JSON_DOT_TARGET` |
 | `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `None` | Dot-notation path to extract the LLM reply text from the response body. Required for Garak LLM mode and PyRIT multi-turn (e.g. `body.choices.0.message.content`) |
 | `PENTESTER_SCANNER__CUSTOM_HANDLER` | `None` | Custom handler in format `path/to/file.py:ClassName` |
 

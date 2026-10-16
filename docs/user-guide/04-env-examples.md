@@ -78,8 +78,9 @@ PENTESTER_TARGET_TYPE=SEMANTIC_FENCE
 
 # How to reach the target ($PROMPT is required, no escaping needed here)
 PENTESTER_SCANNER__CURL_COMMAND=curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{"text": $PROMPT}'
-# Which response field means "the attack got through"
+# Which response field holds the verdict, and what `true` means in it
 PENTESTER_SCANNER__JSON_DOT_TARGET=body.valid
+PENTESTER_SCANNER__TRUE_MEANS=bypassed    # or `blocked` for a field like body.blocked
 
 # Keep it tiny
 PENTESTER_AUDITORS=["garak"]
@@ -161,7 +162,8 @@ PENTESTER_MAX_ATTACKS=50               # global cap; per-auditor caps below over
 
 # --- Scanner: how to reach the target -----------------------------------
 PENTESTER_SCANNER__CURL_COMMAND=curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{"text": $PROMPT}'
-PENTESTER_SCANNER__JSON_DOT_TARGET=body.valid          # field that signals a bypass
+PENTESTER_SCANNER__JSON_DOT_TARGET=body.valid          # field that holds the verdict
+PENTESTER_SCANNER__TRUE_MEANS=bypassed                 # true = bypass; `blocked` if true = stopped
 PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.message   # reply text (PyRIT multi-turn needs it)
 # Alternatives to CURL_COMMAND — pick ONE transport:
 # PENTESTER_SCANNER__CURL_FILE=./target_curl.txt
@@ -236,7 +238,7 @@ pentester
   doesn't exist breaks the run. Leave them unset unless you have a custom config or a
   Python assertion script.
 - **For an LLM target instead of a fence**, change these lines: set
-  `PENTESTER_TARGET_TYPE=LLM`, drop `PENTESTER_SCANNER__JSON_DOT_TARGET`, keep
+  `PENTESTER_TARGET_TYPE=LLM`, drop `PENTESTER_SCANNER__JSON_DOT_TARGET` and `PENTESTER_SCANNER__TRUE_MEANS`, keep
   `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` (now required), and point the curl command
   at the model endpoint. Everything else stays the same.
 
