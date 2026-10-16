@@ -112,10 +112,22 @@ class TestScannerConstruction:
             _make_settings(
                 curl_command="curl http://example.com",
                 json_dot_target="body.result",
+                true_means="bypassed",
             )
         )
         assert isinstance(factory._scanner, Scanner)
         assert factory._scanner.request_handler.response_serializer is not None
+
+    def test_json_dot_target_without_true_means_fails_at_startup(self) -> None:
+        from pentester.scanners.exceptions import MissingTrueMeaningException
+
+        with pytest.raises(MissingTrueMeaningException):
+            AuditorFactory(
+                _make_settings(
+                    curl_command="curl http://example.com",
+                    json_dot_target="body.result",
+                )
+            )
 
 
 # ---------------------------------------------------------------------------

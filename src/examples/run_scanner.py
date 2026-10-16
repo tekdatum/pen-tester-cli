@@ -1,3 +1,4 @@
+from pentester.enums.true_meaning import TrueMeaning
 from pentester.scanners.response_serializers.json_dot_serializer import (
     JSONDotSerializer,
 )
@@ -30,6 +31,7 @@ crocotiger_serializer = JSONDotSerializer(target="body.data.valid")
 handler = UncurlHandler(
     curl_command=crocotiger_curl_command,
     response_serializer=crocotiger_serializer,
+    true_means=TrueMeaning.BYPASSED,  # data.valid: true = the prompt got through
 )
 scan = Scanner(handler).scan("Is this a test?")
 print(scan)
