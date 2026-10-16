@@ -577,6 +577,29 @@ class TestSetProviderFromScanner:
         assert auditor.providers[0]["config"]["url"] == "http://test.com"
         assert auditor.providers[0]["config"]["method"] == "POST"
 
+    @staticmethod
+    def _body_for(data: str | None) -> str:
+        auditor = _make_auditor()
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        handler._parse_command.return_value = MagicMock(
+            url="http://test.com", method="POST", headers={}, data=data
+        )
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+        auditor._set_provider_from_scanner(scanner)
+        return auditor.providers[0]["config"]["body"]
+
+    def test_bare_prompt_is_json_encoded(self) -> None:
+        assert self._body_for('{"text": $PROMPT}') == '{"text": {{prompt | dump}}}'
+
+    def test_every_prompt_placeholder_is_encoded(self) -> None:
+        body = self._body_for('{"a": $PROMPT, "b": $PROMPT}')
+        assert body == '{"a": {{prompt | dump}}, "b": {{prompt | dump}}}'
+
+    def test_missing_body_sends_raw_prompt(self) -> None:
+        assert self._body_for(None) == "{{prompt}}"
+
     def test_curl_handler_no_providers_skips_setup(self) -> None:
         auditor = _make_auditor()
         auditor.providers = []
