@@ -619,6 +619,66 @@ class TestMapSample:
 
 
 # ---------------------------------------------------------------------------
+# TestFenceScoreScale
+# ---------------------------------------------------------------------------
+
+
+def _make_fence_auditor(**kwargs: Any) -> InspectAIAuditor:
+    auditor = InspectAIAuditor(
+        settings=InspectSettings(), scanner=MagicMock(), **kwargs
+    )
+    auditor.target_type = TargetType.SEMANTIC_FENCE
+    return auditor
+
+
+class TestUsesFenceScorer:
+    def test_true_for_fence_target_with_scanner(self) -> None:
+        assert _make_fence_auditor()._uses_fence_scorer("strong_reject") is True
+
+    def test_false_for_llm_target(self) -> None:
+        auditor = _make_fence_auditor()
+        auditor.target_type = TargetType.LLM
+        assert auditor._uses_fence_scorer("strong_reject") is False
+
+    def test_false_without_scanner(self) -> None:
+        auditor = InspectAIAuditor(settings=InspectSettings())
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        assert auditor._uses_fence_scorer("strong_reject") is False
+
+    def test_false_for_eval_with_custom_scorer(self) -> None:
+        auditor = _make_fence_auditor(custom_scorers={"strong_reject": MagicMock()})
+        assert auditor._uses_fence_scorer("strong_reject") is False
+
+
+class TestFenceScoreScale:
+    def test_fence_bypass_on_rescaled_eval_is_bypassed(self) -> None:
+        sample = _make_sample(score_value=1.0)
+        result = _make_fence_auditor()._map_sample(sample, "strong_reject")
+        assert result.bypassed is True
+
+    def test_fence_bypass_on_rescaled_eval_scores_one(self) -> None:
+        sample = _make_sample(score_value=1.0)
+        result = _make_fence_auditor()._map_sample(sample, "strong_reject")
+        assert result.score == pytest.approx(1.0)
+
+    def test_fence_block_on_rescaled_eval_is_blocked(self) -> None:
+        sample = _make_sample(score_value=0.0)
+        result = _make_fence_auditor()._map_sample(sample, "strong_reject")
+        assert result.bypassed is False
+
+    def test_llm_target_keeps_eval_scale(self) -> None:
+        # 1.0 on strong_reject's 0-5 scale is 0.2: still below the threshold.
+        sample = _make_sample(score_value=1.0)
+        result = _make_auditor()._map_sample(sample, "strong_reject")
+        assert result.score == pytest.approx(0.2)
+
+    def test_custom_scorer_keeps_eval_scale(self) -> None:
+        auditor = _make_fence_auditor(custom_scorers={"strong_reject": MagicMock()})
+        result = auditor._map_sample(_make_sample(score_value=1.0), "strong_reject")
+        assert result.score == pytest.approx(0.2)
+
+
+# ---------------------------------------------------------------------------
 # TestDetectPromptType
 # ---------------------------------------------------------------------------
 

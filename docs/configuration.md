@@ -14,6 +14,7 @@ All variables are prefixed with `PENTESTER_`.
 | `PENTESTER_AUDITORS` | `list[str]` | `[]` | Comma-separated list of auditors to run (e.g. `garak,pyrit`). When empty, all available auditors run. |
 | `PENTESTER_SCANNER__CURL_COMMAND` | `str \| None` | `None` | curl command string used to target the model |
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `str \| None` | `None` | dot-notation path to extract a value from the response and cast to `bool` for `bypassed` |
+| `PENTESTER_SCANNER__TRUE_MEANS` | `TrueMeaning \| None` | `None` | What a true value at `JSON_DOT_TARGET` means: `bypassed` (e.g. `valid: true` = allowed) or `blocked` (e.g. `blocked: true` = stopped). Required with `JSON_DOT_TARGET`; the run fails at startup without it. CLI: `--true-means`. |
 | `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `str \| None` | `None` | dot-notation path to extract the LLM reply text from the response body. Required when using `ScannerGenerator` (garak LLM mode) or `ScannerTarget` (PyRIT multi-turn). Example: `body.choices.0.message.content` |
 | `PENTESTER_SCANNER__REQUEST_TIMEOUT` | `float` | `120.0` | Seconds to wait for each HTTP request to the target before failing it. Must be greater than `0`. |
 | `PENTESTER_REPORTING__OUTPUT_DIR_PATH` | `str` | `./output/` | Directory where report files are written. Also the base for the promptfoo auditor's working files (`<dir>/promptfoo/`) unless `PENTESTER_PROMPTFOO__OUTPUT_PATH` is set explicitly. |

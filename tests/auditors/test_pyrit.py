@@ -94,7 +94,6 @@ from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
 from pentester.config.settings import TargetType, clear_settings_cache  # noqa: E402
 from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 from pentester.enums.prompt_type import PromptType  # noqa: E402
-from pentester.scanners.scanner import Scanner  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -369,8 +368,30 @@ class TestInitScorer:
 
 
 class TestInitScanner:
-    def test_returns_scanner_instance(self) -> None:
-        assert isinstance(_make_auditor()._init_scanner(), Scanner)
+    def test_returns_injected_scanner(self) -> None:
+        mock_scanner = MagicMock()
+        auditor = PyritProbe(
+            settings=PyritSettings(), llm_settings=LLMSettings(), scanner=mock_scanner
+        )
+        assert auditor._init_scanner() is mock_scanner
+
+    def test_raises_when_no_scanner_configured(self) -> None:
+        with pytest.raises(ValueError, match="No scanner configured"):
+            _make_auditor()._init_scanner()
+
+    def test_fence_audit_sends_seeds_through_injected_scanner(self) -> None:
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = _make_scan_result()
+        _pyrit_datasets_mod.SeedDatasetProvider.fetch_datasets_async = AsyncMock(
+            return_value=[_make_dataset(seeds=[_make_seed("attack")])]
+        )
+        auditor = PyritProbe(
+            settings=PyritSettings(dataset_names=["x"], enable_multiturn=False),
+            llm_settings=LLMSettings(),
+            scanner=mock_scanner,
+        )
+        auditor.audit()
+        mock_scanner.scan.assert_called_once_with("attack")
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +760,10 @@ class TestAuditMultiturn:
                 multiturn_objective="",
             )
         )
-        with pytest.raises(ValueError, match="multiturn_objective must be set"):
+        with (
+            patch.object(auditor, "_init_scanner", return_value=MagicMock()),
+            pytest.raises(ValueError, match="multiturn_objective must be set"),
+        ):
             auditor.audit()
 
     def test_explicit_strategies_are_used(self) -> None:

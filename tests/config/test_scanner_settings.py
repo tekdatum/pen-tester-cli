@@ -1,6 +1,7 @@
 import pytest
 
 from pentester.config.scanner import ScannerSettings
+from pentester.enums.true_meaning import TrueMeaning
 
 
 class TestDefaults:
@@ -77,3 +78,19 @@ class TestRequestTimeout:
     def test_negative_rejected(self) -> None:
         with pytest.raises(ValueError, match="request_timeout must be greater than 0"):
             ScannerSettings(request_timeout=-1)
+
+
+class TestTrueMeans:
+    def test_defaults_to_none(self) -> None:
+        assert ScannerSettings().true_means is None
+
+    def test_set_blocked(self) -> None:
+        assert ScannerSettings(true_means="blocked").true_means == TrueMeaning.BLOCKED
+
+    def test_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TRUE_MEANS", "bypassed")
+        assert ScannerSettings().true_means == TrueMeaning.BYPASSED
+
+    def test_unknown_value_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            ScannerSettings(true_means="allowed")

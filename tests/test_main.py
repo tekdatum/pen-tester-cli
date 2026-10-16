@@ -38,6 +38,7 @@ import click.testing  # noqa: E402
 
 from pentester.config.settings import PentesterSettings  # noqa: E402
 from pentester.enums.target_type import TargetType  # noqa: E402
+from pentester.enums.true_meaning import TrueMeaning  # noqa: E402
 from pentester.main import main  # noqa: E402
 
 
@@ -220,6 +221,31 @@ class TestParallelAttemptsCLI:
 
     def test_parallel_attempts_zero_is_rejected(self) -> None:
         result, _ = self._invoke(["--parallel-attempts", "0"])
+        assert result.exit_code != 0
+
+
+class TestTrueMeansCLI:
+    @staticmethod
+    def _invoke(args: list[str]) -> tuple[click.testing.Result, MagicMock]:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, args)
+        return result, mock_orchestrator_cls
+
+    def test_true_means_sets_scanner_field(self) -> None:
+        _, mock_orchestrator_cls = self._invoke(["--true-means", "blocked"])
+        settings = mock_orchestrator_cls.call_args.args[0]
+        assert settings.scanner.true_means == TrueMeaning.BLOCKED
+
+    def test_true_means_not_set_leaves_none(self) -> None:
+        _, mock_orchestrator_cls = self._invoke([])
+        settings = mock_orchestrator_cls.call_args.args[0]
+        assert settings.scanner.true_means is None
+
+    def test_unknown_true_means_is_rejected(self) -> None:
+        result, _ = self._invoke(["--true-means", "allowed"])
         assert result.exit_code != 0
 
 

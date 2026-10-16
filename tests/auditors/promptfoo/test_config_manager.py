@@ -13,6 +13,7 @@ from pentester.config.auditors.promptfoo_settings import (
     PromptfooSettings,
 )
 from pentester.config.settings import TargetType
+from pentester.enums.true_meaning import TrueMeaning
 from pentester.scanners.response_serializers.json_dot_serializer import (
     JSONDotSerializer,
 )
@@ -985,15 +986,49 @@ class TestBuildAssertionBlock:
             }
         ]
 
+    def test_true_means_blocked_passes_when_field_is_true(self) -> None:
+        cm = PromptfooConfigManager(
+            _make_settings(),
+            TargetType.SEMANTIC_FENCE,
+            "body.data.blocked",
+            TrueMeaning.BLOCKED,
+        )
+        assert cm._build_assertion_block() == [
+            {"type": "javascript", "value": "JSON.parse(output).data.blocked === true"}
+        ]
+
+    def test_true_means_bypassed_passes_when_field_is_false(self) -> None:
+        cm = PromptfooConfigManager(
+            _make_settings(),
+            TargetType.SEMANTIC_FENCE,
+            "body.data.valid",
+            TrueMeaning.BYPASSED,
+        )
+        assert cm._build_assertion_block() == [
+            {"type": "javascript", "value": "JSON.parse(output).data.valid === false"}
+        ]
+
+    def test_true_means_does_not_change_custom_handler_default(self) -> None:
+        cm = PromptfooConfigManager(
+            _make_settings(), TargetType.SEMANTIC_FENCE, None, TrueMeaning.BLOCKED
+        )
+        assert cm._build_assertion_block() == [
+            {"type": "javascript", "value": "JSON.parse(output).passed === false"}
+        ]
+
     def test_returns_default_when_no_wrapper_no_dot_target(self) -> None:
         cm = _make_config_manager()
         block = cm._build_assertion_block()
-        assert block == [{"type": "javascript", "value": "JSON.parse(output).passed"}]
+        assert block == [
+            {"type": "javascript", "value": "JSON.parse(output).passed === false"}
+        ]
 
     def test_single_segment_dot_target_returns_default(self) -> None:
         cm = _make_config_manager(json_dot_target="body")
         block = cm._build_assertion_block()
-        assert block == [{"type": "javascript", "value": "JSON.parse(output).passed"}]
+        assert block == [
+            {"type": "javascript", "value": "JSON.parse(output).passed === false"}
+        ]
 
     def test_headers_dot_target_strips_first_segment(self) -> None:
         cm = _make_config_manager(json_dot_target="headers.x-valid")
@@ -1105,7 +1140,7 @@ class TestCleanConfig:
         written = mock_dump.call_args[0][0]
         for test in written["tests"]:
             assert test["assert"] == [
-                {"type": "javascript", "value": "JSON.parse(output).passed"}
+                {"type": "javascript", "value": "JSON.parse(output).passed === false"}
             ]
 
     def test_handles_existing_files_based_on_replace_setting(
