@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from unittest.mock import MagicMock, patch
@@ -6,6 +8,7 @@ import pytest
 from requests import ConnectionError, HTTPError, Response, Timeout
 
 from pentester.utils.retry import (
+    RetryCancelled,
     backoff_delay,
     is_transient,
     retry_after_seconds,
@@ -19,6 +22,14 @@ def _make_http_error(status_code: int, retry_after: str | None = None) -> HTTPEr
     if retry_after is not None:
         response.headers["Retry-After"] = retry_after
     return HTTPError(response=response)
+
+
+def _make_cancel(set_before: bool = False, set_during_wait: bool = False) -> MagicMock:
+    """Stand-in for threading.Event: is_set() and wait() return fixed answers."""
+    cancel = MagicMock()
+    cancel.is_set.return_value = set_before
+    cancel.wait.return_value = set_during_wait
+    return cancel
 
 
 class TestIsTransient:
@@ -107,43 +118,105 @@ class TestWithRetries:
 
     def test_returns_result_on_success(self) -> None:
         func = MagicMock(return_value="ok")
-        assert with_retries(func, max_retries=3, sleep=MagicMock())("p") == "ok"
+        assert with_retries(func, max_retries=3, cancel=_make_cancel())("p") == "ok"
 
     def test_passes_prompt_through(self) -> None:
         func = MagicMock(return_value="ok")
-        with_retries(func, max_retries=3, sleep=MagicMock())("the prompt")
+        with_retries(func, max_retries=3, cancel=_make_cancel())("the prompt")
         func.assert_called_once_with("the prompt")
 
     def test_retries_transient_then_succeeds(self) -> None:
         func = MagicMock(side_effect=[Timeout(), Timeout(), "ok"])
-        assert with_retries(func, max_retries=3, sleep=MagicMock())("p") == "ok"
+        assert with_retries(func, max_retries=3, cancel=_make_cancel())("p") == "ok"
 
     def test_gives_up_after_max_retries(self) -> None:
         func = MagicMock(side_effect=Timeout())
         with pytest.raises(Timeout):
-            with_retries(func, max_retries=2, sleep=MagicMock())("p")
+            with_retries(func, max_retries=2, cancel=_make_cancel())("p")
         assert func.call_count == 3
 
     def test_zero_retries_calls_once(self) -> None:
         func = MagicMock(side_effect=Timeout())
         with pytest.raises(Timeout):
-            with_retries(func, max_retries=0, sleep=MagicMock())("p")
+            with_retries(func, max_retries=0, cancel=_make_cancel())("p")
         assert func.call_count == 1
 
     def test_non_transient_error_not_retried(self) -> None:
         func = MagicMock(side_effect=_make_http_error(500))
         with pytest.raises(HTTPError):
-            with_retries(func, max_retries=3, sleep=MagicMock())("p")
+            with_retries(func, max_retries=3, cancel=_make_cancel())("p")
         assert func.call_count == 1
 
-    def test_sleeps_between_attempts(self) -> None:
-        sleep = MagicMock()
+    def test_waits_between_attempts(self) -> None:
+        cancel = _make_cancel()
         func = MagicMock(side_effect=[_make_http_error(429, "2"), "ok"])
-        with_retries(func, max_retries=3, sleep=sleep)("p")
-        sleep.assert_called_once_with(2.0)
+        with_retries(func, max_retries=3, cancel=cancel)("p")
+        cancel.wait.assert_called_once_with(2.0)
+
+    def test_without_cancel_waits_on_private_event(self) -> None:
+        with patch("pentester.utils.retry.threading.Event") as mock_event:
+            mock_event.return_value = _make_cancel()
+            func = MagicMock(side_effect=[_make_http_error(429, "2"), "ok"])
+            with_retries(func, max_retries=3)("p")
+        mock_event.return_value.wait.assert_called_once_with(2.0)
 
     def test_logs_each_retry(self) -> None:
         func = MagicMock(side_effect=[Timeout(), Timeout(), "ok"])
         with patch("pentester.utils.retry.logger") as mock_logger:
-            with_retries(func, max_retries=3, sleep=MagicMock())("p")
+            with_retries(func, max_retries=3, cancel=_make_cancel())("p")
         assert mock_logger.warning.call_count == 2
+
+
+class TestWithRetriesCancel:
+    @pytest.fixture(autouse=True)
+    def _silence_logger(self) -> None:  # type: ignore[misc]
+        with patch("pentester.utils.retry.logger"):
+            yield
+
+    def test_cancel_before_call_raises(self) -> None:
+        with pytest.raises(RetryCancelled):
+            with_retries(MagicMock(), max_retries=3, cancel=_make_cancel(True))("p")
+
+    def test_cancel_before_call_skips_func(self) -> None:
+        func = MagicMock()
+        with pytest.raises(RetryCancelled):
+            with_retries(func, max_retries=3, cancel=_make_cancel(True))("p")
+        func.assert_not_called()
+
+    def test_cancel_during_wait_raises(self) -> None:
+        func = MagicMock(side_effect=Timeout())
+        cancel = _make_cancel(set_during_wait=True)
+        with pytest.raises(RetryCancelled):
+            with_retries(func, max_retries=3, cancel=cancel)("p")
+
+    def test_cancel_during_wait_stops_retrying(self) -> None:
+        func = MagicMock(side_effect=Timeout())
+        cancel = _make_cancel(set_during_wait=True)
+        with pytest.raises(RetryCancelled):
+            with_retries(func, max_retries=3, cancel=cancel)("p")
+        assert func.call_count == 1
+
+    def test_cancel_during_wait_chains_last_failure(self) -> None:
+        failure = Timeout()
+        cancel = _make_cancel(set_during_wait=True)
+        with pytest.raises(RetryCancelled) as excinfo:
+            with_retries(MagicMock(side_effect=failure), 3, cancel=cancel)("p")
+        assert excinfo.value.__cause__ is failure
+
+    def test_unset_cancel_checked_before_each_attempt(self) -> None:
+        cancel = _make_cancel()
+        func = MagicMock(side_effect=[Timeout(), "ok"])
+        with_retries(func, max_retries=3, cancel=cancel)("p")
+        assert cancel.is_set.call_count == 2
+
+    def test_real_event_set_mid_wait_ends_wait(self) -> None:
+        # A real Event: the 60s backoff must end as soon as another thread
+        # sets it, not after the full delay.
+        cancel = threading.Event()
+        timer = threading.Timer(0.05, cancel.set)
+        func = MagicMock(side_effect=_make_http_error(429, "60"))
+        timer.start()
+        started = time.monotonic()
+        with pytest.raises(RetryCancelled):
+            with_retries(func, max_retries=3, cancel=cancel)("p")
+        assert time.monotonic() - started < 5
