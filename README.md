@@ -269,6 +269,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `None` | Dot-notation path to the response field that indicates bypass (e.g. `body.valid`) |
 | `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `None` | Dot-notation path to extract the LLM reply text from the response body. Required for Garak LLM mode and PyRIT multi-turn (e.g. `body.choices.0.message.content`) |
 | `PENTESTER_SCANNER__CUSTOM_HANDLER` | `None` | Custom handler in format `path/to/file.py:ClassName` |
+| `PENTESTER_SCANNER__REQUEST_TIMEOUT` | `120.0` | Seconds to wait for each HTTP request to the target. Applies to all auditors; raise it for slow targets. |
 
 ### Reporting
 
