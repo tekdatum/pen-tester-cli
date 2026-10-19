@@ -90,7 +90,8 @@ Settings live in `PyritSettings` (env prefix `PENTESTER_PYRIT__`):
 | `dataset_names` | `[]` | PyRIT dataset names to load. Empty = all available datasets |
 | `max_seeds` | `None` | Maximum seeds per dataset (None = all) |
 | `enable_multiturn` | `True` | Whether to run multi-turn attack strategies after single-turn probes |
-| `max_concurrency` | `1` | Seeds (single-turn) or dataset × strategy attacks (multi-turn) in flight at once. `1` runs sequentially; results keep their order either way |
+| `max_concurrency` | `1` | Seeds (single-turn) or dataset × strategy attacks (multi-turn) in flight at once. `1` runs sequentially; results keep their order either way. Raise it only with the target owner's consent: requests that still fail after retries become `ERROR` results, and a warning reports how many |
+| `max_retries` | `3` | Retries per scanner request on transient failures (HTTP 408/425/429/502/503/504, timeouts, dropped connections), with jittered backoff that honors `Retry-After`. `0` disables retries. Native LLM targets are retried by PyRIT itself |
 | `attack_strategies` | `["multi_prompt_sending"]` | Strategies to run in the multi-turn phase. Empty = all strategies |
 | `multiturn_objective` | `""` | Goal statement used by RedTeaming, Crescendo, and TAP |
 | `max_turns` | `10` | Max conversation turns (RedTeaming, Crescendo) |
