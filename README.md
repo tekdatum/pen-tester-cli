@@ -309,6 +309,8 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_PYRIT__TREE_DEPTH` | `5` | Tree depth (Tree of Attacks only) |
 | `PENTESTER_PYRIT__BRANCHING_FACTOR` | `2` | Branching factor (Tree of Attacks only) |
 | `PENTESTER_PYRIT__MAX_ATTACKS` | `None` | Attack cap for PyRIT. Overrides `PENTESTER_MAX_ATTACKS`. |
+| `PENTESTER_PYRIT__MAX_CONCURRENCY` | `1` | Seeds (single-turn) or dataset × strategy attacks (multi-turn) in flight at once. `1` runs sequentially. Raise it only with the target owner's consent. |
+| `PENTESTER_PYRIT__MAX_RETRIES` | `3` | Retries per scanner request on transient failures (429, 503, timeouts...). `0` disables retries. |
 
 ### Inspect AI
 
@@ -317,7 +319,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_INSPECT__EVALS` | `[]` (auto) | JSON array of eval keys to run (e.g. `["strong_reject","b3"]`). Empty = auto-select by target type. |
 | `PENTESTER_INSPECT__EPOCHS` | `1` | Number of times each sample is evaluated |
 | `PENTESTER_INSPECT__LIMIT` | `None` | Cap the number of samples per eval |
-| `PENTESTER_INSPECT__JUDGE_MODEL` | `None` | Explicit judge model override (e.g. `openai/gpt-4o`). Falls back to `PENTESTER_LLM__MODEL`. |
+| `PENTESTER_INSPECT__JUDGE_MODEL` | `None` | Explicit judge model override (e.g. `openai/gpt-4o`, or `deepseek/deepseek-flash` for DeepSeek). Falls back to `PENTESTER_LLM__MODEL`. |
 | `PENTESTER_INSPECT__MAX_ATTACKS` | `None` | Attack cap for Inspect AI. Overrides `PENTESTER_MAX_ATTACKS`. |
 | `PENTESTER_INSPECT__MAX_CONNECTIONS` | `10` | Inspect AI samples in flight at once (target plus judge calls). `10` is Inspect AI's default. |
 

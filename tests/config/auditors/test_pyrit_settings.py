@@ -10,6 +10,13 @@ class TestDefaults:
     def test_max_attacks_default_is_none(self) -> None:
         assert PyritSettings().max_attacks is None
 
+    def test_max_concurrency_default_is_sequential(self) -> None:
+        assert PyritSettings().max_concurrency == 1
+
+    def test_max_concurrency_below_one_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            PyritSettings(max_concurrency=0)
+
 
 class TestDirectInit:
     def test_set_dataset_names(self) -> None:
@@ -30,3 +37,7 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("MAX_ATTACKS", "50")
         settings = PyritSettings()
         assert settings.max_attacks == 50
+
+    def test_max_concurrency_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MAX_CONCURRENCY", "24")
+        assert PyritSettings().max_concurrency == 24

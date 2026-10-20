@@ -75,10 +75,12 @@ Configure the native Inspect AI target model via root `LLMSettings` (env prefix 
 
 | Field | Default | Description |
 |---|---|---|
-| `provider` | `openai` | Model provider: `openai`, `anthropic`, or `gemini` |
+| `provider` | `openai` | Model provider: `openai`, `anthropic`, `gemini`, or `deepseek` |
 | `model` | `""` | Model name (without provider prefix, e.g. `gpt-4o-mini`) |
 
 When both `provider` and `model` are set, the auditor uses `"<provider>/<model>"` as the Inspect AI model string. Note: `gemini` maps to `google` in Inspect AI (e.g. `PENTESTER_LLM__MODEL=gemini-flash` → `google/gemini-flash`).
+
+`deepseek` maps to Inspect AI's OpenAI-compatible provider, `openai-api/deepseek` (e.g. `PENTESTER_LLM__MODEL=deepseek-flash` → `openai-api/deepseek/deepseek-flash`). It reads `DEEPSEEK_API_KEY`, and `DEEPSEEK_BASE_URL` defaults to `https://api.deepseek.com/v1` when unset.
 
 ### Inspect auditor settings (`PENTESTER_INSPECT__*`)
 
@@ -89,7 +91,7 @@ Settings live in `InspectSettings` (env prefix `PENTESTER_INSPECT__`):
 | `evals` | `[]` | Eval keys to run. Empty = auto-select by target type |
 | `epochs` | `1` | Number of times each sample is evaluated |
 | `limit` | `None` | Cap the number of samples per eval (None = full dataset) |
-| `judge_model` | `None` | Explicit judge/grader model override. Falls back to `PENTESTER_LLM__MODEL`. When both are absent, each eval uses its own default. |
+| `judge_model` | `None` | Explicit judge/grader model override, as an Inspect AI model string. `deepseek/<model>` is accepted as shorthand for `openai-api/deepseek/<model>`. Falls back to `PENTESTER_LLM__MODEL`. When both are absent, each eval uses its own default. |
 
 The effective judge passed to evals is resolved as: `judge_model` → `PENTESTER_LLM__MODEL` → `None` (eval default).
 
@@ -111,3 +113,13 @@ PENTESTER_LLM__MODEL=gemini-flash        # target model
 
 PENTESTER_INSPECT__JUDGE_MODEL=openai/gpt-4o  # explicit judge override
 ```
+
+Example — DeepSeek as the judge:
+
+```bash
+PENTESTER_INSPECT__JUDGE_MODEL=deepseek/deepseek-flash
+DEEPSEEK_API_KEY=<your-key>
+# DEEPSEEK_BASE_URL defaults to https://api.deepseek.com/v1
+```
+
+The judge runs with DeepSeek's default settings: Inspect AI receives only a model name, so request options such as disabling thinking can't be passed.

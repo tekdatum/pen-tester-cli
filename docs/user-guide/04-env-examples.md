@@ -63,7 +63,7 @@ four shapes:
   `$PROMPT` placeholder is preserved as-is. (Shell escaping — `\$PROMPT` — is only for
   inline `--curl-command` on the command line.)
 - **API keys are NOT prefixed** with `PENTESTER_`. They're plain `OPENAI_API_KEY`,
-  `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`.
+  `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`.
 
 ---
 
@@ -197,7 +197,7 @@ PENTESTER_PYRIT__MAX_ATTACKS=30
 PENTESTER_INSPECT__EVALS=["strong_reject","b3"]
 PENTESTER_INSPECT__EPOCHS=1
 PENTESTER_INSPECT__LIMIT=50            # samples per eval (unset = full dataset)
-PENTESTER_INSPECT__JUDGE_MODEL=openai/gpt-4o   # falls back to PENTESTER_LLM__MODEL if unset
+PENTESTER_INSPECT__JUDGE_MODEL=openai/gpt-4o   # or deepseek/deepseek-flash; falls back to PENTESTER_LLM__MODEL if unset
 PENTESTER_INSPECT__MAX_ATTACKS=50
 
 # --- Promptfoo ----------------------------------------------------------
