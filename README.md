@@ -284,6 +284,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_SCANNER__TRUE_MEANS` | `None` | What a true value at `JSON_DOT_TARGET` means: `bypassed` or `blocked`. Required with `JSON_DOT_TARGET` |
 | `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `None` | Dot-notation path to extract the LLM reply text from the response body. Required for Garak LLM mode and PyRIT multi-turn (e.g. `body.choices.0.message.content`) |
 | `PENTESTER_SCANNER__CUSTOM_HANDLER` | `None` | Custom handler in format `path/to/file.py:ClassName` |
+| `PENTESTER_SCANNER__REQUEST_TIMEOUT` | `120.0` | Seconds to wait for each HTTP request to the target. Applies to all auditors; raise it for slow targets. |
 
 ### Reporting
 
@@ -323,7 +324,8 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_PYRIT__TREE_DEPTH` | `5` | Tree depth (Tree of Attacks only) |
 | `PENTESTER_PYRIT__BRANCHING_FACTOR` | `2` | Branching factor (Tree of Attacks only) |
 | `PENTESTER_PYRIT__MAX_ATTACKS` | `None` | Attack cap for PyRIT. Overrides `PENTESTER_MAX_ATTACKS`. |
-| `PENTESTER_PYRIT__MAX_CONCURRENCY` | `1` | Seeds (single-turn) or dataset × strategy attacks (multi-turn) in flight at once. `1` runs sequentially. |
+| `PENTESTER_PYRIT__MAX_CONCURRENCY` | `1` | Seeds (single-turn) or dataset × strategy attacks (multi-turn) in flight at once. `1` runs sequentially. Raise it only with the target owner's consent. |
+| `PENTESTER_PYRIT__MAX_RETRIES` | `3` | Retries per scanner request on transient failures (429, 503, timeouts...). `0` disables retries. |
 
 ### Inspect AI
 

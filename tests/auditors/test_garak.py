@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1013,14 +1014,14 @@ class TestRunAttacks:
     def test_sends_every_attack(self) -> None:
         send = MagicMock(return_value="r")
         _make_parallel_auditor(3)._run_attacks(
-            _make_attacks("a", "b", "c"), send, _echo_build
+            _make_attacks("a", "b", "c"), send, _echo_build, threading.Event()
         )
         assert sorted(c.args[0] for c in send.call_args_list) == ["a", "b", "c"]
 
     def test_send_response_flows_into_build(self) -> None:
         send = MagicMock(return_value="target reply")
         results = _make_parallel_auditor(1)._run_attacks(
-            _make_attacks("a"), send, _echo_build
+            _make_attacks("a"), send, _echo_build, threading.Event()
         )
         assert results[0].response == "target reply"
 
@@ -1030,7 +1031,10 @@ class TestRunAttacks:
             wraps=__import__("concurrent.futures").futures.ThreadPoolExecutor,
         ) as mock_executor:
             _make_parallel_auditor(4)._run_attacks(
-                _make_attacks("a"), MagicMock(return_value="r"), _echo_build
+                _make_attacks("a"),
+                MagicMock(return_value="r"),
+                _echo_build,
+                threading.Event(),
             )
         mock_executor.assert_called_once_with(max_workers=4)
 
@@ -1045,7 +1049,7 @@ class TestRunAttacks:
 
         with patch("pentester.auditors.garak.auditor.logger"):
             results = _make_parallel_auditor(2)._run_attacks(
-                _make_attacks("a", "b"), send, _echo_build
+                _make_attacks("a", "b"), send, _echo_build, threading.Event()
             )
         assert not any(r.is_error for r in results)
 
@@ -1062,7 +1066,7 @@ class TestRunAttacks:
             return prompt
 
         _make_parallel_auditor(1)._run_attacks(
-            _make_attacks("a", "b", "c"), send, _echo_build
+            _make_attacks("a", "b", "c"), send, _echo_build, threading.Event()
         )
         assert state["peak"] == 1
 
@@ -1077,7 +1081,7 @@ class TestRunAttacks:
             return prompt
 
         results = _make_parallel_auditor(2)._run_attacks(
-            _make_attacks("slow", "fast"), send, _echo_build
+            _make_attacks("slow", "fast"), send, _echo_build, threading.Event()
         )
         assert [r.prompt for r in results] == ["slow", "fast"]
 
@@ -1089,7 +1093,10 @@ class TestRunAttacks:
             return _echo_build(attack, response)
 
         _make_parallel_auditor(3)._run_attacks(
-            _make_attacks("a", "b", "c"), MagicMock(return_value="r"), build
+            _make_attacks("a", "b", "c"),
+            MagicMock(return_value="r"),
+            build,
+            threading.Event(),
         )
         assert set(build_threads) == {threading.get_ident()}
 
@@ -1097,7 +1104,7 @@ class TestRunAttacks:
         send = MagicMock(side_effect=RuntimeError("timeout"))
         with patch("pentester.auditors.garak.auditor.logger"):
             results = _make_parallel_auditor(2)._run_attacks(
-                _make_attacks("a"), send, _echo_build
+                _make_attacks("a"), send, _echo_build, threading.Event()
             )
         assert results[0].response == "ERROR"
 
@@ -1105,7 +1112,7 @@ class TestRunAttacks:
         send = MagicMock(side_effect=RuntimeError("timeout"))
         with patch("pentester.auditors.garak.auditor.logger"):
             results = _make_parallel_auditor(2)._run_attacks(
-                _make_attacks("a"), send, _echo_build
+                _make_attacks("a"), send, _echo_build, threading.Event()
             )
         assert results[0].metadata == {"error": "True"}
 
@@ -1113,7 +1120,7 @@ class TestRunAttacks:
         send = MagicMock(side_effect=RuntimeError("timeout"))
         with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
             _make_parallel_auditor(2)._run_attacks(
-                _make_attacks("a"), send, _echo_build
+                _make_attacks("a"), send, _echo_build, threading.Event()
             )
         mock_logger.exception.assert_called_once()
 
@@ -1125,7 +1132,10 @@ class TestRunAttacks:
 
         with patch("pentester.auditors.garak.auditor.logger"):
             results = _make_parallel_auditor(2)._run_attacks(
-                _make_attacks("good", "bad", "good2"), send, _echo_build
+                _make_attacks("good", "bad", "good2"),
+                send,
+                _echo_build,
+                threading.Event(),
             )
         assert [r.is_error for r in results] == [False, True, False]
 
@@ -1133,7 +1143,10 @@ class TestRunAttacks:
         build = MagicMock(side_effect=RuntimeError("detector crashed"))
         with patch("pentester.auditors.garak.auditor.logger"):
             results = _make_parallel_auditor(1)._run_attacks(
-                _make_attacks("a"), MagicMock(return_value="r"), build
+                _make_attacks("a"),
+                MagicMock(return_value="r"),
+                build,
+                threading.Event(),
             )
         assert results[0].response == "ERROR"
 
@@ -1147,16 +1160,146 @@ class TestRunAttacks:
 
         sends = MagicMock(side_effect=send)
         build = MagicMock(side_effect=KeyboardInterrupt)
+        try:
+            with pytest.raises(KeyboardInterrupt):
+                _make_parallel_auditor(2)._run_attacks(
+                    _make_attacks("a", "b", "c", "d", "e"),
+                    sends,
+                    build,
+                    threading.Event(),
+                )
+        finally:
+            release.set()
+        # "a", the in-flight "b", and at most one attack a worker grabbed
+        # before shutdown; the rest were dropped from the queue.
+        assert sends.call_count <= 3
+
+    def test_interrupt_sets_cancel(self) -> None:
+        cancel = threading.Event()
+        build = MagicMock(side_effect=KeyboardInterrupt)
         with pytest.raises(KeyboardInterrupt):
-            _make_parallel_auditor(1)._run_attacks(
-                _make_attacks("a", "b", "c", "d", "e"), sends, build
+            _make_parallel_auditor(2)._run_attacks(
+                _make_attacks("a"), MagicMock(return_value="r"), build, cancel
             )
-        assert sends.call_count <= 2
+        assert cancel.is_set()
+
+    def test_interrupt_shuts_down_without_waiting(self) -> None:
+        with patch("pentester.auditors.garak.auditor.ThreadPoolExecutor") as mock_cls:
+            mock_cls.return_value.submit.side_effect = KeyboardInterrupt
+            with pytest.raises(KeyboardInterrupt):
+                _make_parallel_auditor(2)._run_attacks(
+                    _make_attacks("a"), MagicMock(), _echo_build, threading.Event()
+                )
+        mock_cls.return_value.shutdown.assert_called_once_with(
+            wait=False, cancel_futures=True
+        )
+
+    def test_interrupt_does_not_wait_for_in_flight_attack(self) -> None:
+        release = threading.Event()
+
+        def send(prompt: str) -> str:
+            if prompt == "slow":
+                release.wait(timeout=5)
+            return prompt
+
+        build = MagicMock(side_effect=KeyboardInterrupt)
+        started = time.monotonic()
+        try:
+            with pytest.raises(KeyboardInterrupt):
+                _make_parallel_auditor(2)._run_attacks(
+                    _make_attacks("slow", "fast"), send, build, threading.Event()
+                )
+            elapsed = time.monotonic() - started
+        finally:
+            release.set()
+        assert elapsed < 2
+
+    def test_completed_run_does_not_set_cancel(self) -> None:
+        cancel = threading.Event()
+        _make_parallel_auditor(2)._run_attacks(
+            _make_attacks("a", "b"), MagicMock(return_value="r"), _echo_build, cancel
+        )
+        assert not cancel.is_set()
+
+    def test_completed_run_shuts_down_pool(self) -> None:
+        future = MagicMock()
+        future.result.return_value = "r"
+        with (
+            patch("pentester.auditors.garak.auditor.ThreadPoolExecutor") as mock_cls,
+            patch(
+                "pentester.auditors.garak.auditor.as_completed",
+                side_effect=lambda futures: list(futures),
+            ),
+        ):
+            mock_cls.return_value.submit.return_value = future
+            _make_parallel_auditor(2)._run_attacks(
+                _make_attacks("a"), MagicMock(), _echo_build, threading.Event()
+            )
+        mock_cls.return_value.shutdown.assert_called_once_with()
 
     def test_empty_attack_list_returns_empty(self) -> None:
         assert (
-            _make_parallel_auditor(2)._run_attacks([], MagicMock(), _echo_build) == []
+            _make_parallel_auditor(2)._run_attacks(
+                [], MagicMock(), _echo_build, threading.Event()
+            )
+            == []
         )
+
+
+class TestRunAttacksSequential:
+    def test_single_attempt_does_not_create_pool(self) -> None:
+        with patch("pentester.auditors.garak.auditor.ThreadPoolExecutor") as mock_cls:
+            _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a"),
+                MagicMock(return_value="r"),
+                _echo_build,
+                threading.Event(),
+            )
+        mock_cls.assert_not_called()
+
+    def test_single_attempt_sends_in_calling_thread(self) -> None:
+        send_threads: list[int] = []
+
+        def send(prompt: str) -> str:
+            send_threads.append(threading.get_ident())
+            return prompt
+
+        _make_parallel_auditor(1)._run_attacks(
+            _make_attacks("a", "b"), send, _echo_build, threading.Event()
+        )
+        assert set(send_threads) == {threading.get_ident()}
+
+    def test_single_attempt_keeps_input_order(self) -> None:
+        results = _make_parallel_auditor(1)._run_attacks(
+            _make_attacks("a", "b", "c"),
+            MagicMock(side_effect=lambda p: p),
+            _echo_build,
+            threading.Event(),
+        )
+        assert [r.prompt for r in results] == ["a", "b", "c"]
+
+    def test_interrupt_in_send_propagates(self) -> None:
+        send = MagicMock(side_effect=KeyboardInterrupt)
+        with pytest.raises(KeyboardInterrupt):
+            _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a", "b"), send, _echo_build, threading.Event()
+            )
+
+    def test_interrupt_in_send_stops_later_attacks(self) -> None:
+        send = MagicMock(side_effect=KeyboardInterrupt)
+        with pytest.raises(KeyboardInterrupt):
+            _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a", "b"), send, _echo_build, threading.Event()
+            )
+        assert send.call_count == 1
+
+    def test_send_exception_returns_error_result(self) -> None:
+        send = MagicMock(side_effect=RuntimeError("timeout"))
+        with patch("pentester.auditors.garak.auditor.logger"):
+            results = _make_parallel_auditor(1)._run_attacks(
+                _make_attacks("a"), send, _echo_build, threading.Event()
+            )
+        assert results[0].is_error
 
 
 # ---------------------------------------------------------------------------
@@ -1220,13 +1363,29 @@ class TestAuditRetries:
             ),
             patch("pentester.auditors.garak.auditor.with_retries") as mock_retries,
         ):
-            mock_retries.side_effect = lambda send, max_retries: send
+            mock_retries.side_effect = lambda send, max_retries, cancel: send
             auditor.audit()
         return mock_retries
 
     def test_send_wrapped_with_configured_max_retries(self) -> None:
         mock_retries = self._audit_fence(GarakSettings(max_retries=5))
-        assert mock_retries.call_args.kwargs == {"max_retries": 5}
+        assert mock_retries.call_args.kwargs["max_retries"] == 5
+
+    def test_send_wrapped_with_cancel_event(self) -> None:
+        mock_retries = self._audit_fence(GarakSettings())
+        assert isinstance(mock_retries.call_args.kwargs["cancel"], threading.Event)
+
+    def test_retry_cancel_is_the_event_run_attacks_sets(self) -> None:
+        auditor = _make_auditor(scanner=MagicMock())
+        auditor.target_type = TargetType.SEMANTIC_FENCE
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=[]),
+            patch("pentester.auditors.garak.auditor.with_retries") as mock_retries,
+            patch.object(auditor, "_run_attacks") as mock_run,
+        ):
+            auditor.audit()
+        assert mock_run.call_args.args[3] is mock_retries.call_args.kwargs["cancel"]
 
     def test_fence_send_is_scanner_scan(self) -> None:
         mock_scanner = MagicMock()
@@ -1269,7 +1428,7 @@ class TestWarnOnErrors:
         send = MagicMock(side_effect=RuntimeError("rate limited"))
         with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
             _make_parallel_auditor(1)._run_attacks(
-                _make_attacks("a", "b"), send, _echo_build
+                _make_attacks("a", "b"), send, _echo_build, threading.Event()
             )
         mock_logger.warning.assert_called_once()
 
@@ -1281,13 +1440,19 @@ class TestWarnOnErrors:
 
         with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
             _make_parallel_auditor(1)._run_attacks(
-                _make_attacks("bad", "good", "good2"), send, _echo_build
+                _make_attacks("bad", "good", "good2"),
+                send,
+                _echo_build,
+                threading.Event(),
             )
         assert mock_logger.warning.call_args.args[1:] == (1, 3)
 
     def test_no_warning_when_all_attacks_succeed(self) -> None:
         with patch("pentester.auditors.garak.auditor.logger") as mock_logger:
             _make_parallel_auditor(1)._run_attacks(
-                _make_attacks("a"), MagicMock(return_value="r"), _echo_build
+                _make_attacks("a"),
+                MagicMock(return_value="r"),
+                _echo_build,
+                threading.Event(),
             )
         mock_logger.warning.assert_not_called()

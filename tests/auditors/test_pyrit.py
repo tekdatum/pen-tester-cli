@@ -179,6 +179,21 @@ def _make_llm_response(text: str = "LLM output") -> MagicMock:
     return response
 
 
+def _make_probe_result(
+    attack_type: str = "default", error: bool = False
+) -> ProbeResult:
+    return ProbeResult(
+        auditor="pyrit",
+        attack_category="violence",
+        attack_type=attack_type,
+        prompt="p",
+        response="ERROR" if error else "r",
+        bypassed=False,
+        score=None,
+        metadata={"error": "True"} if error else {},
+    )
+
+
 def _make_score(value: bool = True) -> MagicMock:
     score = MagicMock()
     score.get_value.return_value = value
@@ -1068,13 +1083,15 @@ class TestMaxConcurrency:
             patch.object(
                 auditor,
                 "_build_probe_results",
-                side_effect=lambda result, attack_type, _cat: [attack_type],
+                side_effect=lambda result, attack_type, _cat: [
+                    _make_probe_result(attack_type=attack_type)
+                ],
             ),
         ):
             results, _ = auditor.audit()
         assert peak == 3
         # one single-turn result, then multi-turn results in strategy order
-        assert results[1:] == [s.value for s in strategies]
+        assert [r.attack_type for r in results[1:]] == [s.value for s in strategies]
 
 
 # ---------------------------------------------------------------------------
