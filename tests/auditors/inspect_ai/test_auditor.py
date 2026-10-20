@@ -1234,6 +1234,20 @@ class TestMaxAttacks:
         _, kwargs = mock_eval.call_args
         assert kwargs["limit"] is None
 
+    def test_max_connections_passed_to_inspect_eval(self) -> None:
+        auditor = self._make_auditor_with_llm(
+            max_connections=24, evals=["strong_reject"]
+        )
+        mock_eval = self._run_audit(auditor, [_make_sample()])
+        _, kwargs = mock_eval.call_args
+        assert kwargs["max_connections"] == 24
+
+    def test_max_connections_default_passed_to_inspect_eval(self) -> None:
+        auditor = self._make_auditor_with_llm(evals=["strong_reject"])
+        mock_eval = self._run_audit(auditor, [_make_sample()])
+        _, kwargs = mock_eval.call_args
+        assert kwargs["max_connections"] == 10
+
     def test_max_attacks_applied_per_eval(self) -> None:
         auditor = self._make_auditor_with_llm(
             max_attacks=3, evals=["strong_reject", "b3"]

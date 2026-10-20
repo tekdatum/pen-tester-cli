@@ -58,6 +58,7 @@ All options are optional. Defaults load from environment variables or a `.env` /
 | `--target-type` | Category of the target: `LLM` or `SEMANTIC_FENCE` | `SEMANTIC_FENCE` |
 | `--auditors` | Comma-separated list of auditors to run: `garak`, `pyrit`, `inspect_ai`, `promptfoo` | all |
 | `--max-attacks` | Cap the number of attack prompts per auditor | `None` |
+| `--parallel-attempts` | Number of garak attacks sent concurrently | `1` |
 
 ---
 
@@ -268,6 +269,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_SCANNER__JSON_DOT_TARGET` | `None` | Dot-notation path to the response field that indicates bypass (e.g. `body.valid`) |
 | `PENTESTER_SCANNER__RESPONSE_TEXT_TARGET` | `None` | Dot-notation path to extract the LLM reply text from the response body. Required for Garak LLM mode and PyRIT multi-turn (e.g. `body.choices.0.message.content`) |
 | `PENTESTER_SCANNER__CUSTOM_HANDLER` | `None` | Custom handler in format `path/to/file.py:ClassName` |
+| `PENTESTER_SCANNER__REQUEST_TIMEOUT` | `120.0` | Seconds to wait for each HTTP request to the target. Applies to all auditors; raise it for slow targets. |
 
 ### Reporting
 
@@ -317,6 +319,7 @@ OPENAI_API_KEY=sk-...
 | `PENTESTER_INSPECT__LIMIT` | `None` | Cap the number of samples per eval |
 | `PENTESTER_INSPECT__JUDGE_MODEL` | `None` | Explicit judge model override (e.g. `openai/gpt-4o`). Falls back to `PENTESTER_LLM__MODEL`. |
 | `PENTESTER_INSPECT__MAX_ATTACKS` | `None` | Attack cap for Inspect AI. Overrides `PENTESTER_MAX_ATTACKS`. |
+| `PENTESTER_INSPECT__MAX_CONNECTIONS` | `10` | Inspect AI samples in flight at once (target plus judge calls). `10` is Inspect AI's default. |
 
 ### Promptfoo
 

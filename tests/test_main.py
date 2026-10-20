@@ -198,6 +198,31 @@ class TestMaxAttacksCLI:
         assert s.promptfoo.max_attacks is None
 
 
+class TestParallelAttemptsCLI:
+    @staticmethod
+    def _invoke(args: list[str]) -> tuple[click.testing.Result, MagicMock]:
+        mock_orchestrator_cls = MagicMock()
+        mock_orchestrator_cls.return_value.execute.return_value = None
+        runner = click.testing.CliRunner()
+        with patch("pentester.main.Orchestrator", mock_orchestrator_cls):
+            result = runner.invoke(main, args)
+        return result, mock_orchestrator_cls
+
+    def test_parallel_attempts_sets_garak_field(self) -> None:
+        _, mock_orchestrator_cls = self._invoke(["--parallel-attempts", "8"])
+        settings = mock_orchestrator_cls.call_args.args[0]
+        assert settings.garak.parallel_attempts == 8
+
+    def test_parallel_attempts_not_set_keeps_default(self) -> None:
+        _, mock_orchestrator_cls = self._invoke([])
+        settings = mock_orchestrator_cls.call_args.args[0]
+        assert settings.garak.parallel_attempts == 1
+
+    def test_parallel_attempts_zero_is_rejected(self) -> None:
+        result, _ = self._invoke(["--parallel-attempts", "0"])
+        assert result.exit_code != 0
+
+
 class TestAuditorsCLI:
     def test_auditors_calls_execute_auditors(self) -> None:
         mock_orchestrator = MagicMock()
