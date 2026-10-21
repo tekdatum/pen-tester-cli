@@ -85,7 +85,11 @@ _garak_evaluators_mod.base = _garak_evaluators_base_mod
 from pentester.auditors.garak.auditor import GarakAuditor, _Attack  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
-from pentester.config.llm import LLMProvider, LLMSettings  # noqa: E402
+from pentester.config.llm import (  # noqa: E402
+    DEEPSEEK_BASE_URL,
+    LLMProvider,
+    LLMSettings,
+)
 from pentester.config.settings import clear_settings_cache  # noqa: E402
 from pentester.enums.auditor_key import AuditorKey  # noqa: E402
 from pentester.enums.prompt_type import PromptType  # noqa: E402
@@ -125,6 +129,10 @@ def _make_llm_auditor(
     auditor = _make_auditor(settings, llm_settings, scanner)
     auditor.target_type = TargetType.LLM
     return auditor
+
+
+def _make_deepseek_llm_settings(model: str = "deepseek-chat") -> LLMSettings:
+    return LLMSettings(model=model, provider=LLMProvider.DEEPSEEK)
 
 
 def _make_probe(probename: str, prompts: list[str]) -> MagicMock:
@@ -545,6 +553,97 @@ class TestInitGenerator:
         )._init_generator()
         assert generator.top_p is not None
 
+    def test_deepseek_uses_openai_compatible_with_deepseek_config(self) -> None:
+        _garak_generators_openai_mod.OpenAICompatible.reset_mock()
+        auditor = _make_llm_auditor(llm_settings=_make_deepseek_llm_settings())
+        with patch.object(
+            auditor, "_deepseek_generator_config", return_value={"uri": "u"}
+        ):
+            auditor._init_generator()
+        _garak_generators_openai_mod.OpenAICompatible.assert_called_once_with(
+            name="deepseek-chat",
+            config_root={"generators": {"openai": {"OpenAICompatible": {"uri": "u"}}}},
+        )
+
+    def test_deepseek_returns_openai_compatible_instance(self) -> None:
+        auditor = _make_llm_auditor(llm_settings=_make_deepseek_llm_settings())
+        with patch.object(auditor, "_deepseek_generator_config", return_value={}):
+            result = auditor._init_generator()
+        assert result is _garak_generators_openai_mod.OpenAICompatible.return_value
+
+
+# ---------------------------------------------------------------------------
+# _configure_judge
+# ---------------------------------------------------------------------------
+
+
+class TestConfigureJudge:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:  # type: ignore[override]
+        _garak_config_mod.plugins.detectors = {}
+
+    def _configure(self, llm_settings: LLMSettings) -> None:
+        auditor = _make_llm_auditor(llm_settings=llm_settings)
+        with patch.object(
+            auditor, "_deepseek_generator_config", return_value={"uri": "u"}
+        ):
+            auditor._configure_judge()
+
+    def test_deepseek_sets_judge_model_type(self) -> None:
+        self._configure(_make_deepseek_llm_settings())
+        judge = _garak_config_mod.plugins.detectors["judge"]
+        assert judge["detector_model_type"] == "openai.OpenAICompatible"
+
+    def test_deepseek_sets_judge_model_name(self) -> None:
+        self._configure(_make_deepseek_llm_settings("deepseek-reasoner"))
+        judge = _garak_config_mod.plugins.detectors["judge"]
+        assert judge["detector_model_name"] == "deepseek-reasoner"
+
+    def test_deepseek_sets_judge_model_config(self) -> None:
+        self._configure(_make_deepseek_llm_settings())
+        judge = _garak_config_mod.plugins.detectors["judge"]
+        assert judge["detector_model_config"] == {"uri": "u"}
+
+    def test_other_provider_leaves_judge_unconfigured(self) -> None:
+        self._configure(LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))
+        assert "judge" not in _garak_config_mod.plugins.detectors
+
+    def test_deepseek_without_model_leaves_judge_unconfigured(self) -> None:
+        self._configure(_make_deepseek_llm_settings(model=""))
+        assert "judge" not in _garak_config_mod.plugins.detectors
+
+
+# ---------------------------------------------------------------------------
+# _deepseek_generator_config
+# ---------------------------------------------------------------------------
+
+
+class TestDeepseekGeneratorConfig:
+    def test_uses_deepseek_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+        config = _make_llm_auditor()._deepseek_generator_config()
+        assert config["uri"] == DEEPSEEK_BASE_URL
+
+    def test_reads_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+        config = _make_llm_auditor()._deepseek_generator_config()
+        assert config["api_key"] == "sk-test"
+
+    def test_suppresses_stop_sequences(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+        config = _make_llm_auditor()._deepseek_generator_config()
+        assert config["suppressed_params"] == {"stop"}
+
+    def test_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="DEEPSEEK_API_KEY must be set"):
+            _make_llm_auditor()._deepseek_generator_config()
+
+    def test_empty_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "")
+        with pytest.raises(ValueError, match="DEEPSEEK_API_KEY must be set"):
+            _make_llm_auditor()._deepseek_generator_config()
+
 
 # ---------------------------------------------------------------------------
 # _init_objective_generator
@@ -582,35 +681,33 @@ class TestEvaluate:
     def setup(self) -> None:  # type: ignore[override]
         _garak_plugins_mod.load_plugin.reset_mock(side_effect=True, return_value=True)
 
-    def _probe_with_detectors(self, detector_specs: list[str]) -> MagicMock:
-        probe = MagicMock()
-        probe.detector_specs = detector_specs
-        return probe
+    def _evaluate(
+        self,
+        specs: list[str],
+        probe: MagicMock | None = None,
+        responses: list | None = None,
+    ) -> float:
+        auditor = _make_llm_auditor()
+        with patch.object(auditor, "_detector_specs", return_value=specs):
+            return auditor._evaluate(probe or MagicMock(), "prompt", responses or [])
 
-    def test_returns_zero_when_no_detector_specs(self) -> None:
-        probe = self._probe_with_detectors([])
-        assert _make_llm_auditor()._evaluate(probe, "prompt", []) == 0.0
+    def _detector_returning(self, scores: list[float | None]) -> MagicMock:
+        detector = MagicMock()
+        detector.detect.return_value = scores
+        _garak_plugins_mod.load_plugin.return_value = detector
+        return detector
 
-    def test_returns_zero_when_detector_specs_missing(self) -> None:
-        probe = MagicMock(spec=[])  # no detector_specs attribute
-        assert _make_llm_auditor()._evaluate(probe, "prompt", []) == 0.0
+    def test_returns_zero_when_no_detectors(self) -> None:
+        assert self._evaluate([]) == 0.0
 
     def test_loads_each_detector_plugin(self) -> None:
-        detector = MagicMock()
-        detector.detect.return_value = [0.5]
-        _garak_plugins_mod.load_plugin.return_value = detector
-        probe = self._probe_with_detectors(
-            ["detectors.always.Fail", "detectors.always.Pass"]
-        )
-        _make_llm_auditor()._evaluate(probe, "prompt", [])
+        self._detector_returning([0.5])
+        self._evaluate(["detectors.always.Fail", "detectors.always.Pass"])
         assert _garak_plugins_mod.load_plugin.call_count == 2
 
-    def test_calls_detect_with_attempt_object(self) -> None:
-        detector = MagicMock()
-        detector.detect.return_value = [0.7]
-        _garak_plugins_mod.load_plugin.return_value = detector
-        probe = self._probe_with_detectors(["detectors.always.Fail"])
-        _make_llm_auditor()._evaluate(probe, "attack prompt", [MagicMock()])
+    def test_calls_detect_for_each_detector(self) -> None:
+        detector = self._detector_returning([0.7])
+        self._evaluate(["detectors.always.Fail"])
         detector.detect.assert_called_once()
 
     def test_returns_max_score_across_detectors(self) -> None:
@@ -618,22 +715,89 @@ class TestEvaluate:
         low.detect.return_value = [0.2]
         high.detect.return_value = [0.9]
         _garak_plugins_mod.load_plugin.side_effect = [low, high]
-        probe = self._probe_with_detectors(["detectors.a.Low", "detectors.a.High"])
-        assert _make_llm_auditor()._evaluate(probe, "prompt", []) == 0.9
+        assert self._evaluate(["detectors.a.Low", "detectors.a.High"]) == 0.9
 
     def test_returns_max_across_multi_score_detector(self) -> None:
-        detector = MagicMock()
-        detector.detect.return_value = [0.1, 0.8, 0.4]
-        _garak_plugins_mod.load_plugin.return_value = detector
-        probe = self._probe_with_detectors(["detectors.always.Fail"])
-        assert _make_llm_auditor()._evaluate(probe, "prompt", []) == 0.8
+        self._detector_returning([0.1, 0.8, 0.4])
+        assert self._evaluate(["detectors.always.Fail"]) == 0.8
 
     def test_single_detector_single_score(self) -> None:
-        detector = MagicMock()
-        detector.detect.return_value = [0.6]
-        _garak_plugins_mod.load_plugin.return_value = detector
-        probe = self._probe_with_detectors(["detectors.always.Fail"])
-        assert _make_llm_auditor()._evaluate(probe, "prompt", []) == 0.6
+        self._detector_returning([0.6])
+        assert self._evaluate(["detectors.always.Fail"]) == 0.6
+
+    def test_ignores_unscored_outputs(self) -> None:
+        self._detector_returning([None, 0.3])
+        assert self._evaluate(["detectors.always.Fail"]) == 0.3
+
+    def test_returns_zero_when_all_outputs_unscored(self) -> None:
+        self._detector_returning([None])
+        assert self._evaluate(["detectors.always.Fail"]) == 0.0
+
+    def test_tags_prompt_with_probe_lang(self) -> None:
+        probe = MagicMock()
+        probe.lang = "en"
+        with patch("pentester.auditors.garak.auditor.Message") as m_message:
+            self._evaluate([], probe=probe)
+        m_message.assert_called_once_with(text="prompt", lang="en")
+
+    def test_attempt_outputs_are_responses(self) -> None:
+        responses = [MagicMock()]
+        with patch("pentester.auditors.garak.auditor.Attempt") as m_attempt:
+            self._evaluate([], responses=responses)
+        assert m_attempt.return_value.outputs is responses
+
+
+# ---------------------------------------------------------------------------
+# _detector_specs
+# ---------------------------------------------------------------------------
+
+
+def _make_detector_probe(
+    primary: str | None = None,
+    extended: list[str] | None = None,
+    recommended: list[str] | None = None,
+) -> MagicMock:
+    probe = MagicMock()
+    probe.primary_detector = primary
+    probe.extended_detectors = extended or []
+    probe.recommended_detector = recommended or ["always.Fail"]
+    return probe
+
+
+class TestDetectorSpecs:
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:  # type: ignore[override]
+        _garak_config_mod.plugins.extended_detectors = True
+        yield
+        _garak_config_mod.plugins.extended_detectors = True
+
+    def test_primary_detector_is_prefixed(self) -> None:
+        probe = _make_detector_probe(primary="dan.DAN")
+        assert _make_llm_auditor()._detector_specs(probe) == ["detectors.dan.DAN"]
+
+    def test_extended_detectors_follow_primary_sorted(self) -> None:
+        probe = _make_detector_probe(primary="dan.DAN", extended=["z.Z", "a.A"])
+        assert _make_llm_auditor()._detector_specs(probe) == [
+            "detectors.dan.DAN",
+            "detectors.a.A",
+            "detectors.z.Z",
+        ]
+
+    def test_extended_detectors_skipped_when_disabled(self) -> None:
+        _garak_config_mod.plugins.extended_detectors = False
+        probe = _make_detector_probe(primary="dan.DAN", extended=["a.A"])
+        assert _make_llm_auditor()._detector_specs(probe) == ["detectors.dan.DAN"]
+
+    def test_recommended_detectors_used_without_primary(self) -> None:
+        probe = _make_detector_probe(recommended=["z.Z", "a.A"])
+        assert _make_llm_auditor()._detector_specs(probe) == [
+            "detectors.a.A",
+            "detectors.z.Z",
+        ]
+
+    def test_extended_detectors_ignored_without_primary(self) -> None:
+        probe = _make_detector_probe(extended=["x.X"], recommended=["a.A"])
+        assert _make_llm_auditor()._detector_specs(probe) == ["detectors.a.A"]
 
 
 # ---------------------------------------------------------------------------
@@ -679,6 +843,17 @@ class TestAuditLLM:
         ):
             auditor.audit()
         m_gen.assert_called_once()
+
+    def test_calls_configure_judge(self) -> None:
+        auditor = _make_llm_auditor()
+        with (
+            patch.object(auditor, "_init_garak"),
+            patch.object(auditor, "_load_probes", return_value=[]),
+            patch.object(auditor, "_init_objective_generator"),
+            patch.object(auditor, "_configure_judge") as m_judge,
+        ):
+            auditor.audit()
+        m_judge.assert_called_once()
 
     def test_returns_empty_when_no_probes(self) -> None:
         assert self._audit_with([]) == []
@@ -1317,10 +1492,12 @@ class TestDetectorCache:
 
     def test_detector_loaded_once_across_evaluations(self) -> None:
         probe = MagicMock()
-        probe.detector_specs = ["detectors.always.Fail"]
         auditor = _make_llm_auditor()
-        auditor._evaluate(probe, "first", [])
-        auditor._evaluate(probe, "second", [])
+        with patch.object(
+            auditor, "_detector_specs", return_value=["detectors.always.Fail"]
+        ):
+            auditor._evaluate(probe, "first", [])
+            auditor._evaluate(probe, "second", [])
         _garak_plugins_mod.load_plugin.assert_called_once_with("detectors.always.Fail")
 
     def test_returns_loaded_plugin(self) -> None:
