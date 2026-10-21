@@ -84,6 +84,13 @@ Settings live in `GarakSettings` (env prefix `PENTESTER_GARAK__`):
 | `openai` | `OpenAIGenerator` (reasoning models) or `OpenAIGenerator` | Requires `OPENAI_API_KEY`. Models starting with `o` use `OpenAIReasoningGenerator` |
 | `anthropic` | `LiteLLMGenerator` | Requires `ANTHROPIC_API_KEY`. `top_p` is forced to `None` (not supported by Anthropic) |
 | `gemini` | `LiteLLMGenerator` | Requires `GEMINI_API_KEY` |
+| `deepseek` | `OpenAICompatible` | Requires `DEEPSEEK_API_KEY`. Points at `https://api.deepseek.com/v1`; garak's default `#`/`;` stop sequences are suppressed so replies are not truncated |
+
+### LLM-as-judge detectors (`detectors.judge.*`)
+
+A few garak probes (currently `fitd`) are scored by LLM-as-judge detectors, which default to an NVIDIA NIM model and need `NIM_API_KEY`. Without it, every attack those detectors score is recorded as `ERROR`.
+
+With `PENTESTER_LLM__PROVIDER=deepseek`, these detectors use DeepSeek instead, with `PENTESTER_LLM__MODEL` as the judge model. Other providers keep garak's NIM default. If DeepSeek is also the native target, the same model grades its own replies, which tends to under-report bypasses; point the target at the model through `PENTESTER_SCANNER__CURL_COMMAND` instead if that matters.
 
 ### Scanner response extraction (`PENTESTER_SCANNER__RESPONSE_TEXT_TARGET`)
 
@@ -123,6 +130,16 @@ PENTESTER_TARGET_TYPE=LLM \
 PENTESTER_SCANNER__CURL_COMMAND='curl -X POST "http://localhost:8080/v1/chat/completions" -H "Content-Type: application/json" --data-raw "{\"messages\": [{\"role\": \"user\", \"content\": $PROMPT}]}"' \
 PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.choices.0.message.content \
 PENTESTER_GARAK__PROBES='["probes.dan.Dan_6_2"]' \
+python src/main.py
+```
+
+### LLM — DeepSeek
+
+```bash
+PENTESTER_TARGET_TYPE=LLM \
+PENTESTER_LLM__PROVIDER=deepseek \
+PENTESTER_LLM__MODEL=deepseek-chat \
+DEEPSEEK_API_KEY=<your-key> \
 python src/main.py
 ```
 
