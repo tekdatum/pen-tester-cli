@@ -32,8 +32,9 @@ _garak_generators_base_mod.Generator = _FakeGenerator
 
 # Message stub — just holds .text
 class _FakeMessage:
-    def __init__(self, text: str = "") -> None:
+    def __init__(self, text: str = "", lang: str | None = None) -> None:
         self.text = text
+        self.lang = lang
 
 
 _garak_attempt_mod.Message = _FakeMessage
