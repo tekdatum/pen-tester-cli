@@ -371,6 +371,49 @@ class TestClassifyErrors:
         result = PromptfooResultCollector._classify_errors(df, http)
         assert result.iloc[0] is None
 
+    # promptfoo ResultFailureReason.ERROR (2) -----------------------------------
+
+    def test_returns_error_for_error_failure_reason(self) -> None:
+        df = pd.DataFrame(
+            [{"error": "Worker failed to become ready", "failureReason": 2}]
+        )
+        http = pd.Series([None], dtype=object)
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "Worker failed to become ready"
+
+    def test_error_failure_reason_without_message_is_still_an_error(self) -> None:
+        df = pd.DataFrame([{"error": None, "failureReason": 2}])
+        http = pd.Series([200])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "promptfoo execution error"
+
+    def test_error_failure_reason_read_as_float_is_an_error(self) -> None:
+        # A column mixing ints and NaN is read back as floats (2.0).
+        df = pd.DataFrame(
+            [{"error": "timeout", "failureReason": 2}, {"failureReason": float("nan")}]
+        )
+        http = pd.Series([None, None], dtype=object)
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "timeout"
+
+    def test_error_failure_reason_takes_precedence_over_http_status(self) -> None:
+        df = pd.DataFrame([{"error": "provider crashed", "failureReason": 2}])
+        http = pd.Series([503])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] == "provider crashed"
+
+    def test_boolean_failure_reason_is_not_an_execution_failure(self) -> None:
+        df = pd.DataFrame([{"error": "x", "failureReason": True}], dtype=object)
+        http = pd.Series([200])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] is None
+
+    def test_none_failure_reason_without_error_is_not_an_error(self) -> None:
+        df = pd.DataFrame([{"error": None, "failureReason": None}], dtype=object)
+        http = pd.Series([200])
+        result = PromptfooResultCollector._classify_errors(df, http)
+        assert result.iloc[0] is None
+
 
 class TestExtractRowsHttpErrorClassification:
     def test_http_422_with_numeric_failure_reason_produces_error(self) -> None:

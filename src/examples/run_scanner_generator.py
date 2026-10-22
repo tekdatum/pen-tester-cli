@@ -13,7 +13,7 @@ Configure via environment variables or a .env file:
     PENTESTER_SCANNER__CURL_COMMAND='curl -X POST \
         "http://localhost:8080/v1/chat/completions" \
         -H "Content-Type: application/json" \
-        --data-raw "{\"messages\": [{\"role\": \"user\", \"content\": $PROMPT}]}"'
+        --data-raw '\\''{"messages": [{"role": "user", "content": $PROMPT}]}'\\'''
 
     PENTESTER_SCANNER__RESPONSE_TEXT_TARGET=body.choices.0.message.content
 

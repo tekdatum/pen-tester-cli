@@ -1,7 +1,11 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from pentester.config.scanner import ScannerSettings
-from pentester.scanners.exceptions import ScanFileException
+from pentester.enums.true_meaning import TrueMeaning
+from pentester.scanners.exceptions import (
+    MissingTrueMeaningException,
+    ScanFileException,
+)
 from pentester.scanners.scanner import Scanner
 from pentester.scanners.models.target_response import TargetResponse
 from pentester.scanners.request_handlers.request_handler import RequestHandler
@@ -100,7 +104,9 @@ def test_from_curl_without_target_has_no_serializer() -> None:
 
 
 def test_from_curl_with_target_sets_serializer() -> None:
-    scanner = Scanner.from_curl(CURL_COMMAND, json_dot_target="body.data.valid")
+    scanner = Scanner.from_curl(
+        CURL_COMMAND, json_dot_target="body.data.valid", true_means=TrueMeaning.BYPASSED
+    )
     assert scanner.request_handler.response_serializer is not None
 
 
@@ -122,7 +128,9 @@ def test_from_curl_file_loads_command(tmp_path) -> None:
 def test_from_curl_file_with_target_sets_serializer(tmp_path) -> None:
     f = tmp_path / "cmd.curl"
     f.write_text(CURL_COMMAND)
-    scanner = Scanner.from_curl_file(str(f), json_dot_target="body.data.valid")
+    scanner = Scanner.from_curl_file(
+        str(f), json_dot_target="body.data.valid", true_means=TrueMeaning.BYPASSED
+    )
     assert scanner.request_handler.response_serializer is not None
 
 
@@ -177,7 +185,9 @@ def test_from_settings_without_json_dot_target_has_no_serializer() -> None:
 
 def test_from_settings_with_json_dot_target_sets_serializer() -> None:
     settings = ScannerSettings(
-        curl_command=CURL_COMMAND, json_dot_target="body.data.valid"
+        curl_command=CURL_COMMAND,
+        json_dot_target="body.data.valid",
+        true_means=TrueMeaning.BYPASSED,
     )
     scanner = Scanner.from_settings(settings)
     assert scanner is not None
@@ -241,3 +251,55 @@ def test_from_settings_curl_file_passes_request_timeout(tmp_path) -> None:
     f.write_text(CURL_COMMAND)
     settings = ScannerSettings(curl_file=str(f), request_timeout=15.0)
     assert Scanner.from_settings(settings).request_handler.timeout == 15.0
+
+
+# ── true_means ────────────────────────────────────────────────────────────────
+
+
+def test_from_curl_with_target_requires_true_means() -> None:
+    with pytest.raises(MissingTrueMeaningException):
+        Scanner.from_curl(CURL_COMMAND, json_dot_target="body.data.valid")
+
+
+def test_from_curl_passes_true_means_to_handler() -> None:
+    scanner = Scanner.from_curl(
+        CURL_COMMAND, json_dot_target="body.blocked", true_means=TrueMeaning.BLOCKED
+    )
+    assert scanner.request_handler.true_means == TrueMeaning.BLOCKED
+
+
+def test_from_curl_file_passes_true_means_to_handler(tmp_path) -> None:
+    f = tmp_path / "cmd.txt"
+    f.write_text(CURL_COMMAND)
+    scanner = Scanner.from_curl_file(
+        str(f), json_dot_target="body.blocked", true_means=TrueMeaning.BLOCKED
+    )
+    assert scanner.request_handler.true_means == TrueMeaning.BLOCKED
+
+
+def test_from_settings_curl_command_passes_true_means() -> None:
+    settings = ScannerSettings(
+        curl_command=CURL_COMMAND,
+        json_dot_target="body.blocked",
+        true_means=TrueMeaning.BLOCKED,
+    )
+    assert Scanner.from_settings(settings).request_handler.true_means == (
+        TrueMeaning.BLOCKED
+    )
+
+
+def test_from_settings_curl_file_passes_true_means(tmp_path) -> None:
+    f = tmp_path / "cmd.txt"
+    f.write_text(CURL_COMMAND)
+    settings = ScannerSettings(
+        curl_file=str(f), json_dot_target="body.blocked", true_means=TrueMeaning.BLOCKED
+    )
+    assert Scanner.from_settings(settings).request_handler.true_means == (
+        TrueMeaning.BLOCKED
+    )
+
+
+def test_from_settings_with_target_requires_true_means() -> None:
+    settings = ScannerSettings(curl_command=CURL_COMMAND, json_dot_target="body.valid")
+    with pytest.raises(MissingTrueMeaningException):
+        Scanner.from_settings(settings)
