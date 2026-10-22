@@ -86,7 +86,7 @@ from pentester.auditors.garak.auditor import GarakAuditor, _Attack  # noqa: E402
 from pentester.auditors.models.probe_result import ProbeResult  # noqa: E402
 from pentester.config.auditors.garak_settings import GarakSettings  # noqa: E402
 from pentester.config.llm import (  # noqa: E402
-    DEEPSEEK_BASE_URL,
+    OPENAI_COMPATIBLE_ENDPOINTS,
     LLMProvider,
     LLMSettings,
 )
@@ -133,6 +133,15 @@ def _make_llm_auditor(
 
 def _make_deepseek_llm_settings(model: str = "deepseek-chat") -> LLMSettings:
     return LLMSettings(model=model, provider=LLMProvider.DEEPSEEK)
+
+
+def _make_judge_auditor(
+    judge_model: str | None = "deepseek/deepseek-chat",
+    target_type: TargetType = TargetType.LLM,
+) -> GarakAuditor:
+    auditor = _make_auditor(GarakSettings(judge_model=judge_model))
+    auditor.target_type = target_type
+    return auditor
 
 
 def _make_probe(probename: str, prompts: list[str]) -> MagicMock:
@@ -245,6 +254,48 @@ class TestInitGarak:
     def test_calls_start_run(self) -> None:
         self.auditor._init_garak()
         _garak_command_mod.start_run.assert_called_once()
+
+
+class TestInitGarakJudgeSecrets:
+    """garak.command.start_run() writes _config.plugins into the report file,
+    so the judge config, which holds the API key, must not exist yet when it
+    runs. These tests check that property directly rather than a call order.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:  # type: ignore[override]
+        _garak_config_mod.plugins.detectors = {}
+
+    def _init_garak(self, auditor: GarakAuditor) -> list[dict]:
+        """Run _init_garak and return snapshots of the plugin detector config
+        taken when start_run() is called."""
+        snapshots: list[dict] = []
+
+        def record_config() -> None:
+            snapshots.append(dict(_garak_config_mod.plugins.detectors))
+
+        with (
+            patch.object(_garak_command_mod, "start_run", side_effect=record_config),
+            patch.object(
+                auditor,
+                "_openai_compatible_config",
+                return_value={"api_key": "sk-secret"},
+            ),
+        ):
+            auditor._init_garak()
+        return snapshots
+
+    def test_api_key_absent_when_start_run_dumps_config(self) -> None:
+        assert self._init_garak(_make_judge_auditor()) == [{}]
+
+    def test_judge_configured_after_start_run(self) -> None:
+        self._init_garak(_make_judge_auditor())
+        judge = _garak_config_mod.plugins.detectors["judge"]
+        assert judge["detector_model_config"] == {"api_key": "sk-secret"}
+
+    def test_judge_not_configured_for_semantic_fence(self) -> None:
+        self._init_garak(_make_judge_auditor(target_type=TargetType.SEMANTIC_FENCE))
+        assert "judge" not in _garak_config_mod.plugins.detectors
 
 
 # ---------------------------------------------------------------------------
@@ -557,9 +608,10 @@ class TestInitGenerator:
         _garak_generators_openai_mod.OpenAICompatible.reset_mock()
         auditor = _make_llm_auditor(llm_settings=_make_deepseek_llm_settings())
         with patch.object(
-            auditor, "_deepseek_generator_config", return_value={"uri": "u"}
-        ):
+            auditor, "_openai_compatible_config", return_value={"uri": "u"}
+        ) as m_config:
             auditor._init_generator()
+        m_config.assert_called_once_with(LLMProvider.DEEPSEEK)
         _garak_generators_openai_mod.OpenAICompatible.assert_called_once_with(
             name="deepseek-chat",
             config_root={"generators": {"openai": {"OpenAICompatible": {"uri": "u"}}}},
@@ -567,7 +619,7 @@ class TestInitGenerator:
 
     def test_deepseek_returns_openai_compatible_instance(self) -> None:
         auditor = _make_llm_auditor(llm_settings=_make_deepseek_llm_settings())
-        with patch.object(auditor, "_deepseek_generator_config", return_value={}):
+        with patch.object(auditor, "_openai_compatible_config", return_value={}):
             result = auditor._init_generator()
         assert result is _garak_generators_openai_mod.OpenAICompatible.return_value
 
@@ -582,67 +634,73 @@ class TestConfigureJudge:
     def setup(self) -> None:  # type: ignore[override]
         _garak_config_mod.plugins.detectors = {}
 
-    def _configure(self, llm_settings: LLMSettings) -> None:
-        auditor = _make_llm_auditor(llm_settings=llm_settings)
+    def _configure(self, judge_model: str | None) -> MagicMock:
+        auditor = _make_judge_auditor(judge_model)
         with patch.object(
-            auditor, "_deepseek_generator_config", return_value={"uri": "u"}
-        ):
+            auditor, "_openai_compatible_config", return_value={"uri": "u"}
+        ) as m_config:
             auditor._configure_judge()
+        return m_config
 
-    def test_deepseek_sets_judge_model_type(self) -> None:
-        self._configure(_make_deepseek_llm_settings())
+    def test_sets_judge_model_type(self) -> None:
+        self._configure("deepseek/deepseek-chat")
         judge = _garak_config_mod.plugins.detectors["judge"]
         assert judge["detector_model_type"] == "openai.OpenAICompatible"
 
-    def test_deepseek_sets_judge_model_name(self) -> None:
-        self._configure(_make_deepseek_llm_settings("deepseek-reasoner"))
+    def test_sets_judge_model_name_without_provider(self) -> None:
+        self._configure("deepseek/deepseek-reasoner")
         judge = _garak_config_mod.plugins.detectors["judge"]
         assert judge["detector_model_name"] == "deepseek-reasoner"
 
-    def test_deepseek_sets_judge_model_config(self) -> None:
-        self._configure(_make_deepseek_llm_settings())
+    def test_sets_judge_model_config(self) -> None:
+        self._configure("deepseek/deepseek-chat")
         judge = _garak_config_mod.plugins.detectors["judge"]
         assert judge["detector_model_config"] == {"uri": "u"}
 
-    def test_other_provider_leaves_judge_unconfigured(self) -> None:
-        self._configure(LLMSettings(model="gpt-4o", provider=LLMProvider.OPENAI))
+    def test_builds_config_for_judge_provider(self) -> None:
+        m_config = self._configure("openai/gpt-4o-mini")
+        m_config.assert_called_once_with(LLMProvider.OPENAI)
+
+    def test_unset_judge_model_keeps_garak_default(self) -> None:
+        self._configure(None)
         assert "judge" not in _garak_config_mod.plugins.detectors
 
-    def test_deepseek_without_model_leaves_judge_unconfigured(self) -> None:
-        self._configure(_make_deepseek_llm_settings(model=""))
+    def test_judge_independent_of_target_provider(self) -> None:
+        auditor = _make_llm_auditor(llm_settings=_make_deepseek_llm_settings())
+        auditor._configure_judge()
         assert "judge" not in _garak_config_mod.plugins.detectors
 
 
 # ---------------------------------------------------------------------------
-# _deepseek_generator_config
+# _openai_compatible_config
 # ---------------------------------------------------------------------------
 
 
-class TestDeepseekGeneratorConfig:
-    def test_uses_deepseek_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+class TestOpenAICompatibleConfig:
+    def test_uses_provider_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
-        config = _make_llm_auditor()._deepseek_generator_config()
-        assert config["uri"] == DEEPSEEK_BASE_URL
+        config = _make_llm_auditor()._openai_compatible_config(LLMProvider.DEEPSEEK)
+        assert config["uri"] == OPENAI_COMPATIBLE_ENDPOINTS[LLMProvider.DEEPSEEK]
 
-    def test_reads_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
-        config = _make_llm_auditor()._deepseek_generator_config()
-        assert config["api_key"] == "sk-test"
+    def test_reads_provider_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GEMINI_API_KEY", "sk-gemini")
+        config = _make_llm_auditor()._openai_compatible_config(LLMProvider.GEMINI)
+        assert config["api_key"] == "sk-gemini"
 
     def test_suppresses_stop_sequences(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
-        config = _make_llm_auditor()._deepseek_generator_config()
+        config = _make_llm_auditor()._openai_compatible_config(LLMProvider.DEEPSEEK)
         assert config["suppressed_params"] == {"stop"}
 
     def test_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with pytest.raises(ValueError, match="DEEPSEEK_API_KEY must be set"):
-            _make_llm_auditor()._deepseek_generator_config()
+            _make_llm_auditor()._openai_compatible_config(LLMProvider.DEEPSEEK)
 
     def test_empty_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "")
-        with pytest.raises(ValueError, match="DEEPSEEK_API_KEY must be set"):
-            _make_llm_auditor()._deepseek_generator_config()
+        monkeypatch.setenv("OPENAI_API_KEY", "")
+        with pytest.raises(ValueError, match="OPENAI_API_KEY must be set"):
+            _make_llm_auditor()._openai_compatible_config(LLMProvider.OPENAI)
 
 
 # ---------------------------------------------------------------------------
@@ -843,17 +901,6 @@ class TestAuditLLM:
         ):
             auditor.audit()
         m_gen.assert_called_once()
-
-    def test_calls_configure_judge(self) -> None:
-        auditor = _make_llm_auditor()
-        with (
-            patch.object(auditor, "_init_garak"),
-            patch.object(auditor, "_load_probes", return_value=[]),
-            patch.object(auditor, "_init_objective_generator"),
-            patch.object(auditor, "_configure_judge") as m_judge,
-        ):
-            auditor.audit()
-        m_judge.assert_called_once()
 
     def test_returns_empty_when_no_probes(self) -> None:
         assert self._audit_with([]) == []
