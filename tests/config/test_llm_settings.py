@@ -1,7 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
-from pentester.config.llm import LLMProvider, LLMSettings
+from pentester.config.llm import (
+    API_KEY_ENV_VARS,
+    OPENAI_COMPATIBLE_ENDPOINTS,
+    LLMProvider,
+    LLMSettings,
+)
 
 
 class TestDefaults:
@@ -60,3 +65,13 @@ class TestLLMProviderEnum:
 
     def test_deepseek_value(self) -> None:
         assert LLMProvider.DEEPSEEK == "deepseek"
+
+
+class TestProviderTables:
+    @pytest.mark.parametrize("provider", list(LLMProvider))
+    def test_every_provider_has_an_endpoint(self, provider: LLMProvider) -> None:
+        assert OPENAI_COMPATIBLE_ENDPOINTS[provider].startswith("https://")
+
+    @pytest.mark.parametrize("provider", list(LLMProvider))
+    def test_every_provider_has_an_api_key_env_var(self, provider: LLMProvider) -> None:
+        assert API_KEY_ENV_VARS[provider].endswith("_API_KEY")
