@@ -36,6 +36,7 @@ PENTESTER_TARGET_TYPE=SEMANTIC_FENCE
 # --- How to reach the target -------------------------------------------
 PENTESTER_SCANNER__CURL_COMMAND=curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{"text": $PROMPT}'
 PENTESTER_SCANNER__JSON_DOT_TARGET=body.valid
+PENTESTER_SCANNER__TRUE_MEANS=bypassed   # valid: true = the attack got through
 
 # --- Where reports go ---------------------------------------------------
 PENTESTER_REPORTING__OUTPUT_DIR_PATH=./reports
