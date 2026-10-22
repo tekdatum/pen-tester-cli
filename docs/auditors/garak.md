@@ -84,13 +84,15 @@ Settings live in `GarakSettings` (env prefix `PENTESTER_GARAK__`):
 | `openai` | `OpenAIGenerator` (reasoning models) or `OpenAIGenerator` | Requires `OPENAI_API_KEY`. Models starting with `o` use `OpenAIReasoningGenerator` |
 | `anthropic` | `LiteLLMGenerator` | Requires `ANTHROPIC_API_KEY`. `top_p` is forced to `None` (not supported by Anthropic) |
 | `gemini` | `LiteLLMGenerator` | Requires `GEMINI_API_KEY` |
-| `deepseek` | `OpenAICompatible` | Requires `DEEPSEEK_API_KEY`. Points at `https://api.deepseek.com/v1`; garak's default `#`/`;` stop sequences are suppressed so replies are not truncated |
+| `deepseek` | `OpenAICompatible` | Requires `DEEPSEEK_API_KEY`. Points at `https://api.deepseek.com/v1`; garak's default `#`/`;` stop sequences are suppressed so replies are not truncated. Runs with DeepSeek's default thinking mode; to turn it off, use a curl command or custom handler that sends `"thinking": {"type": "disabled"}` |
 
 ### LLM-as-judge detectors (`detectors.judge.*`)
 
-A few garak probes (currently `fitd`) are scored by LLM-as-judge detectors, which default to an NVIDIA NIM model and need `NIM_API_KEY`. Without it, every attack those detectors score is recorded as `ERROR`.
+Most garak detectors are rule-based or local classifiers, so they score replies the same way whatever the target is. A few are LLM-as-judge detectors, which default to an NVIDIA NIM model and need `NIM_API_KEY`.
 
-With `PENTESTER_LLM__PROVIDER=deepseek`, these detectors use DeepSeek instead, with `PENTESTER_LLM__MODEL` as the judge model. Other providers keep garak's NIM default. If DeepSeek is also the native target, the same model grades its own replies, which tends to under-report bypasses; point the target at the model through `PENTESTER_SCANNER__CURL_COMMAND` instead if that matters.
+Set `PENTESTER_GARAK__JUDGE_MODEL` to `<provider>/<model>` to use another judge, e.g. `deepseek/deepseek-chat` or `openai/gpt-4o-mini`. The provider is one of `openai`, `anthropic`, `gemini` or `deepseek`, reached through its OpenAI-compatible endpoint with its usual API key (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`). Unset, garak's default judge is kept. The setting is independent of `PENTESTER_LLM__*`, so pick a model other than the target's if you want an independent check.
+
+No probe that this auditor runs uses these detectors today: the only one, `fitd`, is inactive by default and builds its prompts at runtime, which this auditor doesn't run. The setting is for custom or future probes.
 
 ### Scanner response extraction (`PENTESTER_SCANNER__RESPONSE_TEXT_TARGET`)
 

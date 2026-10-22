@@ -238,12 +238,12 @@ The judge decides whether a reply is a bypass. It only applies to `--target-type
 
 | Auditor | Judge | Providers |
 |---|---|---|
-| `garak` | each probe's built-in detectors, mostly rule-based; `detectors.judge.*` use an LLM | LLM detectors: NVIDIA NIM by default, `PENTESTER_LLM__MODEL` when `PENTESTER_LLM__PROVIDER=deepseek` |
+| `garak` | each probe's built-in detectors, mostly rule-based and independent of the target; `detectors.judge.*` use an LLM | LLM detectors: garak's default (NVIDIA NIM) unless `PENTESTER_GARAK__JUDGE_MODEL` is set to `<provider>/<model>`, with provider `openai`, `anthropic`, `gemini` or `deepseek` |
 | `pyrit` | `PENTESTER_LLM__PROVIDER` + `PENTESTER_LLM__MODEL` | `openai`, `anthropic`, `gemini`, `deepseek` |
 | `inspect_ai` | `PENTESTER_INSPECT__JUDGE_MODEL`, falling back to `PENTESTER_LLM__*` | any inspect_ai model string; `deepseek/<model>` is accepted as shorthand |
 | `promptfoo` | `PENTESTER_PROMPTFOO__JUDGE_MODEL` | any promptfoo provider id, or `file://<script>.py:<function>` |
 
-When the default implementation is used, the target and the `PENTESTER_LLM__*` judge are the same model, which then grades its own replies and tends to under-report bypasses. Use a curl command for the target, or a separate judge setting, for an independent check.
+When the default implementation is used for PyRIT, the target and the `PENTESTER_LLM__*` judge are the same model, which then grades its own replies and tends to under-report bypasses. Use a curl command for the target, or a separate judge setting, for an independent check.
 
 ---
 
@@ -344,8 +344,9 @@ OPENAI_API_KEY=sk-...
 |---|---|---|
 | `PENTESTER_GARAK__PROBES` | `[]` (all) | JSON array of probe specs to run (e.g. `["probes.dan.Dan_6_2"]`) |
 | `PENTESTER_GARAK__MAX_ATTACKS` | `None` | Attack cap for Garak. Overrides `PENTESTER_MAX_ATTACKS`. |
+| `PENTESTER_GARAK__JUDGE_MODEL` | `None` | Model behind Garak's LLM-as-judge detectors (`detectors.judge.*`), as `<provider>/<model>` (e.g. `deepseek/deepseek-chat`). Needs that provider's API key. Unset keeps Garak's default judge (NVIDIA NIM, needs `NIM_API_KEY`). |
 
-With `PENTESTER_LLM__PROVIDER=deepseek`, Garak reaches DeepSeek through its OpenAI-compatible generator (`DEEPSEEK_API_KEY` required). `PENTESTER_LLM__MODEL` is then used both as the native LLM target (when no curl command is set) and as the model behind Garak's LLM-as-judge detectors (`detectors.judge.*`, used by probes such as `fitd`), which otherwise default to NVIDIA NIM. When DeepSeek is both target and judge, the model grades its own replies, which tends to under-report bypasses.
+With `PENTESTER_LLM__PROVIDER=deepseek` and no curl command, Garak reaches DeepSeek through its OpenAI-compatible generator (`DEEPSEEK_API_KEY` required), with DeepSeek's default thinking mode. To turn thinking off, reach the model through a curl command or custom handler that sends `"thinking": {"type": "disabled"}`.
 
 ### PyRIT
 
