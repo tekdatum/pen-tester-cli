@@ -39,7 +39,7 @@ curl -X POST 'https://api.example.com/chat' \
   --data-raw '{"messages": [{"role": "user", "content": $PROMPT}]}'
 ```
 
-> `$PROMPT` is replaced with a complete JSON string literal including surrounding double-quotes (e.g. `"hello world"`, `"say \"hi\""` with escaping applied). Always use bare `$PROMPT` — never `"$PROMPT"` — so the substituted value is valid JSON.
+> `$PROMPT` is replaced with a complete JSON string literal including surrounding double-quotes (e.g. `"hello world"`, `"say \"hi\""` with escaping applied). Always use bare `$PROMPT` — never `"$PROMPT"` — inside a single-quoted body, so the substituted value is valid JSON. A quoted placeholder (`"$PROMPT"` or `\"$PROMPT\"`) is rejected when the scanner is built, before any auditor runs.
 
 ---
 
