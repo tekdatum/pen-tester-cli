@@ -194,7 +194,7 @@ Can also be set via environment variable — see [Environment Variables](#enviro
 
 ## LLM Keys
 
-Some auditors need an LLM to judge whether a target's response constitutes a bypass. The target itself is always reached via curl or a custom handler — the LLM is only the scorer/judge.
+Some auditors need an LLM to judge whether a target's response constitutes a bypass. With `--target-type LLM` the same settings can also name the target itself, when no curl command or custom handler is given — see [Supported Providers](#supported-providers).
 
 Configure the judge via `PENTESTER_LLM__*` env vars:
 
@@ -210,6 +210,40 @@ OPENAI_API_KEY=sk-...
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `gemini` | `GEMINI_API_KEY` |
 | `deepseek` | `DEEPSEEK_API_KEY` |
+
+---
+
+## Supported Providers
+
+Every auditor can reach its target in three ways:
+
+- **Default implementation:** the auditor calls the provider's API itself, using `PENTESTER_LLM__PROVIDER` + `PENTESTER_LLM__MODEL`. Only for `--target-type LLM`.
+- **curl:** `--curl-command` or `--curl-file`. Reaches any HTTP API, for either target type.
+- **Custom handler:** `--custom-handler path/to/file.py:ClassName`. For targets that aren't plain HTTP (SDKs, gRPC, local models), for either target type.
+
+### Target
+
+| Auditor | Default implementation | curl | Custom handler |
+|---|---|---|---|
+| `garak` | `openai` (`OpenAIGenerator`; `OpenAIReasoningGenerator` for `o*` models), `anthropic` and `gemini` (`LiteLLMGenerator`), `deepseek` (`OpenAICompatible`) | ✅ | ✅ |
+| `pyrit` | `openai`, `anthropic`, `gemini`, `deepseek` (all through `OpenAIChatTarget` on each provider's OpenAI-compatible endpoint) | ✅ | ✅ |
+| `inspect_ai` | `openai`, `anthropic`, `gemini` (as `google/`), `deepseek` (as `openai-api/deepseek/`) | ✅ | ✅ |
+| `promptfoo` | any provider, sent to promptfoo as `{provider}:{model}`; promptfoo must recognize the id | ✅ | ✅ |
+
+With `SEMANTIC_FENCE` the default implementation doesn't apply: the bypass verdict comes from the target's response (`--json-dot-target`), so a curl command or custom handler is required.
+
+### Judge
+
+The judge decides whether a reply is a bypass. It only applies to `--target-type LLM`.
+
+| Auditor | Judge | Providers |
+|---|---|---|
+| `garak` | each probe's built-in detectors, mostly rule-based and independent of the target; `detectors.judge.*` use an LLM | LLM detectors: garak's default (NVIDIA NIM) unless `PENTESTER_GARAK__JUDGE_MODEL` is set to `<provider>/<model>`, with provider `openai`, `anthropic`, `gemini` or `deepseek` |
+| `pyrit` | `PENTESTER_LLM__PROVIDER` + `PENTESTER_LLM__MODEL` | `openai`, `anthropic`, `gemini`, `deepseek` |
+| `inspect_ai` | `PENTESTER_INSPECT__JUDGE_MODEL`, falling back to `PENTESTER_LLM__*` | any inspect_ai model string; `deepseek/<model>` is accepted as shorthand |
+| `promptfoo` | `PENTESTER_PROMPTFOO__JUDGE_MODEL` | any promptfoo provider id, or `file://<script>.py:<function>` |
+
+When the default implementation is used for PyRIT, the target and the `PENTESTER_LLM__*` judge are the same model, which then grades its own replies and tends to under-report bypasses. Use a curl command for the target, or a separate judge setting, for an independent check.
 
 ---
 
@@ -310,6 +344,9 @@ OPENAI_API_KEY=sk-...
 |---|---|---|
 | `PENTESTER_GARAK__PROBES` | `[]` (all) | JSON array of probe specs to run (e.g. `["probes.dan.Dan_6_2"]`) |
 | `PENTESTER_GARAK__MAX_ATTACKS` | `None` | Attack cap for Garak. Overrides `PENTESTER_MAX_ATTACKS`. |
+| `PENTESTER_GARAK__JUDGE_MODEL` | `None` | Model behind Garak's LLM-as-judge detectors (`detectors.judge.*`), as `<provider>/<model>` (e.g. `deepseek/deepseek-chat`). Needs that provider's API key. Unset keeps Garak's default judge (NVIDIA NIM, needs `NIM_API_KEY`). |
+
+With `PENTESTER_LLM__PROVIDER=deepseek` and no curl command, Garak reaches DeepSeek through its OpenAI-compatible generator (`DEEPSEEK_API_KEY` required), with DeepSeek's default thinking mode. To turn thinking off, reach the model through a curl command or custom handler that sends `"thinking": {"type": "disabled"}`.
 
 ### PyRIT
 
