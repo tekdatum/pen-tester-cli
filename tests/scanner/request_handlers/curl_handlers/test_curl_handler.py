@@ -11,7 +11,11 @@ from pentester.scanners.request_handlers.curl_handlers.curl_reader_handler impor
     CurlReaderHandler,
 )
 from pentester.scanners.models.target_response import TargetResponse
-from pentester.scanners.exceptions import CurlParseException
+from pentester.enums.true_meaning import TrueMeaning
+from pentester.scanners.exceptions import (
+    CurlParseException,
+    MissingTrueMeaningException,
+)
 
 _SESSION_PATH = "pentester.scanners.request_handlers.curl_handlers.curl_handler.Session"
 
@@ -124,11 +128,63 @@ def test_request_bypassed_uses_serializer_when_present() -> None:
     serializer = MagicMock()
     serializer.serialize.return_value = True
     handler = CurlReaderHandler(
-        curl_command=CURL_COMMAND, response_serializer=serializer
+        curl_command=CURL_COMMAND,
+        response_serializer=serializer,
+        true_means=TrueMeaning.BYPASSED,
     )
     with _patch_session(_make_response()):
         result = handler.request(PROMPT)
     assert result.bypassed is True
+
+
+# ── CurlHandler true_means ────────────────────────────────────────────────────
+
+
+def _bypassed_for(field_value: Any, true_means: TrueMeaning) -> bool | None:
+    serializer = MagicMock()
+    serializer.serialize.return_value = field_value
+    handler = CurlReaderHandler(
+        curl_command=CURL_COMMAND,
+        response_serializer=serializer,
+        true_means=true_means,
+    )
+    with _patch_session(_make_response()):
+        return handler.request(PROMPT).bypassed
+
+
+class TestTrueMeans:
+    def test_serializer_without_true_means_raises(self) -> None:
+        with pytest.raises(MissingTrueMeaningException, match="TRUE_MEANS"):
+            CurlReaderHandler(
+                curl_command=CURL_COMMAND, response_serializer=MagicMock()
+            )
+
+    def test_no_serializer_does_not_need_true_means(self) -> None:
+        handler = CurlReaderHandler(curl_command=CURL_COMMAND, response_serializer=None)
+        assert handler.true_means is None
+
+    def test_true_means_bypassed_true_is_bypassed(self) -> None:
+        assert _bypassed_for(True, TrueMeaning.BYPASSED) is True
+
+    def test_true_means_bypassed_false_is_blocked(self) -> None:
+        assert _bypassed_for(False, TrueMeaning.BYPASSED) is False
+
+    def test_true_means_blocked_true_is_blocked(self) -> None:
+        assert _bypassed_for(True, TrueMeaning.BLOCKED) is False
+
+    def test_true_means_blocked_false_is_bypassed(self) -> None:
+        assert _bypassed_for(False, TrueMeaning.BLOCKED) is True
+
+    def test_true_means_blocked_casts_truthy_values(self) -> None:
+        assert _bypassed_for("yes", TrueMeaning.BLOCKED) is False
+
+    def test_true_means_survives_pickling(self) -> None:
+        handler = CurlReaderHandler(
+            curl_command=CURL_COMMAND,
+            response_serializer=None,
+            true_means=TrueMeaning.BLOCKED,
+        )
+        assert pickle.loads(pickle.dumps(handler)).true_means == TrueMeaning.BLOCKED
 
 
 def test_request_passes_default_timeout() -> None:

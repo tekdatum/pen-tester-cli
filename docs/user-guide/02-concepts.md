@@ -104,10 +104,17 @@ response body:  { "result": { "blocked": false } }
 json-dot-target: body.result.blocked
 ```
 
-The value at that path is coerced to a boolean and recorded as `bypassed`. Pick the
-field whose truthiness means "the attack succeeded." If your field means the opposite
-(e.g. `blocked: true` when *safe*), you'll want a custom handler where you can invert
-it, or an endpoint field that reads the way you need.
+The value at that path is coerced to a boolean. Fences disagree on what `true` means,
+so you say it with `--true-means` (`PENTESTER_SCANNER__TRUE_MEANS`). It's required
+whenever you set `--json-dot-target`, and the run won't start without it:
+
+| Your field | `true` means | Flag |
+|---|---|---|
+| `body.valid`, `body.allowed` | the attack got through | `--true-means bypassed` |
+| `body.result.blocked`, `body.flagged` | the fence stopped it | `--true-means blocked` |
+
+For the example above, `blocked: false` with `--true-means blocked` is recorded as a
+bypass. If the field is missing from a response, that attack is recorded as `ERROR`.
 
 ---
 

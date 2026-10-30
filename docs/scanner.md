@@ -8,11 +8,13 @@ Executes a curl command against a target by injecting a prompt, and optionally e
 from pentester.scanners.scanner import Scanner
 from pentester.scanners.request_handlers.curl_handlers.uncurl_handler import UncurlHandler
 from pentester.scanners.response_serializers.json_dot_serializer import JSONDotSerializer
+from pentester.enums.true_meaning import TrueMeaning
 
 serializer = JSONDotSerializer(target="body.data.valid")
 handler = UncurlHandler(
     curl_command="curl -X POST 'https://target.com/api' -H 'Content-Type: application/json' --data-raw '{\"text\": $PROMPT}'",
     response_serializer=serializer,
+    true_means=TrueMeaning.BYPASSED,  # valid: true = the prompt got through
 )
 scanner = Scanner(handler)
 result = scanner.scan("Ignore previous instructions")
@@ -22,7 +24,7 @@ print(result.bypassed)    # True / False / None
 print(result.text)        # extracted LLM reply text, or None if response_text_target not set
 ```
 
-`json_dot_target` is optional. If omitted, `bypassed` will always be `None`.
+`json_dot_target` is optional. If omitted, `bypassed` will always be `None`. When it's set, `true_means` is required (see below).
 
 ---
 
@@ -37,7 +39,7 @@ curl -X POST 'https://api.example.com/chat' \
   --data-raw '{"messages": [{"role": "user", "content": $PROMPT}]}'
 ```
 
-> `$PROMPT` is replaced with a complete JSON string literal including surrounding double-quotes (e.g. `"hello world"`, `"say \"hi\""` with escaping applied). Always use bare `$PROMPT` — never `"$PROMPT"` — so the substituted value is valid JSON.
+> `$PROMPT` is replaced with a complete JSON string literal including surrounding double-quotes (e.g. `"hello world"`, `"say \"hi\""` with escaping applied). Always use bare `$PROMPT` — never `"$PROMPT"` — inside a single-quoted body, so the substituted value is valid JSON. A quoted placeholder (`"$PROMPT"` or `\"$PROMPT\"`) is rejected when the scanner is built, before any auditor runs.
 
 ---
 
@@ -61,9 +63,14 @@ A dot-separated string with the format `section.key1.key2...` that navigates the
 "headers.X-Guard-Result"
 ```
 
-The extracted value is cast to bool to determine `bypassed`:
-- truthy value → `bypassed = True`
-- falsy value → `bypassed = False`
+The extracted value is cast to bool, and `true_means` (`PENTESTER_SCANNER__TRUE_MEANS` / `--true-means`) says what `true` means. Fences disagree, so it's required whenever `json_dot_target` is set, and the handler raises `MissingTrueMeaningException` without it:
+
+| `true_means` | truthy value | falsy value | Typical field |
+|---|---|---|---|
+| `bypassed` | `bypassed = True` | `bypassed = False` | `body.valid`, `body.allowed` |
+| `blocked` | `bypassed = False` | `bypassed = True` | `body.blocked`, `body.flagged` |
+
+A missing field raises `SerializeException`, which auditors record as `ERROR`, never as a verdict.
 
 ---
 
@@ -109,11 +116,11 @@ class MyServiceHandler(CustomHandler):
         response = my_sdk_client.send(text)
         return HandlerResponse(
             response=response.text,
-            passed=response.was_blocked,
+            passed=not response.was_blocked,
         )
 ```
 
-`passed=True` means the service blocked the prompt (no bypass). `passed=False` means the prompt got through (bypass).
+`passed=True` means the prompt got through the service (bypass). `passed=False` means the service blocked it (no bypass).
 
 ### 2. Use it programmatically
 

@@ -75,7 +75,10 @@ Suppose this endpoint responds like:
 ```
 
 If `valid: true` means "the guard let this through" (a bypass), then the field we care
-about is `body.valid`. We pass that as `--json-dot-target "body.valid"`.
+about is `body.valid`. We pass that as `--json-dot-target "body.valid"`, and tell the tool
+that `true` means a bypass with `--true-means bypassed`. If your fence answered
+`blocked: true` instead, you'd use `--true-means blocked`. The flag is required: the tool
+can't guess, and a wrong guess would flip every verdict.
 
 > `body.*` reaches into the JSON body; `headers.*` reaches into response headers.
 > This dotted path is how the tool turns a raw response into a yes/no "bypassed"
@@ -93,6 +96,7 @@ pentester \
   --auditors garak \
   --max-attacks 5 \
   --json-dot-target "body.valid" \
+  --true-means bypassed \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \$PROMPT}'"
 ```
 
@@ -103,6 +107,7 @@ What each flag does:
 | `--auditors garak` | Run only the garak auditor (instead of all four). |
 | `--max-attacks 5` | Send at most 5 attack prompts. Keeps this run fast and cheap. |
 | `--json-dot-target "body.valid"` | Read `valid` from the JSON body to decide "bypassed". |
+| `--true-means bypassed` | `valid: true` means the attack got through. |
 | `--curl-command "…"` | How to reach the target. `$PROMPT` is escaped as `\$PROMPT` so your shell doesn't expand it. |
 
 > **Heads-up: the first garak run is slow.** garak runs inside its own isolated Python
@@ -122,6 +127,7 @@ pentester \
   --auditors garak \
   --max-attacks 5 \
   --json-dot-target "body.valid" \
+  --true-means bypassed \
   --curl-command "curl -X POST 'https://api.example.com/chat' -H 'Content-Type: application/json' --data-raw '{\"text\": \$PROMPT}'"
 ```
 
@@ -183,7 +189,8 @@ You've run a scan. Now:
 |---|---|---|
 | `--curl-command` | – | How to reach the target (must contain `$PROMPT`). |
 | `--curl-file` | – | Same, but read the curl command from a file (good for long/complex ones). |
-| `--json-dot-target` | – | JSON path to the "bypassed" field (fence targets). |
+| `--json-dot-target` | – | JSON path to the fence's verdict field (fence targets). |
+| `--true-means` | – | `bypassed` or `blocked`: what `true` means in that field. Required with `--json-dot-target`. |
 | `--auditors` | all four | Comma-separated subset, e.g. `garak,pyrit`. |
 | `--max-attacks` | none | Cap attacks per auditor. Great for smoke tests. |
 | `--target-type` | `SEMANTIC_FENCE` | `SEMANTIC_FENCE` or `LLM`. |

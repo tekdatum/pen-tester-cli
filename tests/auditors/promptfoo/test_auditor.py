@@ -23,6 +23,7 @@ from pentester.config.auditors.promptfoo_settings import (
 from pentester.config.llm import LLMProvider, LLMSettings
 from pentester.config.settings import TargetType
 from pentester.enums.prompt_type import PromptType
+from pentester.enums.true_meaning import TrueMeaning
 from pentester.scanners.request_handlers.curl_handlers.curl_handler import CurlHandler
 from pentester.scanners.response_serializers.json_dot_serializer import (
     JSONDotSerializer,
@@ -155,6 +156,19 @@ class TestInit:
         mock_scanner = MagicMock()
         auditor = _make_auditor(scanner=mock_scanner)
         assert auditor._scanner is mock_scanner
+
+    def test_passes_true_means_to_config_manager(self) -> None:
+        scanner = _make_scanner_with_dot_target("body.blocked")
+        scanner.request_handler.true_means = TrueMeaning.BLOCKED
+        with (
+            patch("pathlib.Path.mkdir"),
+            patch(
+                "pentester.auditors.promptfoo.auditor.PromptfooConfigManager"
+            ) as mock_cm_cls,
+        ):
+            mock_cm_cls.return_value.config = copy.deepcopy(_FAKE_CONFIG)
+            PromptfooAuditor(settings=_make_settings(), scanner=scanner)
+        assert mock_cm_cls.call_args.args[3] == TrueMeaning.BLOCKED
 
 
 class TestEnsureDirectories:
@@ -563,6 +577,29 @@ class TestSetProviderFromScanner:
         assert auditor.providers[0]["config"]["url"] == "http://test.com"
         assert auditor.providers[0]["config"]["method"] == "POST"
 
+    @staticmethod
+    def _body_for(data: str | None) -> str:
+        auditor = _make_auditor()
+        scanner = MagicMock()
+        handler = MagicMock(spec=CurlHandler)
+        handler._parse_command.return_value = MagicMock(
+            url="http://test.com", method="POST", headers={}, data=data
+        )
+        handler.curl_command = "curl http://test.com"
+        scanner.request_handler = handler
+        auditor._set_provider_from_scanner(scanner)
+        return auditor.providers[0]["config"]["body"]
+
+    def test_bare_prompt_is_json_encoded(self) -> None:
+        assert self._body_for('{"text": $PROMPT}') == '{"text": {{prompt | dump}}}'
+
+    def test_every_prompt_placeholder_is_encoded(self) -> None:
+        body = self._body_for('{"a": $PROMPT, "b": $PROMPT}')
+        assert body == '{"a": {{prompt | dump}}, "b": {{prompt | dump}}}'
+
+    def test_missing_body_sends_raw_prompt(self) -> None:
+        assert self._body_for(None) == "{{prompt}}"
+
     def test_curl_handler_no_providers_skips_setup(self) -> None:
         auditor = _make_auditor()
         auditor.providers = []
@@ -619,6 +656,21 @@ class TestConfigureProviderInTestFiles:
         auditor.config_manager.configure_provider_in_test_files.assert_called_once_with(
             cfg_dir, auditor.providers[0], "http"
         )
+
+
+class TestExtractTrueMeans:
+    def test_returns_true_means_from_handler(self) -> None:
+        scanner = _make_scanner_with_dot_target("body.blocked")
+        scanner.request_handler.true_means = TrueMeaning.BLOCKED
+        assert PromptfooAuditor._extract_true_means(scanner) == TrueMeaning.BLOCKED
+
+    def test_defaults_to_bypassed_when_scanner_is_none(self) -> None:
+        assert PromptfooAuditor._extract_true_means(None) == TrueMeaning.BYPASSED
+
+    def test_defaults_to_bypassed_when_handler_has_none(self) -> None:
+        scanner = MagicMock()
+        scanner.request_handler.true_means = None
+        assert PromptfooAuditor._extract_true_means(scanner) == TrueMeaning.BYPASSED
 
 
 class TestExtractJsonDotTarget:
